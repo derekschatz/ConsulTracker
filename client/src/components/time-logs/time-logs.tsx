@@ -30,7 +30,7 @@ const TimeLogs = () => {
   // Build query params
   let queryParams = new URLSearchParams();
   
-  if (filters.engagementId) {
+  if (filters.engagementId && filters.engagementId !== 'all') {
     queryParams.append('engagementId', filters.engagementId);
   }
   
@@ -45,13 +45,13 @@ const TimeLogs = () => {
   }
 
   // Fetch time logs with filters
-  const { data: timeLogs = [], isLoading } = useQuery({
+  const { data: timeLogs = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/time-logs', queryParams.toString()],
     enabled: queryParams.toString() !== '',
   });
 
   // Fetch engagements for filter dropdown
-  const { data: engagements = [] } = useQuery({
+  const { data: engagements = [] } = useQuery<any[]>({
     queryKey: ['/api/engagements'],
   });
 

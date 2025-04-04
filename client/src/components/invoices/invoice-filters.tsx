@@ -40,7 +40,7 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Statuses</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
@@ -54,7 +54,7 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
                 <SelectValue placeholder="All Clients" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Clients</SelectItem>
+                <SelectItem value="all">All Clients</SelectItem>
                 {clientOptions.map(client => (
                   <SelectItem key={client} value={client}>{client}</SelectItem>
                 ))}

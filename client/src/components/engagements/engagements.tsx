@@ -21,7 +21,7 @@ const Engagements = () => {
   });
 
   // Fetch engagements
-  const { data: engagements = [], isLoading } = useQuery({
+  const { data: engagements = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/engagements'],
   });
 
@@ -76,10 +76,10 @@ const Engagements = () => {
 
   // Apply filters to engagements
   const filteredEngagements = engagements.filter((engagement: any) => {
-    if (filters.status && engagement.status !== filters.status) {
+    if (filters.status && filters.status !== 'all' && engagement.status !== filters.status) {
       return false;
     }
-    if (filters.client && engagement.clientName !== filters.client) {
+    if (filters.client && filters.client !== 'all' && engagement.clientName !== filters.client) {
       return false;
     }
     // Date range filtering could be added when needed
@@ -87,7 +87,7 @@ const Engagements = () => {
   });
 
   // Extract unique client names for filter dropdown
-  const clientOptions = Array.from(
+  const clientOptions: string[] = Array.from(
     new Set(engagements.map((engagement: any) => engagement.clientName))
   );
 
