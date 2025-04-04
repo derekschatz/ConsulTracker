@@ -6,6 +6,7 @@ import TimeLogFilters from './time-log-filters';
 import TimeLogSummary from './time-log-summary';
 import TimeLogTable from './time-log-table';
 import TimeLogModal from '@/components/modals/time-log-modal';
+import { DeleteConfirmationModal } from '@/components/modals/delete-confirmation-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { getDateRange } from '@/lib/date-utils';
@@ -15,7 +16,9 @@ const TimeLogs = () => {
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [currentTimeLog, setCurrentTimeLog] = useState<any>(null);
+  const [timeLogToDelete, setTimeLogToDelete] = useState<number | null>(null);
   const [filters, setFilters] = useState({
     dateRange: 'month',
     engagementId: '',
@@ -80,32 +83,42 @@ const TimeLogs = () => {
     setCurrentTimeLog(null);
   };
 
-  const handleDeleteTimeLog = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this time log?')) {
-      try {
-        const response = await apiRequest('DELETE', `/api/time-logs/${id}`);
-        
-        if (!response.ok) {
-          throw new Error('Failed to delete time log');
-        }
+  const handleDeleteTimeLog = (id: number) => {
+    setTimeLogToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
 
-        toast({
-          title: 'Time log deleted',
-          description: 'The time log has been deleted successfully.',
-        });
-
-        // Refresh data
-        queryClient.invalidateQueries({ queryKey: ['/api/time-logs'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      } catch (error) {
-        console.error('Error deleting time log:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to delete time log',
-          variant: 'destructive',
-        });
+  const handleConfirmDelete = async () => {
+    if (!timeLogToDelete) return;
+    
+    try {
+      const response = await apiRequest('DELETE', `/api/time-logs/${timeLogToDelete}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete time log');
       }
+
+      toast({
+        title: 'Time log deleted',
+        description: 'The time log has been deleted successfully.',
+      });
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/time-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    } catch (error) {
+      console.error('Error deleting time log:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete time log',
+        variant: 'destructive',
+      });
     }
+  };
+
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setTimeLogToDelete(null);
   };
 
   const handleSuccess = () => {
@@ -183,6 +196,15 @@ const TimeLogs = () => {
         onClose={handleCloseEditModal}
         timeLog={currentTimeLog}
         onSuccess={handleSuccess}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        title="Delete Time Log"
+        description="Are you sure you want to delete this time log? This action cannot be undone."
       />
     </div>
   );
