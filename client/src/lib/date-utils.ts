@@ -27,11 +27,19 @@ export function parseDate(dateStr: string, formatStr = 'yyyy-MM-dd'): Date | nul
 // Get date range based on predefined ranges
 export function getDateRange(range: string, referenceDate: Date = new Date()): DateRange {
   switch (range) {
+    case 'all':
+      // All time: use a very wide range to include all engagements
+      // For demo purposes, we'll use 2020-2030 range
+      return {
+        startDate: new Date(2020, 0, 1),
+        endDate: new Date(2030, 11, 31)
+      };
+    
     case 'current':
-      // Current Year: from beginning of the year to current date
+      // Current Year: entire current year (Jan 1st to Dec 31st)
       return {
         startDate: startOfYear(referenceDate),
-        endDate: referenceDate
+        endDate: endOfYear(referenceDate)
       };
     
     case 'last':

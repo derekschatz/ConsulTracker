@@ -129,16 +129,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (startDateParam && endDateParam) {
         // Use custom date range if provided
-        const startDate = new Date(startDateParam);
-        const endDate = new Date(endDateParam);
+        // Create date objects by parsing the YYYY-MM-DD format
+        const startDateParts = startDateParam.split('-').map(Number);
+        const endDateParts = endDateParam.split('-').map(Number);
+        
+        // Create date objects using year, month (0-based), and day
+        const startDate = new Date(startDateParts[0], startDateParts[1] - 1, startDateParts[2]);
+        const endDate = new Date(endDateParts[0], endDateParts[1] - 1, endDateParts[2]);
+        
+        // Set time components appropriately for day-level comparison
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
 
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
           return res.status(400).json({ error: 'Invalid date format' });
         }
 
+        console.log('Server processing custom date range:', {
+          startParam: startDateParam,
+          endParam: endDateParam,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        });
+
         engagements = engagements.filter(engagement => {
-          const engagementStart = new Date(engagement.startDate);
-          const engagementEnd = new Date(engagement.endDate);
+          const engagementStartRaw = new Date(engagement.startDate);
+          const engagementEndRaw = new Date(engagement.endDate);
+          
+          // Create clean date objects with consistent time components
+          const engagementStart = new Date(
+            engagementStartRaw.getFullYear(), 
+            engagementStartRaw.getMonth(), 
+            engagementStartRaw.getDate()
+          );
+          engagementStart.setHours(0, 0, 0, 0);
+          
+          const engagementEnd = new Date(
+            engagementEndRaw.getFullYear(), 
+            engagementEndRaw.getMonth(), 
+            engagementEndRaw.getDate()
+          );
+          engagementEnd.setHours(23, 59, 59, 999);
           
           // Custom range: either the start date or end date is within the selected range
           // or the range completely encompasses the engagement
@@ -150,47 +181,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } else if (dateRange) {
         // Use predefined date range
-        const { startDate, endDate } = getDateRange(dateRange);
-        
-        // Special handling for different date ranges
-        if (dateRange === 'current') {
-          // Current Year: only include engagements in the current year
-          const currentYear = startDate.getFullYear();
-          engagements = engagements.filter(engagement => {
-            const engagementStart = new Date(engagement.startDate);
-            return engagementStart.getFullYear() === currentYear;
-          });
-        } else if (dateRange === 'last') {
-          // Last Year: only include engagements from the previous year
-          const lastYear = startDate.getFullYear();
-          engagements = engagements.filter(engagement => {
-            const engagementStart = new Date(engagement.startDate);
-            return engagementStart.getFullYear() === lastYear;
-          });
-        } else if (dateRange === 'month') {
-          // This Month: only include engagements in the current month
-          const currentMonth = startDate.getMonth();
-          const currentYear = startDate.getFullYear();
-          engagements = engagements.filter(engagement => {
-            const engagementStart = new Date(engagement.startDate);
-            return (
-              engagementStart.getMonth() === currentMonth &&
-              engagementStart.getFullYear() === currentYear
-            );
-          });
+        if (dateRange === 'all') {
+          // For 'all', we don't apply any date filtering
+          // No need to filter - show all engagements
         } else {
-          // Default filtering for other date ranges
-          engagements = engagements.filter(engagement => {
-            const engagementStart = new Date(engagement.startDate);
-            const engagementEnd = new Date(engagement.endDate);
-            
-            // Include engagement if it overlaps with the date range
-            return (
-              (engagementStart >= startDate && engagementStart <= endDate) ||
-              (engagementEnd >= startDate && engagementEnd <= endDate) ||
-              (engagementStart <= startDate && engagementEnd >= endDate)
-            );
-          });
+          const { startDate, endDate } = getDateRange(dateRange);
+          
+          // Special handling for different date ranges
+          if (dateRange === 'current') {
+            // Current Year: include engagements that overlap with the current year
+            const currentYear = startDate.getFullYear();
+            const yearStart = new Date(currentYear, 0, 1);
+            yearStart.setHours(0, 0, 0, 0); // Set to start of day
+            const yearEnd = new Date(currentYear, 11, 31);
+            yearEnd.setHours(23, 59, 59, 999); // Set to end of day
+
+            engagements = engagements.filter(engagement => {
+              const engagementStart = new Date(engagement.startDate);
+              engagementStart.setHours(0, 0, 0, 0); // Set to start of day
+              const engagementEnd = new Date(engagement.endDate);
+              engagementEnd.setHours(23, 59, 59, 999); // Set to end of day
+              
+              // Include if:
+              // 1. Engagement starts during the year, or
+              // 2. Engagement ends during the year, or
+              // 3. Engagement spans the entire year
+              return (
+                (engagementStart >= yearStart && engagementStart <= yearEnd) || // Starts in year
+                (engagementEnd >= yearStart && engagementEnd <= yearEnd) || // Ends in year
+                (engagementStart <= yearStart && engagementEnd >= yearEnd) // Spans year
+              );
+            });
+          } else if (dateRange === 'last') {
+            // Last Year: include engagements that overlap with last year
+            const lastYear = startDate.getFullYear();
+            const yearStart = new Date(lastYear, 0, 1);
+            yearStart.setHours(0, 0, 0, 0); // Set to start of day
+            const yearEnd = new Date(lastYear, 11, 31);
+            yearEnd.setHours(23, 59, 59, 999); // Set to end of day
+
+            engagements = engagements.filter(engagement => {
+              const engagementStart = new Date(engagement.startDate);
+              engagementStart.setHours(0, 0, 0, 0); // Set to start of day
+              const engagementEnd = new Date(engagement.endDate);
+              engagementEnd.setHours(23, 59, 59, 999); // Set to end of day
+              
+              // Include if:
+              // 1. Engagement starts during the year, or
+              // 2. Engagement ends during the year, or
+              // 3. Engagement spans the entire year
+              return (
+                (engagementStart >= yearStart && engagementStart <= yearEnd) || // Starts in year
+                (engagementEnd >= yearStart && engagementEnd <= yearEnd) || // Ends in year
+                (engagementStart <= yearStart && engagementEnd >= yearEnd) // Spans year
+              );
+            });
+          } else if (dateRange === 'month') {
+            // This Month: include engagements that overlap with the current month
+            const currentMonth = startDate.getMonth();
+            const currentYear = startDate.getFullYear();
+            const monthStart = new Date(currentYear, currentMonth, 1);
+            monthStart.setHours(0, 0, 0, 0); // Set to start of day
+            const monthEnd = new Date(currentYear, currentMonth + 1, 0);
+            monthEnd.setHours(23, 59, 59, 999); // Set to end of day
+
+            engagements = engagements.filter(engagement => {
+              const engagementStart = new Date(engagement.startDate);
+              engagementStart.setHours(0, 0, 0, 0); // Set to start of day
+              const engagementEnd = new Date(engagement.endDate);
+              engagementEnd.setHours(23, 59, 59, 999); // Set to end of day
+              
+              // Include if:
+              // 1. Engagement starts during the month, or
+              // 2. Engagement ends during the month, or
+              // 3. Engagement spans the entire month
+              return (
+                (engagementStart >= monthStart && engagementStart <= monthEnd) || // Starts in month
+                (engagementEnd >= monthStart && engagementEnd <= monthEnd) || // Ends in month
+                (engagementStart <= monthStart && engagementEnd >= monthEnd) // Spans month
+              );
+            });
+          } else {
+            // Default filtering for other date ranges
+            engagements = engagements.filter(engagement => {
+              const engagementStart = new Date(engagement.startDate);
+              const engagementEnd = new Date(engagement.endDate);
+              
+              // Include engagement if it overlaps with the date range
+              return (
+                (engagementStart >= startDate && engagementStart <= endDate) ||
+                (engagementEnd >= startDate && engagementEnd <= endDate) ||
+                (engagementStart <= startDate && engagementEnd >= endDate)
+              );
+            });
+          }
         }
       }
       

@@ -53,11 +53,35 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
   };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters(prev => ({ ...prev, startDate: e.target.value }));
+    const newStartDate = e.target.value;
+    setFilters(prev => ({ 
+      ...prev, 
+      startDate: newStartDate 
+    }));
+    
+    // If both start and end dates are set, we can trigger filtering immediately
+    if (filters.endDate) {
+      // Slight delay to ensure state updates before filtering
+      setTimeout(() => {
+        setFilters(prev => ({ ...prev })); // Force a re-render to trigger filtering
+      }, 50);
+    }
   };
 
   const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters(prev => ({ ...prev, endDate: e.target.value }));
+    const newEndDate = e.target.value;
+    setFilters(prev => ({ 
+      ...prev, 
+      endDate: newEndDate 
+    }));
+    
+    // If both start and end dates are set, we can trigger filtering immediately
+    if (filters.startDate) {
+      // Slight delay to ensure state updates before filtering
+      setTimeout(() => {
+        setFilters(prev => ({ ...prev })); // Force a re-render to trigger filtering
+      }, 50);
+    }
   };
 
   return (
@@ -99,6 +123,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
                 <SelectValue placeholder="Select Range" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Engagements</SelectItem>
                 <SelectItem value="current">Current Year</SelectItem>
                 <SelectItem value="last">Last Year</SelectItem>
                 <SelectItem value="month">This Month</SelectItem>

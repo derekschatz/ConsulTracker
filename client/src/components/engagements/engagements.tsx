@@ -7,6 +7,7 @@ import EngagementTable from './engagement-table';
 import EngagementModal from '@/components/modals/engagement-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { getDateRange } from '@/lib/date-utils';
 
 interface Filters {
   status: string;
@@ -25,7 +26,7 @@ const Engagements = () => {
   const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
-    dateRange: 'current'
+    dateRange: 'all'
   });
 
   // Build query params
@@ -43,8 +44,31 @@ const Engagements = () => {
   
   // Apply date range filter
   if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
-    queryParams.append('startDate', filters.startDate);
-    queryParams.append('endDate', filters.endDate);
+    // For custom date ranges, we need to ensure the backend gets dates in the correct format
+    // and that our frontend filtering uses the same date interpretation
+    const customStartParts = filters.startDate.split('-').map(Number);
+    const customEndParts = filters.endDate.split('-').map(Number);
+    
+    // Create date objects for consistent formatting
+    const customStart = new Date(customStartParts[0], customStartParts[1] - 1, customStartParts[2]);
+    const customEnd = new Date(customEndParts[0], customEndParts[1] - 1, customEndParts[2]);
+    
+    // Set time components for consistent day boundary handling
+    customStart.setHours(0, 0, 0, 0);
+    customEnd.setHours(23, 59, 59, 999);
+    
+    // Format as ISO date strings (YYYY-MM-DD)
+    const formattedStartDate = customStart.toISOString().split('T')[0];
+    const formattedEndDate = customEnd.toISOString().split('T')[0];
+    
+    console.log('Custom date filter params:', { 
+      startDate: formattedStartDate, 
+      endDate: formattedEndDate 
+    });
+    
+    // Send the properly formatted dates to the backend
+    queryParams.append('startDate', formattedStartDate);
+    queryParams.append('endDate', formattedEndDate);
   } else if (filters.dateRange) {
     queryParams.append('dateRange', filters.dateRange);
   }
@@ -103,8 +127,84 @@ const Engagements = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/engagements'] });
   };
 
-  // No need to filter engagements client-side since we're handling it on the server
-  const filteredEngagements = engagements;
+  // Add client-side filtering to ensure we only show engagements that match the current filter criteria
+  const filteredEngagements = engagements.filter((engagement: any) => {
+    // First, check if the client filter matches (if specified)
+    if (filters.client !== 'all' && engagement.clientName !== filters.client) {
+      return false; // Skip this engagement if client doesn't match
+    }
+    
+    const engagementStartDate = new Date(engagement.startDate);
+    const engagementEndDate = new Date(engagement.endDate);
+    
+    // Get the date range based on the current filter
+    if (filters.dateRange === 'all') {
+      // Show all engagements regardless of date
+      return true;
+    } else if (filters.dateRange === 'current') {
+      const { startDate: yearStart, endDate: yearEnd } = getDateRange('current');
+      
+      // Check if the engagement overlaps with the current year
+      return (
+        // Starts during the year
+        (engagementStartDate >= yearStart && engagementStartDate <= yearEnd) ||
+        // Ends during the year
+        (engagementEndDate >= yearStart && engagementEndDate <= yearEnd) ||
+        // Spans the entire year
+        (engagementStartDate <= yearStart && engagementEndDate >= yearEnd)
+      );
+    } else if (filters.dateRange === 'last') {
+      const { startDate: yearStart, endDate: yearEnd } = getDateRange('last');
+      
+      // Check if the engagement overlaps with the last year
+      return (
+        // Starts during the year
+        (engagementStartDate >= yearStart && engagementStartDate <= yearEnd) ||
+        // Ends during the year
+        (engagementEndDate >= yearStart && engagementEndDate <= yearEnd) ||
+        // Spans the entire year
+        (engagementStartDate <= yearStart && engagementEndDate >= yearEnd)
+      );
+    } else if (filters.dateRange === 'month') {
+      const { startDate: monthStart, endDate: monthEnd } = getDateRange('month');
+      
+      // Check if the engagement overlaps with the current month
+      return (
+        // Starts during the month
+        (engagementStartDate >= monthStart && engagementStartDate <= monthEnd) ||
+        // Ends during the month
+        (engagementEndDate >= monthStart && engagementEndDate <= monthEnd) ||
+        // Spans the entire month
+        (engagementStartDate <= monthStart && engagementEndDate >= monthEnd)
+      );
+    } else if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
+      // Parse the date strings correctly to handle potential timezone issues
+      // Format is 'YYYY-MM-DD' from the input field, so we need to parse it specifically
+      const customStartParts = filters.startDate.split('-').map(Number);
+      const customEndParts = filters.endDate.split('-').map(Number);
+      
+      // Create date objects using year, month (0-based), and day
+      const customStart = new Date(customStartParts[0], customStartParts[1] - 1, customStartParts[2]);
+      const customEnd = new Date(customEndParts[0], customEndParts[1] - 1, customEndParts[2]);
+      
+      // Set time components appropriately for day-level comparison
+      customStart.setHours(0, 0, 0, 0);
+      customEnd.setHours(23, 59, 59, 999);
+      
+      // Check if the engagement overlaps with the custom date range
+      return (
+        // Starts during the range
+        (engagementStartDate >= customStart && engagementStartDate <= customEnd) ||
+        // Ends during the range
+        (engagementEndDate >= customStart && engagementEndDate <= customEnd) ||
+        // Spans the entire range
+        (engagementStartDate <= customStart && engagementEndDate >= customEnd)
+      );
+    }
+    
+    // If no matching filter, return true to include all engagements
+    return true;
+  });
 
   // Extract unique client names for filter dropdown
   const clientOptions: string[] = Array.from(
