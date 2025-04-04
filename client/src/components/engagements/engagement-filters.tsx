@@ -101,12 +101,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
               <SelectContent>
                 <SelectItem value="current">Current Year</SelectItem>
                 <SelectItem value="last">Last Year</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
                 <SelectItem value="month">This Month</SelectItem>
-                <SelectItem value="quarter">This Quarter</SelectItem>
-                <SelectItem value="last3">Last 3 Months</SelectItem>
-                <SelectItem value="last6">Last 6 Months</SelectItem>
-                <SelectItem value="last12">Last 12 Months</SelectItem>
                 <SelectItem value="custom">Custom Range</SelectItem>
               </SelectContent>
             </Select>

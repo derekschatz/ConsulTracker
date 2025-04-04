@@ -1,4 +1,4 @@
-import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
+import { format, parse, isValid, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 
 export interface DateRange {
   startDate: Date;
@@ -28,65 +28,33 @@ export function parseDate(dateStr: string, formatStr = 'yyyy-MM-dd'): Date | nul
 export function getDateRange(range: string, referenceDate: Date = new Date()): DateRange {
   switch (range) {
     case 'current':
+      // Current Year: from beginning of the year to current date
       return {
         startDate: startOfYear(referenceDate),
-        endDate: endOfYear(referenceDate)
+        endDate: referenceDate
       };
     
     case 'last':
+      // Last Year: entire previous year
       const lastYear = new Date(referenceDate);
       lastYear.setFullYear(lastYear.getFullYear() - 1);
       return {
         startDate: startOfYear(lastYear),
         endDate: endOfYear(lastYear)
       };
-
-    case 'week':
-      return {
-        startDate: startOfWeek(referenceDate, { weekStartsOn: 1 }),
-        endDate: endOfWeek(referenceDate, { weekStartsOn: 1 })
-      };
     
     case 'month':
+      // This Month: all dates in current month
       return {
         startDate: startOfMonth(referenceDate),
         endDate: endOfMonth(referenceDate)
       };
     
-    case 'quarter':
-      return {
-        startDate: startOfQuarter(referenceDate),
-        endDate: endOfQuarter(referenceDate)
-      };
-    
-    case 'year':
-      return {
-        startDate: startOfYear(referenceDate),
-        endDate: endOfYear(referenceDate)
-      };
-    
-    case 'last3':
-      return {
-        startDate: startOfMonth(subMonths(referenceDate, 3)),
-        endDate: endOfMonth(referenceDate)
-      };
-    
-    case 'last6':
-      return {
-        startDate: startOfMonth(subMonths(referenceDate, 6)),
-        endDate: endOfMonth(referenceDate)
-      };
-    
-    case 'last12':
-      return {
-        startDate: startOfMonth(subMonths(referenceDate, 12)),
-        endDate: endOfMonth(referenceDate)
-      };
-    
     default:
+      // Default to current year
       return {
         startDate: startOfYear(referenceDate),
-        endDate: endOfYear(referenceDate)
+        endDate: referenceDate
       };
   }
 }
