@@ -76,7 +76,7 @@ const TimeLogFilters = ({ filters, setFilters, engagements }: TimeLogFiltersProp
                 <SelectValue placeholder="All Engagements" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Engagements</SelectItem>
+                <SelectItem value="all">All Engagements</SelectItem>
                 {engagements.map((engagement: any) => (
                   <SelectItem key={engagement.id} value={engagement.id.toString()}>
                     {engagement.clientName} - {engagement.projectName}

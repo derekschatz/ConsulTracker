@@ -26,12 +26,12 @@ const Invoices = () => {
   // Build query params
   let queryParams = new URLSearchParams();
   
-  if (filters.status) {
+  if (filters.status && filters.status !== 'all') {
     queryParams.append('status', filters.status);
   }
 
   // Fetch invoices with filters
-  const { data: invoices = [], isLoading } = useQuery({
+  const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/invoices', queryParams.toString()],
   });
 
@@ -118,12 +118,12 @@ const Invoices = () => {
   };
 
   // Apply client filter
-  const filteredInvoices = filters.client 
+  const filteredInvoices = (filters.client && filters.client !== 'all')
     ? invoices.filter((invoice: any) => invoice.clientName === filters.client)
     : invoices;
 
   // Extract unique client names for filter dropdown
-  const clientOptions = Array.from(
+  const clientOptions: string[] = Array.from(
     new Set(invoices.map((invoice: any) => invoice.clientName))
   );
 

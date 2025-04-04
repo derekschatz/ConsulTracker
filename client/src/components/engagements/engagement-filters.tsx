@@ -40,7 +40,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Statuses</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="upcoming">Upcoming</SelectItem>
@@ -54,7 +54,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
                 <SelectValue placeholder="All Clients" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Clients</SelectItem>
+                <SelectItem value="all">All Clients</SelectItem>
                 {clientOptions.map(client => (
                   <SelectItem key={client} value={client}>{client}</SelectItem>
                 ))}
@@ -68,7 +68,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
                 <SelectValue placeholder="All Time" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Time</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
                 <SelectItem value="current">Current Year</SelectItem>
                 <SelectItem value="last">Last Year</SelectItem>
                 <SelectItem value="custom">Custom Range</SelectItem>
