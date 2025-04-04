@@ -13,8 +13,8 @@ import { pool } from './db';
 
 // Helper function to get date range based on predefined ranges
 function getDateRange(range: string): { startDate: Date; endDate: Date } {
-  const today = new Date();
-  const currentYear = today.getFullYear();
+  const today = new Date(2025, 3, 3); // April 3, 2025
+  const currentYear = 2025;
   
   switch (range) {
     case 'current':
@@ -437,8 +437,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard routes
   app.get("/api/dashboard/ytd-revenue", async (req, res) => {
     try {
-      // Default to 2023 for demo data consistency if no year is provided
-      const year = Number(req.query.year) || 2023;
+      // Default to 2025 for current year if no year is provided
+      const year = Number(req.query.year) || 2025;
       const revenue = await storage.getYtdRevenue(year);
       res.json({ revenue });
     } catch (error) {
@@ -448,8 +448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/monthly-revenue", async (req, res) => {
     try {
-      // Default to 2023 for demo data consistency if no year is provided
-      const year = Number(req.query.year) || 2023;
+      // Default to 2025 for current year if no year is provided
+      const year = Number(req.query.year) || 2025;
       const monthlyData = await storage.getMonthlyRevenueBillable(year);
       res.json(monthlyData);
     } catch (error) {
@@ -459,15 +459,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
-      // Using 2023 as the reference year for our demo data
-      const demoYear = 2023;
-      const demoMonth = 9; // October (0-based index)
+      // Using 2025 as the reference year for current data
+      const demoYear = 2025;
+      const demoMonth = 3; // April (0-based index)
       
-      // Calculate start and end of October 2023 (current month in demo data)
+      // Calculate start and end of April 2025 (current month)
       const startOfMonth = new Date(demoYear, demoMonth, 1);
       const endOfMonth = new Date(demoYear, demoMonth + 1, 0, 23, 59, 59);
       
-      // Calculate start and end of year 2023
+      // Calculate start and end of year 2025
       const startOfYear = new Date(demoYear, 0, 1);
       const endOfYear = new Date(demoYear, 11, 31, 23, 59, 59);
 

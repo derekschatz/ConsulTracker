@@ -21,8 +21,8 @@ export function parseDate(dateStr: string, formatStr = 'yyyy-MM-dd'): Date | nul
 
 // Get date range based on predefined ranges
 export function getDateRange(range: string): { startDate: Date; endDate: Date } {
-  // Using October 2023 as our reference "today" to match our demo data
-  const demoToday = new Date(2023, 9, 15); // October 15, 2023
+  // Using April 2025 as our reference "today" to match the current date
+  const demoToday = new Date(2025, 3, 3); // April 3, 2025
   
   switch (range) {
     case 'today':
@@ -105,19 +105,17 @@ export function formatDateRange(startDate: Date, endDate: Date): string {
   return `${format(startDate, 'MMMM d, yyyy')} - ${format(endDate, 'MMMM d, yyyy')}`;
 }
 
-// Get the current year - using 2023 for demo data consistency
+// Get the current year - using 2025 as the current year
 export function getCurrentYear(): number {
-  // Using 2023 to match our demo data
-  return 2023;
-  // For production use:
-  // return new Date().getFullYear();
+  // Using 2025 as the current year
+  return 2025;
 }
 
 // Function to check if a date is in the past
 export function isDateInPast(date: Date | string): boolean {
   const compareDate = typeof date === 'string' ? new Date(date) : date;
-  // Using October 15, 2023 as our reference "today" to match demo data
-  const demoToday = new Date(2023, 9, 15);
+  // Using April 3, 2025 as our reference "today"
+  const demoToday = new Date(2025, 3, 3);
   demoToday.setHours(0, 0, 0, 0);
   return compareDate < demoToday;
 }
@@ -125,8 +123,8 @@ export function isDateInPast(date: Date | string): boolean {
 // Function to check if a date is in the future
 export function isDateInFuture(date: Date | string): boolean {
   const compareDate = typeof date === 'string' ? new Date(date) : date;
-  // Using October 15, 2023 as our reference "today" to match demo data
-  const demoToday = new Date(2023, 9, 15);
+  // Using April 3, 2025 as our reference "today"
+  const demoToday = new Date(2025, 3, 3);
   demoToday.setHours(0, 0, 0, 0);
   return compareDate > demoToday;
 }
@@ -134,8 +132,8 @@ export function isDateInFuture(date: Date | string): boolean {
 // Function to check if a date is today
 export function isDateToday(date: Date | string): boolean {
   const compareDate = typeof date === 'string' ? new Date(date) : date;
-  // Using October 15, 2023 as our reference "today" to match demo data
-  const demoToday = new Date(2023, 9, 15);
+  // Using April 3, 2025 as our reference "today"
+  const demoToday = new Date(2025, 3, 3);
   return (
     compareDate.getDate() === demoToday.getDate() &&
     compareDate.getMonth() === demoToday.getMonth() &&
@@ -144,7 +142,7 @@ export function isDateToday(date: Date | string): boolean {
 }
 
 // Get ISO formatted date string (YYYY-MM-DD)
-export function getISODate(date: Date = new Date(2023, 9, 15)): string {
-  // Using the provided date or defaulting to our demo date (October 15, 2023)
+export function getISODate(date: Date = new Date(2025, 3, 3)): string {
+  // Using the provided date or defaulting to our reference date (April 3, 2025)
   return format(date, 'yyyy-MM-dd');
 }
