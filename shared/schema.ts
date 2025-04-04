@@ -1,6 +1,7 @@
 import { pgTable, text, serial, integer, timestamp, numeric, doublePrecision, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { relations } from "drizzle-orm";
 
 // Define engagement status enum
 export const engagementStatusEnum = z.enum(['active', 'completed', 'upcoming']);
@@ -15,6 +16,10 @@ export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
 });
+
+export const clientsRelations = relations(clients, ({ many }) => ({
+  engagements: many(engagements)
+}));
 
 export const insertClientSchema = createInsertSchema(clients).pick({
   name: true,
@@ -31,6 +36,11 @@ export const engagements = pgTable("engagements", {
   description: text("description"),
   status: text("status").notNull().default('active')
 });
+
+export const engagementsRelations = relations(engagements, ({ many }) => ({
+  timeLogs: many(timeLogs),
+  invoices: many(invoices)
+}));
 
 export const insertEngagementSchema = createInsertSchema(engagements).pick({
   clientName: true,
@@ -51,6 +61,13 @@ export const timeLogs = pgTable("time_logs", {
   description: text("description").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export const timeLogsRelations = relations(timeLogs, ({ one }) => ({
+  engagement: one(engagements, {
+    fields: [timeLogs.engagementId],
+    references: [engagements.id]
+  })
+}));
 
 export const insertTimeLogSchema = createInsertSchema(timeLogs).pick({
   engagementId: true,
@@ -73,6 +90,14 @@ export const invoices = pgTable("invoices", {
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
 });
+
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  engagement: one(engagements, {
+    fields: [invoices.engagementId],
+    references: [engagements.id]
+  }),
+  lineItems: many(invoiceLineItems)
+}));
 
 export const insertInvoiceSchema = createInsertSchema(invoices).pick({
   invoiceNumber: true,
@@ -97,6 +122,17 @@ export const invoiceLineItems = pgTable("invoice_line_items", {
   rate: numeric("rate").notNull(),
   amount: numeric("amount").notNull(),
 });
+
+export const invoiceLineItemsRelations = relations(invoiceLineItems, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [invoiceLineItems.invoiceId],
+    references: [invoices.id]
+  }),
+  timeLog: one(timeLogs, {
+    fields: [invoiceLineItems.timeLogId],
+    references: [timeLogs.id]
+  })
+}));
 
 export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).pick({
   invoiceId: true,

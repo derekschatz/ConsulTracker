@@ -12,6 +12,18 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { getISODate } from '@/lib/date-utils';
 
+// Interface for Engagement
+interface Engagement {
+  id: number;
+  clientName: string;
+  projectName: string;
+  startDate: string;
+  endDate: string;
+  hourlyRate: string;
+  description: string;
+  status: string;
+}
+
 const formSchema = z.object({
   engagementId: z.string().min(1, 'Please select an engagement'),
   date: z.string().min(1, 'Date is required'),
@@ -30,7 +42,7 @@ const QuickAddTimeForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch engagements for dropdown
-  const { data: engagements = [] } = useQuery({
+  const { data: engagements = [] } = useQuery<Engagement[]>({
     queryKey: ['/api/engagements/active'],
   });
 
@@ -103,18 +115,35 @@ const QuickAddTimeForm = () => {
         <Label htmlFor="engagementSelect" className="block text-sm font-medium text-slate-700 mb-1">
           Engagement
         </Label>
-        <Select {...register('engagementId')}>
-          <SelectTrigger className={errors.engagementId ? 'border-red-500' : ''}>
-            <SelectValue placeholder="Select an engagement" />
-          </SelectTrigger>
-          <SelectContent>
-            {engagements.map((engagement: any) => (
-              <SelectItem key={engagement.id} value={engagement.id.toString()}>
-                {engagement.clientName} - {engagement.projectName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div>
+          <Input
+            type="hidden"
+            {...register('engagementId')}
+            id="engagement-id-input"
+          />
+          <Select 
+            onValueChange={(value) => {
+              const input = document.getElementById('engagement-id-input') as HTMLInputElement;
+              if (input) {
+                input.value = value;
+                // Trigger a change event to notify react-hook-form
+                const event = new Event('input', { bubbles: true });
+                input.dispatchEvent(event);
+              }
+            }}
+          >
+            <SelectTrigger className={errors.engagementId ? 'border-red-500' : ''}>
+              <SelectValue placeholder="Select an engagement" />
+            </SelectTrigger>
+            <SelectContent>
+              {engagements.map((engagement: Engagement) => (
+                <SelectItem key={engagement.id} value={engagement.id.toString()}>
+                  {engagement.clientName} - {engagement.projectName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {errors.engagementId && (
           <span className="text-xs text-red-500">{errors.engagementId.message}</span>
         )}
