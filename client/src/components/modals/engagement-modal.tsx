@@ -57,14 +57,14 @@ const EngagementModal = ({
     defaultValues: engagement
       ? {
           ...engagement,
-          startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : '',
+          startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
           endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
           hourlyRate: String(engagement.hourlyRate),
         }
       : {
           clientName: '',
           projectName: '',
-          startDate: getISODate(),
+          startDate: getISODate(), // Uses default 2025 date
           endDate: '',
           hourlyRate: '',
           description: '',

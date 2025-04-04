@@ -155,7 +155,7 @@ export function isDateToday(date: Date | string): boolean {
 }
 
 // Get ISO formatted date string (YYYY-MM-DD)
-export function getISODate(date: Date): string {
+export function getISODate(date: Date = new Date(2025, 3, 3)): string {
   return format(date, 'yyyy-MM-dd');
 }
 

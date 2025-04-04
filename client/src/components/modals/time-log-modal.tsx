@@ -65,12 +65,12 @@ const TimeLogModal = ({
     defaultValues: timeLog
       ? {
           ...timeLog,
-          date: timeLog.date ? getISODate(new Date(timeLog.date)) : '',
+          date: timeLog.date ? getISODate(new Date(timeLog.date)) : getISODate(),
           hours: String(timeLog.hours),
         }
       : {
           engagementId: preselectedEngagementId || '',
-          date: getISODate(new Date(2025, 3, 3)), // Use current reference date
+          date: getISODate(), // Uses default 2025 date
           hours: '',
           description: '',
         },
