@@ -64,6 +64,20 @@ const TimeLogModal = ({
     enabled: isOpen,
   });
 
+  // Get engagement ID from either direct property or nested engagement object
+  const getEngagementId = () => {
+    if (!timeLog) return preselectedEngagementId || 0;
+    
+    // Handle both data structures: flat or nested engagement
+    if (timeLog.engagementId !== undefined) {
+      return timeLog.engagementId;
+    } else if (timeLog.engagement && timeLog.engagement.id !== undefined) {
+      return timeLog.engagement.id;
+    }
+    
+    return 0;
+  };
+  
   // Initialize form with default values or existing time log
   const {
     register,
@@ -79,7 +93,7 @@ const TimeLogModal = ({
           ...timeLog,
           date: timeLog.date ? getISODate(new Date(timeLog.date)) : getISODate(),
           hours: String(timeLog.hours),
-          engagementId: timeLog.engagementId,
+          engagementId: getEngagementId(),
         }
       : {
           engagementId: preselectedEngagementId || 0,
@@ -99,7 +113,18 @@ const TimeLogModal = ({
   // Find and set the rate when an engagement is selected
   useEffect(() => {
     if (isOpen && engagements && engagements.length > 0) {
-      const currentEngagementId = timeLog?.engagementId || preselectedEngagementId;
+      // Get engagementId from either direct property or nested engagement object
+      let currentEngagementId;
+      if (timeLog) {
+        if (timeLog.engagementId !== undefined) {
+          currentEngagementId = timeLog.engagementId;
+        } else if (timeLog.engagement && timeLog.engagement.id !== undefined) {
+          currentEngagementId = timeLog.engagement.id;
+        }
+      } else {
+        currentEngagementId = preselectedEngagementId;
+      }
+      
       if (currentEngagementId) {
         const engagement = engagements.find(e => e.id === currentEngagementId);
         if (engagement) {
