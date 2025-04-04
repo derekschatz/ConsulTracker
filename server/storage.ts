@@ -440,15 +440,24 @@ export class MemStorage implements IStorage {
   // Helper methods
   private enrichTimeLog(timeLog: TimeLog): TimeLogWithEngagement {
     const engagement = this.engagements.get(timeLog.engagementId);
-    if (!engagement) {
-      throw new Error(`Engagement not found for timeLog: ${timeLog.id}`);
-    }
+    
+    // If engagement doesn't exist, use a fallback object rather than throwing an error
+    const engagementData = engagement || {
+      id: timeLog.engagementId,
+      clientName: "Unknown Client",
+      projectName: "Unknown Project",
+      hourlyRate: 0,
+      startDate: new Date(),
+      endDate: new Date(),
+      description: "",
+      status: "unknown"
+    };
 
-    const billableAmount = Number(timeLog.hours) * Number(engagement.hourlyRate);
+    const billableAmount = Number(timeLog.hours) * Number(engagementData.hourlyRate);
     
     return {
       ...timeLog,
-      engagement,
+      engagement: engagementData,
       billableAmount
     };
   }
