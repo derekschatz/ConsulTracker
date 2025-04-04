@@ -55,7 +55,7 @@ const QuickAddTimeForm = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       engagementId: '',
-      date: getISODate(new Date(2025, 3, 3)), // Use current reference date
+      date: getISODate(), // Uses default 2025 date
       hours: '',
       description: '',
     },
@@ -89,7 +89,7 @@ const QuickAddTimeForm = () => {
       // Reset form
       reset({
         engagementId: '',
-        date: getISODate(new Date(2025, 3, 3)), // Use current reference date
+        date: getISODate(), // Uses default 2025 date
         hours: '',
         description: '',
       });
