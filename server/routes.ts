@@ -9,44 +9,90 @@ import {
 import { z } from "zod";
 import nodemailer from "nodemailer";
 import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
+import { pool } from './db';
 
 // Helper function to get date range based on predefined ranges
 function getDateRange(range: string): { startDate: Date; endDate: Date } {
-  // Using data from 2023 for our demo application
-  const demoYear = 2023;
-  const demoToday = new Date(demoYear, 9, 15); // October 15, 2023
+  const today = new Date();
+  const currentYear = today.getFullYear();
   
   switch (range) {
     case 'current':
       return {
-        startDate: startOfYear(demoToday),
-        endDate: endOfYear(demoToday)
+        startDate: new Date(currentYear, 0, 1), // January 1st of current year
+        endDate: new Date(currentYear, 11, 31, 23, 59, 59) // December 31st of current year
+      };
+    
+    case 'last':
+      return {
+        startDate: new Date(currentYear - 1, 0, 1), // January 1st of last year
+        endDate: new Date(currentYear - 1, 11, 31, 23, 59, 59) // December 31st of last year
+      };
+
+    case 'week':
+      return {
+        startDate: startOfWeek(today, { weekStartsOn: 1 }),
+        endDate: endOfWeek(today, { weekStartsOn: 1 })
+      };
+    
+    case 'month':
+      return {
+        startDate: startOfMonth(today),
+        endDate: endOfMonth(today)
+      };
+    
+    case 'quarter':
+      return {
+        startDate: startOfQuarter(today),
+        endDate: endOfQuarter(today)
+      };
+    
+    case 'year':
+      return {
+        startDate: startOfYear(today),
+        endDate: endOfYear(today)
       };
     
     case 'last3':
       return {
-        startDate: startOfMonth(subMonths(demoToday, 3)),
-        endDate: endOfMonth(demoToday)
+        startDate: startOfMonth(subMonths(today, 3)),
+        endDate: endOfMonth(today)
       };
     
     case 'last6':
       return {
-        startDate: startOfMonth(subMonths(demoToday, 6)),
-        endDate: endOfMonth(demoToday)
+        startDate: startOfMonth(subMonths(today, 6)),
+        endDate: endOfMonth(today)
       };
     
     case 'last12':
       return {
-        startDate: startOfMonth(subMonths(demoToday, 12)),
-        endDate: endOfMonth(demoToday)
+        startDate: startOfMonth(subMonths(today, 12)),
+        endDate: endOfMonth(today)
+      };
+    
+    case 'custom':
+      // For custom ranges, the frontend should provide explicit startDate and endDate
+      return {
+        startDate: today,
+        endDate: today
       };
     
     default:
       return {
-        startDate: startOfYear(demoToday),
-        endDate: endOfYear(demoToday)
+        startDate: startOfYear(today),
+        endDate: endOfYear(today)
       };
   }
+}
+
+interface InvoiceItem {
+  description: string;
+  hours: number;
+  amount: string;
+  timeLogId: number;
+  rate: string;
+  invoiceId: number;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -72,7 +118,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Apply date range filter if provided
       const dateRange = req.query.dateRange as string | undefined;
-      if (dateRange && dateRange !== 'all') {
+      const startDateParam = req.query.startDate as string | undefined;
+      const endDateParam = req.query.endDate as string | undefined;
+
+      if (startDateParam && endDateParam) {
+        // Use custom date range if provided
+        const startDate = new Date(startDateParam);
+        const endDate = new Date(endDateParam);
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          return res.status(400).json({ error: 'Invalid date format' });
+        }
+
+        engagements = engagements.filter(engagement => {
+          const engagementStart = new Date(engagement.startDate);
+          const engagementEnd = new Date(engagement.endDate);
+          // Include engagement if it overlaps with the date range
+          return !(engagementEnd < startDate || engagementStart > endDate);
+        });
+      } else if (dateRange) {
+        // Use predefined date range
         const { startDate, endDate } = getDateRange(dateRange);
         engagements = engagements.filter(engagement => {
           const engagementStart = new Date(engagement.startDate);
@@ -246,38 +311,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Invoice routes
-  app.get("/api/invoices", async (req, res) => {
+  app.get("/api/invoices", async (req: Request, res: Response) => {
     try {
-      const status = req.query.status as string | undefined;
-      const clientName = req.query.client as string | undefined;
-      const dateRange = req.query.dateRange as string | undefined;
-      
-      // Get all invoices first
-      let invoices = await storage.getInvoices();
-      
+      const { status, client, dateRange, startDate, endDate } = req.query;
+      let query = `
+        SELECT i.*, e.client_name, e.project_name
+        FROM invoices i
+        JOIN engagements e ON i.engagement_id = e.id
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+
       // Apply status filter
       if (status && status !== 'all') {
-        invoices = invoices.filter(invoice => invoice.status === status);
-      }
-      
-      // Apply client filter
-      if (clientName && clientName !== 'all') {
-        invoices = invoices.filter(invoice => invoice.clientName === clientName);
-      }
-      
-      // Apply date range filter
-      if (dateRange && dateRange !== 'all') {
-        const { startDate, endDate } = getDateRange(dateRange);
-        invoices = invoices.filter(invoice => {
-          const issueDate = new Date(invoice.issueDate);
-          return issueDate >= startDate && issueDate <= endDate;
-        });
+        query += ` AND i.status = $${params.length + 1}`;
+        params.push(status);
       }
 
-      res.json(invoices);
+      // Apply client filter
+      if (client && client !== 'all') {
+        query += ` AND e.client_name = $${params.length + 1}`;
+        params.push(client);
+      }
+
+      // Apply date range filter
+      if (dateRange === 'custom' && startDate && endDate) {
+        query += ` AND i.date >= $${params.length + 1} AND i.date <= $${params.length + 2}`;
+        params.push(startDate as string, endDate as string);
+      } else if (dateRange && dateRange !== 'all') {
+        const dateRangeResult = getDateRange(dateRange as string);
+        query += ` AND i.date >= $${params.length + 1} AND i.date <= $${params.length + 2}`;
+        params.push(dateRangeResult.startDate.toISOString(), dateRangeResult.endDate.toISOString());
+      }
+
+      query += ' ORDER BY i.date DESC';
+
+      const result = await pool.query(query, params);
+      res.json(result.rows);
     } catch (error) {
-      console.error("Error fetching invoices:", error);
-      res.status(500).json({ message: "Failed to fetch invoices" });
+      console.error('Error fetching invoices:', error);
+      res.status(500).json({ error: 'Failed to fetch invoices' });
     }
   });
 
@@ -293,29 +366,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices", async (req, res) => {
+  app.post('/api/invoices', async (req: Request, res: Response) => {
     try {
-      const invoiceSchema = insertInvoiceSchema.extend({
-        lineItems: z.array(z.object({
-          timeLogId: z.number(),
-          description: z.string(),
-          hours: z.number(),
-          rate: z.number(),
-          amount: z.number()
-        }))
-      });
-      
-      const validationResult = invoiceSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid invoice data", errors: validationResult.error.errors });
-      }
+      const { engagementId, timeLogs } = req.body;
 
-      const { lineItems, ...invoiceData } = validationResult.data;
-      
-      const invoice = await storage.createInvoice(invoiceData, lineItems);
-      res.status(201).json(invoice);
+      // Create invoice
+      const invoiceResult = await pool.query(
+        'INSERT INTO invoices (engagement_id, status, date) VALUES ($1, $2, $3) RETURNING id',
+        [engagementId, 'pending', new Date()]
+      );
+      const invoiceId = invoiceResult.rows[0].id;
+
+      // Create invoice items from time logs
+      const invoiceItems = timeLogs.map((log: any) => ({
+        description: log.description,
+        hours: log.hours,
+        amount: log.amount.toString(),
+        timeLogId: log.timeLogId,
+        rate: log.rate.toString(),
+        invoiceId
+      }));
+
+      // Insert invoice items
+      await pool.query(
+        'INSERT INTO invoice_items (description, hours, amount, time_log_id, rate, invoice_id) VALUES ' +
+        invoiceItems.map((_: any, i: number) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', '),
+        invoiceItems.flatMap((item: InvoiceItem) => [item.description, item.hours, item.amount, item.timeLogId, item.rate, item.invoiceId])
+      );
+
+      res.json({ id: invoiceId });
     } catch (error) {
-      res.status(500).json({ message: "Failed to create invoice" });
+      console.error('Error creating invoice:', error);
+      res.status(500).json({ error: 'Failed to create invoice' });
     }
   });
 
