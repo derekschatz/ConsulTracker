@@ -5,6 +5,7 @@ import {
   type Invoice, type InsertInvoice,
   type InvoiceLineItem, type InsertInvoiceLineItem,
   type TimeLogWithEngagement, type InvoiceWithLineItems,
+  type EngagementStatus,
   engagements, timeLogs, invoices, invoiceLineItems
 } from "@shared/schema";
 import { db } from "./db";
@@ -44,21 +45,71 @@ export interface IStorage {
   getPendingInvoicesTotal(): Promise<number>;
 }
 
+
+
+// Helper to calculate engagement status based on date
+function calculateEngagementStatus(startDate: Date, endDate: Date, currentDate = new Date(2025, 3, 4)): EngagementStatus {
+  if (currentDate < startDate) {
+    return 'upcoming';
+  } else if (currentDate > endDate) {
+    return 'completed';
+  } else {
+    return 'active';
+  }
+}
+
 export class DatabaseStorage implements IStorage {
   // Engagement methods
   async getEngagements(): Promise<Engagement[]> {
-    return await db.select().from(engagements).orderBy(desc(engagements.startDate));
+    // Get all engagements
+    const allEngagements = await db.select().from(engagements).orderBy(desc(engagements.startDate));
+    
+    // Update the status for each engagement based on date criteria
+    return allEngagements.map(engagement => {
+      const startDate = new Date(engagement.startDate);
+      const endDate = new Date(engagement.endDate);
+      
+      // Calculate status based on date ranges
+      const calculatedStatus = calculateEngagementStatus(startDate, endDate);
+      
+      // Update the engagement object
+      return {
+        ...engagement,
+        status: calculatedStatus
+      };
+    });
   }
 
   async getEngagement(id: number): Promise<Engagement | undefined> {
     const results = await db.select().from(engagements).where(eq(engagements.id, id));
-    return results.length > 0 ? results[0] : undefined;
+    if (results.length === 0) return undefined;
+    
+    const engagement = results[0];
+    
+    // Calculate status based on date ranges
+    const startDate = new Date(engagement.startDate);
+    const endDate = new Date(engagement.endDate);
+    const calculatedStatus = calculateEngagementStatus(startDate, endDate);
+    
+    // Return the engagement with updated status
+    return {
+      ...engagement,
+      status: calculatedStatus
+    };
   }
 
   async getActiveEngagements(): Promise<Engagement[]> {
-    return await db.select().from(engagements)
-      .where(eq(engagements.status, 'active'))
-      .orderBy(desc(engagements.startDate));
+    // Get all engagements
+    const allEngagements = await db.select().from(engagements).orderBy(desc(engagements.startDate));
+    
+    // Filter to only return engagements that are currently active
+    return allEngagements.filter(engagement => {
+      const startDate = new Date(engagement.startDate);
+      const endDate = new Date(engagement.endDate);
+      
+      // Use the utility function to determine status
+      return calculateEngagementStatus(startDate, endDate) === 'active';
+    });
   }
 
   async createEngagement(engagement: InsertEngagement): Promise<Engagement> {
@@ -75,7 +126,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteEngagement(id: number): Promise<boolean> {
-    const result = await db.delete(engagements).where(eq(engagements.id, id));
+    await db.delete(engagements).where(eq(engagements.id, id));
     return true; // Assuming success if no error thrown
   }
 
@@ -269,6 +320,19 @@ export class DatabaseStorage implements IStorage {
     
     if (engagementResults.length > 0) {
       engagement = engagementResults[0];
+      
+      // Update engagement status based on start and end dates
+      const startDate = new Date(engagement.startDate);
+      const endDate = new Date(engagement.endDate);
+      
+      // Calculate status using utility function
+      const calculatedStatus = calculateEngagementStatus(startDate, endDate);
+      
+      // Update the engagement status
+      engagement = {
+        ...engagement,
+        status: calculatedStatus
+      };
     } else {
       // Fallback if engagement doesn't exist
       engagement = {
