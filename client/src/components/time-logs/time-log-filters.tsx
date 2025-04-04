@@ -112,9 +112,8 @@ const TimeLogFilters = ({ filters, setFilters, engagements }: TimeLogFiltersProp
               <Input
                 id="startDateFilter"
                 type="date"
-                value={filters.startDate}
+                value={filters.startDate || getISODate(new Date())}
                 onChange={handleStartDateChange}
-                defaultValue={getISODate(new Date())}
               />
             </div>
             <div>
@@ -122,9 +121,8 @@ const TimeLogFilters = ({ filters, setFilters, engagements }: TimeLogFiltersProp
               <Input
                 id="endDateFilter"
                 type="date"
-                value={filters.endDate}
+                value={filters.endDate || getISODate(new Date())}
                 onChange={handleEndDateChange}
-                defaultValue={getISODate(new Date())}
               />
             </div>
           </div>

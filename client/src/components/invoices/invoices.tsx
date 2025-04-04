@@ -18,16 +18,27 @@ const Invoices = () => {
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
   const [filters, setFilters] = useState({
-    status: '',
-    client: '',
+    status: 'all',
+    client: 'all',
     dateRange: 'current',
   });
 
   // Build query params
   let queryParams = new URLSearchParams();
   
+  // Apply status filter
   if (filters.status && filters.status !== 'all') {
     queryParams.append('status', filters.status);
+  }
+  
+  // Apply client filter
+  if (filters.client && filters.client !== 'all') {
+    queryParams.append('client', filters.client);
+  }
+  
+  // Apply date range filter
+  if (filters.dateRange && filters.dateRange !== 'all') {
+    queryParams.append('dateRange', filters.dateRange);
   }
 
   // Fetch invoices with filters
