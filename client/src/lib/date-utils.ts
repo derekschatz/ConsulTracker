@@ -1,5 +1,10 @@
 import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
 
+export interface DateRange {
+  startDate: Date;
+  endDate: Date;
+}
+
 // Format a date to a string with specified format
 export function formatDate(date: Date | string, formatStr = 'MMM d, yyyy'): string {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -20,60 +25,68 @@ export function parseDate(dateStr: string, formatStr = 'yyyy-MM-dd'): Date | nul
 }
 
 // Get date range based on predefined ranges
-export function getDateRange(range: string): { startDate: Date; endDate: Date } {
-  // Using April 2025 as our reference "today" to match the current date
-  const demoToday = new Date(2025, 3, 3); // April 3, 2025
-  
+export function getDateRange(range: string, referenceDate: Date = new Date()): DateRange {
   switch (range) {
-    case 'today':
-      return { startDate: demoToday, endDate: demoToday };
+    case 'current':
+      return {
+        startDate: startOfYear(referenceDate),
+        endDate: endOfYear(referenceDate)
+      };
     
+    case 'last':
+      const lastYear = new Date(referenceDate);
+      lastYear.setFullYear(lastYear.getFullYear() - 1);
+      return {
+        startDate: startOfYear(lastYear),
+        endDate: endOfYear(lastYear)
+      };
+
     case 'week':
       return {
-        startDate: startOfWeek(demoToday, { weekStartsOn: 1 }),
-        endDate: endOfWeek(demoToday, { weekStartsOn: 1 })
+        startDate: startOfWeek(referenceDate, { weekStartsOn: 1 }),
+        endDate: endOfWeek(referenceDate, { weekStartsOn: 1 })
       };
     
     case 'month':
       return {
-        startDate: startOfMonth(demoToday),
-        endDate: endOfMonth(demoToday)
+        startDate: startOfMonth(referenceDate),
+        endDate: endOfMonth(referenceDate)
       };
     
     case 'quarter':
       return {
-        startDate: startOfQuarter(demoToday),
-        endDate: endOfQuarter(demoToday)
+        startDate: startOfQuarter(referenceDate),
+        endDate: endOfQuarter(referenceDate)
       };
     
     case 'year':
       return {
-        startDate: startOfYear(demoToday),
-        endDate: endOfYear(demoToday)
+        startDate: startOfYear(referenceDate),
+        endDate: endOfYear(referenceDate)
       };
     
     case 'last3':
       return {
-        startDate: startOfMonth(subMonths(demoToday, 3)),
-        endDate: endOfMonth(demoToday)
+        startDate: startOfMonth(subMonths(referenceDate, 3)),
+        endDate: endOfMonth(referenceDate)
       };
     
     case 'last6':
       return {
-        startDate: startOfMonth(subMonths(demoToday, 6)),
-        endDate: endOfMonth(demoToday)
+        startDate: startOfMonth(subMonths(referenceDate, 6)),
+        endDate: endOfMonth(referenceDate)
       };
     
     case 'last12':
       return {
-        startDate: startOfMonth(subMonths(demoToday, 12)),
-        endDate: endOfMonth(demoToday)
+        startDate: startOfMonth(subMonths(referenceDate, 12)),
+        endDate: endOfMonth(referenceDate)
       };
     
     default:
       return {
-        startDate: startOfYear(demoToday),
-        endDate: endOfYear(demoToday)
+        startDate: startOfYear(referenceDate),
+        endDate: endOfYear(referenceDate)
       };
   }
 }
@@ -142,7 +155,35 @@ export function isDateToday(date: Date | string): boolean {
 }
 
 // Get ISO formatted date string (YYYY-MM-DD)
-export function getISODate(date: Date = new Date(2025, 3, 3)): string {
-  // Using the provided date or defaulting to our reference date (April 3, 2025)
+export function getISODate(date: Date): string {
   return format(date, 'yyyy-MM-dd');
+}
+
+export function parseISODate(dateString: string): Date {
+  return parse(dateString, 'yyyy-MM-dd', new Date());
+}
+
+export function formatDateForDisplay(date: Date): string {
+  return format(date, 'MMM d, yyyy');
+}
+
+export function formatDateTimeForDisplay(date: Date): string {
+  return format(date, 'MMM d, yyyy h:mm a');
+}
+
+export function isValidDateString(dateString: string): boolean {
+  const date = parse(dateString, 'yyyy-MM-dd', new Date());
+  return !isNaN(date.getTime());
+}
+
+export function getStartOfDay(date: Date): Date {
+  const newDate = new Date(date);
+  newDate.setHours(0, 0, 0, 0);
+  return newDate;
+}
+
+export function getEndOfDay(date: Date): Date {
+  const newDate = new Date(date);
+  newDate.setHours(23, 59, 59, 999);
+  return newDate;
 }
