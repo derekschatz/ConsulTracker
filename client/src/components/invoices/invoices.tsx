@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
@@ -11,40 +11,56 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { downloadInvoice } from '@/lib/pdf-generator';
 
+interface Filters {
+  status: string;
+  client: string;
+  dateRange: string;
+  startDate?: string;
+  endDate?: string;
+}
+
 const Invoices = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
-    dateRange: 'current',
+    dateRange: 'current'
   });
 
-  // Build query params
-  let queryParams = new URLSearchParams();
-  
-  // Apply status filter
-  if (filters.status && filters.status !== 'all') {
-    queryParams.append('status', filters.status);
-  }
-  
-  // Apply client filter
-  if (filters.client && filters.client !== 'all') {
-    queryParams.append('client', filters.client);
-  }
-  
-  // Apply date range filter
-  if (filters.dateRange && filters.dateRange !== 'all') {
-    queryParams.append('dateRange', filters.dateRange);
-  }
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch invoices with filters
-  const { data: invoices = [], isLoading } = useQuery<any[]>({
-    queryKey: ['/api/invoices', queryParams.toString()],
-  });
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      setLoading(true);
+      try {
+        const queryParams = new URLSearchParams();
+        if (filters.status !== 'all') queryParams.append('status', filters.status);
+        if (filters.client !== 'all') queryParams.append('client', filters.client);
+        if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
+          queryParams.append('startDate', filters.startDate);
+          queryParams.append('endDate', filters.endDate);
+        } else {
+          queryParams.append('dateRange', filters.dateRange);
+        }
+
+        const response = await fetch(`/api/invoices?${queryParams.toString()}`);
+        if (!response.ok) throw new Error('Failed to fetch invoices');
+        const data = await response.json();
+        setInvoices(data);
+      } catch (error) {
+        console.error('Error fetching invoices:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInvoices();
+  }, [filters]);
 
   const handleOpenCreateModal = () => {
     setIsCreateModalOpen(true);
@@ -128,20 +144,17 @@ const Invoices = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
   };
 
-  // No need to filter invoices client-side since we're now handling all filters server-side
-  const filteredInvoices = invoices;
-
   // Extract unique client names for filter dropdown
   const clientOptions: string[] = Array.from(
     new Set(invoices.map((invoice: any) => invoice.clientName))
   );
 
   // Calculate summary stats
-  const totalInvoiced = filteredInvoices.reduce((sum: number, invoice: any) => sum + Number(invoice.amount), 0);
-  const paidInvoices = filteredInvoices
+  const totalInvoiced = invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.amount), 0);
+  const paidInvoices = invoices
     .filter((invoice: any) => invoice.status === 'paid')
     .reduce((sum: number, invoice: any) => sum + Number(invoice.amount), 0);
-  const outstandingInvoices = filteredInvoices
+  const outstandingInvoices = invoices
     .filter((invoice: any) => invoice.status === 'pending' || invoice.status === 'overdue')
     .reduce((sum: number, invoice: any) => sum + Number(invoice.amount), 0);
 
@@ -178,8 +191,8 @@ const Invoices = () => {
 
       {/* Invoices Table */}
       <InvoiceTable
-        invoices={filteredInvoices}
-        isLoading={isLoading}
+        invoices={invoices}
+        isLoading={loading}
         onView={handleViewInvoice}
         onEmail={handleEmailInvoice}
         onUpdateStatus={handleUpdateInvoiceStatus}

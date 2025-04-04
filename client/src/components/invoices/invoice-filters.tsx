@@ -1,22 +1,35 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getISODate } from '@/lib/date-utils';
 
 interface InvoiceFiltersProps {
   filters: {
     status: string;
     client: string;
     dateRange: string;
+    startDate?: string;
+    endDate?: string;
   };
   setFilters: React.Dispatch<React.SetStateAction<{
     status: string;
     client: string;
     dateRange: string;
+    startDate?: string;
+    endDate?: string;
   }>>;
   clientOptions: string[];
 }
 
 const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersProps) => {
+  const [showCustomRange, setShowCustomRange] = useState(filters.dateRange === 'custom');
+
+  useEffect(() => {
+    setShowCustomRange(filters.dateRange === 'custom');
+  }, [filters.dateRange]);
+
   const handleStatusChange = (value: string) => {
     setFilters(prev => ({ ...prev, status: value }));
   };
@@ -27,6 +40,14 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
 
   const handleDateRangeChange = (value: string) => {
     setFilters(prev => ({ ...prev, dateRange: value }));
+  };
+
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilters(prev => ({ ...prev, startDate: e.target.value }));
+  };
+
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilters(prev => ({ ...prev, endDate: e.target.value }));
   };
 
   return (
@@ -69,14 +90,36 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="current">Current Year</SelectItem>
-                <SelectItem value="last3">Last 3 Months</SelectItem>
-                <SelectItem value="last6">Last 6 Months</SelectItem>
-                <SelectItem value="last12">Last 12 Months</SelectItem>
+                <SelectItem value="last">Last Year</SelectItem>
                 <SelectItem value="custom">Custom Range</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
+
+        {/* Custom date range (hidden by default) */}
+        {showCustomRange && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="startDateFilter" className="block text-sm font-medium text-slate-700 mb-1">Start Date</Label>
+              <Input
+                id="startDateFilter"
+                type="date"
+                value={filters.startDate || getISODate(new Date())}
+                onChange={handleStartDateChange}
+              />
+            </div>
+            <div>
+              <Label htmlFor="endDateFilter" className="block text-sm font-medium text-slate-700 mb-1">End Date</Label>
+              <Input
+                id="endDateFilter"
+                type="date"
+                value={filters.endDate || getISODate(new Date())}
+                onChange={handleEndDateChange}
+              />
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

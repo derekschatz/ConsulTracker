@@ -8,16 +8,24 @@ import EngagementModal from '@/components/modals/engagement-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 
+interface Filters {
+  status: string;
+  client: string;
+  dateRange: string;
+  startDate?: string;
+  endDate?: string;
+}
+
 const Engagements = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentEngagement, setCurrentEngagement] = useState<any>(null);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
-    dateRange: 'all',
+    dateRange: 'current'
   });
 
   // Build query params
@@ -34,7 +42,10 @@ const Engagements = () => {
   }
   
   // Apply date range filter
-  if (filters.dateRange && filters.dateRange !== 'all') {
+  if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
+    queryParams.append('startDate', filters.startDate);
+    queryParams.append('endDate', filters.endDate);
+  } else if (filters.dateRange) {
     queryParams.append('dateRange', filters.dateRange);
   }
 
