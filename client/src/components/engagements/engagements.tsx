@@ -134,6 +134,11 @@ const Engagements = () => {
       return false; // Skip this engagement if client doesn't match
     }
     
+    // Then, check if the status filter matches (if specified)
+    if (filters.status !== 'all' && engagement.status !== filters.status) {
+      return false; // Skip this engagement if status doesn't match
+    }
+    
     const engagementStartDate = new Date(engagement.startDate);
     const engagementEndDate = new Date(engagement.endDate);
     
