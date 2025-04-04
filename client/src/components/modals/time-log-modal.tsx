@@ -14,6 +14,17 @@ import { insertTimeLogSchema } from '@shared/schema';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getISODate } from '@/lib/date-utils';
 
+// Define engagement interface
+interface Engagement {
+  id: number;
+  clientName: string;
+  projectName: string;
+  hourlyRate: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+}
+
 // Extend the time log schema with additional validation
 const formSchema = insertTimeLogSchema
   .extend({
@@ -43,12 +54,13 @@ const TimeLogModal = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedEngagementRate, setSelectedEngagementRate] = useState<string | null>(null);
 
   const isEditMode = !!timeLog;
 
-  // Fetch engagements
-  const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery({
-    queryKey: ['/api/engagements'],
+  // Fetch only active engagements
+  const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery<Engagement[]>({
+    queryKey: ['/api/engagements/active'],
     enabled: isOpen,
   });
 
@@ -67,9 +79,10 @@ const TimeLogModal = ({
           ...timeLog,
           date: timeLog.date ? getISODate(new Date(timeLog.date)) : getISODate(),
           hours: String(timeLog.hours),
+          engagementId: timeLog.engagementId,
         }
       : {
-          engagementId: preselectedEngagementId || '',
+          engagementId: preselectedEngagementId || 0,
           date: getISODate(), // Uses default 2025 date
           hours: '',
           description: '',
@@ -82,6 +95,30 @@ const TimeLogModal = ({
       setValue('engagementId', preselectedEngagementId);
     }
   }, [preselectedEngagementId, isEditMode, setValue]);
+  
+  // Find and set the rate when an engagement is selected
+  useEffect(() => {
+    if (isOpen && engagements && engagements.length > 0) {
+      const currentEngagementId = timeLog?.engagementId || preselectedEngagementId;
+      if (currentEngagementId) {
+        const engagement = engagements.find(e => e.id === currentEngagementId);
+        if (engagement) {
+          setSelectedEngagementRate(engagement.hourlyRate);
+        }
+      }
+    }
+  }, [isOpen, engagements, timeLog, preselectedEngagementId]);
+  
+  // Handle engagement change
+  const handleEngagementChange = (engagementId: string) => {
+    setValue('engagementId', Number(engagementId));
+    if (engagements) {
+      const selectedEngagement = engagements.find(e => e.id === Number(engagementId));
+      if (selectedEngagement) {
+        setSelectedEngagementRate(selectedEngagement.hourlyRate);
+      }
+    }
+  };
 
   // Handle modal close and reset form
   const handleClose = () => {
@@ -157,15 +194,15 @@ const TimeLogModal = ({
                 control={control}
                 render={({ field }) => (
                   <Select
-                    disabled={isLoadingEngagements || isEditMode}
+                    disabled={isLoadingEngagements}
                     value={field.value.toString()}
-                    onValueChange={field.onChange}
+                    onValueChange={handleEngagementChange}
                   >
                     <SelectTrigger className={errors.engagementId ? 'border-red-500' : ''}>
                       <SelectValue placeholder="Select an engagement" />
                     </SelectTrigger>
                     <SelectContent>
-                      {engagements.map((engagement: any) => (
+                      {engagements.map((engagement) => (
                         <SelectItem key={engagement.id} value={engagement.id.toString()}>
                           {engagement.clientName} - {engagement.projectName}
                         </SelectItem>
@@ -176,6 +213,11 @@ const TimeLogModal = ({
               />
               {errors.engagementId && (
                 <span className="text-xs text-red-500">{errors.engagementId.message}</span>
+              )}
+              {selectedEngagementRate && (
+                <span className="text-xs text-slate-500">
+                  Rate: ${selectedEngagementRate}/hour
+                </span>
               )}
             </div>
             
