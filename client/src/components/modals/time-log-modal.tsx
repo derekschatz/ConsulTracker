@@ -70,7 +70,7 @@ const TimeLogModal = ({
         }
       : {
           engagementId: preselectedEngagementId || '',
-          date: getISODate(),
+          date: getISODate(new Date(2025, 3, 3)), // Use current reference date
           hours: '',
           description: '',
         },

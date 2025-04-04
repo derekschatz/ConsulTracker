@@ -12,21 +12,20 @@ import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYea
 import { pool } from './db';
 
 // Helper function to get date range based on predefined ranges
-function getDateRange(range: string): { startDate: Date; endDate: Date } {
-  const today = new Date(2025, 3, 3); // April 3, 2025
-  const currentYear = 2025;
+function getDateRange(range: string, referenceDate: Date = new Date()): { startDate: Date; endDate: Date } {
+  const today = referenceDate;
   
   switch (range) {
     case 'current':
       return {
-        startDate: new Date(currentYear, 0, 1), // January 1st of current year
-        endDate: new Date(currentYear, 11, 31, 23, 59, 59) // December 31st of current year
+        startDate: new Date(today.getFullYear(), 0, 1), // January 1st of current year
+        endDate: new Date(today.getFullYear(), 11, 31, 23, 59, 59) // December 31st of current year
       };
     
     case 'last':
       return {
-        startDate: new Date(currentYear - 1, 0, 1), // January 1st of last year
-        endDate: new Date(currentYear - 1, 11, 31, 23, 59, 59) // December 31st of last year
+        startDate: new Date(today.getFullYear() - 1, 0, 1), // January 1st of last year
+        endDate: new Date(today.getFullYear() - 1, 11, 31, 23, 59, 59) // December 31st of last year
       };
 
     case 'week':
@@ -84,6 +83,13 @@ function getDateRange(range: string): { startDate: Date; endDate: Date } {
         endDate: endOfYear(today)
       };
   }
+}
+
+// Helper function to validate and parse date strings
+function parseAndValidateDate(dateString: string | undefined): Date | null {
+  if (!dateString) return null;
+  const date = parse(dateString, 'yyyy-MM-dd', new Date());
+  return isValid(date) ? date : null;
 }
 
 interface InvoiceItem {
@@ -336,15 +342,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Apply date range filter
       if (dateRange === 'custom' && startDate && endDate) {
-        query += ` AND i.date >= $${params.length + 1} AND i.date <= $${params.length + 2}`;
+        query += ` AND i.issue_date >= $${params.length + 1} AND i.issue_date <= $${params.length + 2}`;
         params.push(startDate as string, endDate as string);
       } else if (dateRange && dateRange !== 'all') {
-        const dateRangeResult = getDateRange(dateRange as string);
-        query += ` AND i.date >= $${params.length + 1} AND i.date <= $${params.length + 2}`;
-        params.push(dateRangeResult.startDate.toISOString(), dateRangeResult.endDate.toISOString());
+        const { startDate: rangeStart, endDate: rangeEnd } = getDateRange(dateRange as string);
+        query += ` AND i.issue_date >= $${params.length + 1} AND i.issue_date <= $${params.length + 2}`;
+        params.push(
+          format(rangeStart, 'yyyy-MM-dd'),
+          format(rangeEnd, 'yyyy-MM-dd 23:59:59')
+        );
       }
 
-      query += ' ORDER BY i.date DESC';
+      query += ' ORDER BY i.issue_date DESC';
 
       const result = await pool.query(query, params);
       res.json(result.rows);
@@ -371,9 +380,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { engagementId, timeLogs } = req.body;
 
       // Create invoice
+      const today = new Date();
+      const dueDate = new Date();
+      dueDate.setDate(today.getDate() + 30); // Due date 30 days from now
+      
       const invoiceResult = await pool.query(
-        'INSERT INTO invoices (engagement_id, status, date) VALUES ($1, $2, $3) RETURNING id',
-        [engagementId, 'pending', new Date()]
+        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+        [
+          engagementId, 
+          'pending', 
+          today, 
+          dueDate, 
+          `INV-${Date.now().toString().slice(-6)}`, // Generate simple invoice number
+          'Client', // This will be updated after we get engagement details
+          0, // Initial amount, will be calculated from line items
+          today, // Using today as period start
+          today  // Using today as period end (will be updated)
+        ]
       );
       const invoiceId = invoiceResult.rows[0].id;
 

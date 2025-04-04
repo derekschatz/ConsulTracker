@@ -3,7 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { useState, useEffect } from 'react';
-import { getISODate } from '@/lib/date-utils';
+import { getISODate, getDateRange } from '@/lib/date-utils';
 
 interface EngagementFiltersProps {
   filters: {
@@ -28,7 +28,17 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
 
   useEffect(() => {
     setShowCustomRange(filters.dateRange === 'custom');
-  }, [filters.dateRange]);
+    
+    // When changing to a predefined range, update the dates automatically
+    if (filters.dateRange !== 'custom') {
+      const { startDate, endDate } = getDateRange(filters.dateRange);
+      setFilters(prev => ({
+        ...prev,
+        startDate: getISODate(startDate),
+        endDate: getISODate(endDate)
+      }));
+    }
+  }, [filters.dateRange, setFilters]);
 
   const handleStatusChange = (value: string) => {
     setFilters(prev => ({ ...prev, status: value }));
@@ -86,18 +96,24 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
             <Label htmlFor="dateRangeFilter" className="block text-sm font-medium text-slate-700 mb-1">Date Range</Label>
             <Select value={filters.dateRange} onValueChange={handleDateRangeChange}>
               <SelectTrigger id="dateRangeFilter">
-                <SelectValue placeholder="Current Year" />
+                <SelectValue placeholder="Select Range" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="current">Current Year</SelectItem>
                 <SelectItem value="last">Last Year</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+                <SelectItem value="quarter">This Quarter</SelectItem>
+                <SelectItem value="last3">Last 3 Months</SelectItem>
+                <SelectItem value="last6">Last 6 Months</SelectItem>
+                <SelectItem value="last12">Last 12 Months</SelectItem>
                 <SelectItem value="custom">Custom Range</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        {/* Custom date range (hidden by default) */}
+        {/* Custom date range inputs */}
         {showCustomRange && (
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
