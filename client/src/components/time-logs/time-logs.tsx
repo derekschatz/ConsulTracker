@@ -113,14 +113,8 @@ const TimeLogs = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
   };
 
-  // Apply text search filter
-  const filteredTimeLogs = filters.search 
-    ? timeLogs.filter((log: any) => 
-        log.description.toLowerCase().includes(filters.search.toLowerCase()) ||
-        log.engagement.clientName.toLowerCase().includes(filters.search.toLowerCase()) ||
-        log.engagement.projectName.toLowerCase().includes(filters.search.toLowerCase())
-      )
-    : timeLogs;
+  // Remove client-side filtering and use server-filtered data directly
+  const filteredTimeLogs = timeLogs;
 
   // Calculate summary stats
   const totalHours = filteredTimeLogs.reduce((sum: number, log: any) => sum + log.hours, 0);
