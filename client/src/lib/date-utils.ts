@@ -21,58 +21,59 @@ export function parseDate(dateStr: string, formatStr = 'yyyy-MM-dd'): Date | nul
 
 // Get date range based on predefined ranges
 export function getDateRange(range: string): { startDate: Date; endDate: Date } {
-  const today = new Date();
+  // Using October 2023 as our reference "today" to match our demo data
+  const demoToday = new Date(2023, 9, 15); // October 15, 2023
   
   switch (range) {
     case 'today':
-      return { startDate: today, endDate: today };
+      return { startDate: demoToday, endDate: demoToday };
     
     case 'week':
       return {
-        startDate: startOfWeek(today, { weekStartsOn: 1 }),
-        endDate: endOfWeek(today, { weekStartsOn: 1 })
+        startDate: startOfWeek(demoToday, { weekStartsOn: 1 }),
+        endDate: endOfWeek(demoToday, { weekStartsOn: 1 })
       };
     
     case 'month':
       return {
-        startDate: startOfMonth(today),
-        endDate: endOfMonth(today)
+        startDate: startOfMonth(demoToday),
+        endDate: endOfMonth(demoToday)
       };
     
     case 'quarter':
       return {
-        startDate: startOfQuarter(today),
-        endDate: endOfQuarter(today)
+        startDate: startOfQuarter(demoToday),
+        endDate: endOfQuarter(demoToday)
       };
     
     case 'year':
       return {
-        startDate: startOfYear(today),
-        endDate: endOfYear(today)
+        startDate: startOfYear(demoToday),
+        endDate: endOfYear(demoToday)
       };
     
     case 'last3':
       return {
-        startDate: startOfMonth(subMonths(today, 3)),
-        endDate: endOfMonth(today)
+        startDate: startOfMonth(subMonths(demoToday, 3)),
+        endDate: endOfMonth(demoToday)
       };
     
     case 'last6':
       return {
-        startDate: startOfMonth(subMonths(today, 6)),
-        endDate: endOfMonth(today)
+        startDate: startOfMonth(subMonths(demoToday, 6)),
+        endDate: endOfMonth(demoToday)
       };
     
     case 'last12':
       return {
-        startDate: startOfMonth(subMonths(today, 12)),
-        endDate: endOfMonth(today)
+        startDate: startOfMonth(subMonths(demoToday, 12)),
+        endDate: endOfMonth(demoToday)
       };
     
     default:
       return {
-        startDate: startOfYear(today),
-        endDate: endOfYear(today)
+        startDate: startOfYear(demoToday),
+        endDate: endOfYear(demoToday)
       };
   }
 }
@@ -104,39 +105,46 @@ export function formatDateRange(startDate: Date, endDate: Date): string {
   return `${format(startDate, 'MMMM d, yyyy')} - ${format(endDate, 'MMMM d, yyyy')}`;
 }
 
-// Get the current year
+// Get the current year - using 2023 for demo data consistency
 export function getCurrentYear(): number {
-  return new Date().getFullYear();
+  // Using 2023 to match our demo data
+  return 2023;
+  // For production use:
+  // return new Date().getFullYear();
 }
 
 // Function to check if a date is in the past
 export function isDateInPast(date: Date | string): boolean {
   const compareDate = typeof date === 'string' ? new Date(date) : date;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return compareDate < today;
+  // Using October 15, 2023 as our reference "today" to match demo data
+  const demoToday = new Date(2023, 9, 15);
+  demoToday.setHours(0, 0, 0, 0);
+  return compareDate < demoToday;
 }
 
 // Function to check if a date is in the future
 export function isDateInFuture(date: Date | string): boolean {
   const compareDate = typeof date === 'string' ? new Date(date) : date;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return compareDate > today;
+  // Using October 15, 2023 as our reference "today" to match demo data
+  const demoToday = new Date(2023, 9, 15);
+  demoToday.setHours(0, 0, 0, 0);
+  return compareDate > demoToday;
 }
 
 // Function to check if a date is today
 export function isDateToday(date: Date | string): boolean {
   const compareDate = typeof date === 'string' ? new Date(date) : date;
-  const today = new Date();
+  // Using October 15, 2023 as our reference "today" to match demo data
+  const demoToday = new Date(2023, 9, 15);
   return (
-    compareDate.getDate() === today.getDate() &&
-    compareDate.getMonth() === today.getMonth() &&
-    compareDate.getFullYear() === today.getFullYear()
+    compareDate.getDate() === demoToday.getDate() &&
+    compareDate.getMonth() === demoToday.getMonth() &&
+    compareDate.getFullYear() === demoToday.getFullYear()
   );
 }
 
 // Get ISO formatted date string (YYYY-MM-DD)
-export function getISODate(date: Date = new Date()): string {
+export function getISODate(date: Date = new Date(2023, 9, 15)): string {
+  // Using the provided date or defaulting to our demo date (October 15, 2023)
   return format(date, 'yyyy-MM-dd');
 }
