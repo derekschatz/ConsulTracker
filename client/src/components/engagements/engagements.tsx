@@ -92,48 +92,8 @@ const Engagements = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/engagements'] });
   };
 
-  // Apply filters to engagements
-  const filteredEngagements = engagements.filter((engagement: any) => {
-    // Status filter
-    if (filters.status && filters.status !== 'all' && engagement.status !== filters.status) {
-      return false;
-    }
-    
-    // Client filter
-    if (filters.client && filters.client !== 'all' && engagement.clientName !== filters.client) {
-      return false;
-    }
-    
-    // Date range filter
-    if (filters.dateRange && filters.dateRange !== 'all') {
-      const today = new Date();
-      const startDate = new Date(engagement.startDate);
-      const endDate = new Date(engagement.endDate);
-      
-      if (filters.dateRange === 'current') {
-        // Current year
-        const currentYear = today.getFullYear();
-        const engagementStartYear = startDate.getFullYear();
-        const engagementEndYear = endDate.getFullYear();
-        
-        if (engagementStartYear > currentYear || engagementEndYear < currentYear) {
-          return false;
-        }
-      } else if (filters.dateRange === 'last') {
-        // Last year
-        const lastYear = today.getFullYear() - 1;
-        const engagementStartYear = startDate.getFullYear();
-        const engagementEndYear = endDate.getFullYear();
-        
-        if (engagementStartYear > lastYear || engagementEndYear < lastYear) {
-          return false;
-        }
-      }
-      // Custom range could be added when needed
-    }
-    
-    return true;
-  });
+  // No need to filter engagements client-side since we're handling it on the server
+  const filteredEngagements = engagements;
 
   // Extract unique client names for filter dropdown
   const clientOptions: string[] = Array.from(
