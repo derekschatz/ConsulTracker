@@ -24,12 +24,10 @@ const TimeLogs = () => {
     endDate: '',
   });
 
-  // Set default date range when component mounts
-  const defaultDateRange = getDateRange('month');
+  // Build query params - run this on every render with current filters
+  const queryParams = new URLSearchParams();
   
-  // Build query params
-  let queryParams = new URLSearchParams();
-  
+  // Filter by engagement
   if (filters.engagementId && filters.engagementId !== 'all') {
     queryParams.append('engagementId', filters.engagementId);
   }
@@ -38,16 +36,25 @@ const TimeLogs = () => {
   if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
     queryParams.append('startDate', filters.startDate);
     queryParams.append('endDate', filters.endDate);
-  } else if (filters.dateRange !== 'custom') {
+  } else if (filters.dateRange !== 'custom' && filters.dateRange) {
     const { startDate, endDate } = getDateRange(filters.dateRange);
-    queryParams.append('startDate', startDate.toISOString());
-    queryParams.append('endDate', endDate.toISOString());
+    queryParams.append('startDate', startDate.toISOString().split('T')[0]);
+    queryParams.append('endDate', endDate.toISOString().split('T')[0]);
+  } else {
+    // Default to current month if no date range specified
+    const { startDate, endDate } = getDateRange('month');
+    queryParams.append('startDate', startDate.toISOString().split('T')[0]);
+    queryParams.append('endDate', endDate.toISOString().split('T')[0]);
+  }
+
+  // Add search term if present
+  if (filters.search) {
+    queryParams.append('search', filters.search);
   }
 
   // Fetch time logs with filters
   const { data: timeLogs = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/time-logs', queryParams.toString()],
-    enabled: queryParams.toString() !== '',
   });
 
   // Fetch engagements for filter dropdown
