@@ -21,7 +21,7 @@ const TimeLogs = () => {
   const [timeLogToDelete, setTimeLogToDelete] = useState<number | null>(null);
   const [filters, setFilters] = useState({
     dateRange: 'month',
-    engagementId: '',
+    client: 'all',
     search: '',
     startDate: '',
     endDate: '',
@@ -30,9 +30,9 @@ const TimeLogs = () => {
   // Build query params - run this on every render with current filters
   const queryParams = new URLSearchParams();
   
-  // Filter by engagement
-  if (filters.engagementId && filters.engagementId !== 'all') {
-    queryParams.append('engagementId', filters.engagementId);
+  // Filter by client
+  if (filters.client && filters.client !== 'all') {
+    queryParams.append('client', filters.client);
   }
   
   // Handle date filtering
@@ -60,10 +60,15 @@ const TimeLogs = () => {
     queryKey: ['/api/time-logs', queryParams.toString()],
   });
 
-  // Fetch engagements for filter dropdown
+  // Fetch engagements for client filter dropdown and the editing form
   const { data: engagements = [] } = useQuery<any[]>({
     queryKey: ['/api/engagements'],
   });
+  
+  // Extract unique client names for filter dropdown
+  const clientOptions: string[] = Array.from(
+    new Set(engagements.map((engagement: any) => engagement.clientName))
+  );
 
   const handleOpenCreateModal = () => {
     setIsCreateModalOpen(true);
@@ -164,7 +169,7 @@ const TimeLogs = () => {
       <TimeLogFilters
         filters={filters}
         setFilters={setFilters}
-        engagements={engagements}
+        clientOptions={clientOptions}
       />
 
       {/* Summary Stats */}
