@@ -37,15 +37,21 @@ const TimeLogs = () => {
   
   // Handle date filtering
   if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
+    // For custom range, use the exact dates selected by the user
     queryParams.append('startDate', filters.startDate);
     queryParams.append('endDate', filters.endDate);
-  } else if (filters.dateRange !== 'custom' && filters.dateRange) {
-    const { startDate, endDate } = getDateRange(filters.dateRange);
+  } else if (filters.dateRange) {
+    // For predefined ranges, get the start and end dates using our utility function
+    const referenceDate = new Date(2025, 3, 3); // Our demo's "current" date is April 3, 2025
+    const { startDate, endDate } = getDateRange(filters.dateRange, referenceDate);
+    
+    // Format dates as ISO strings (YYYY-MM-DD)
     queryParams.append('startDate', startDate.toISOString().split('T')[0]);
     queryParams.append('endDate', endDate.toISOString().split('T')[0]);
   } else {
     // Default to current month if no date range specified
-    const { startDate, endDate } = getDateRange('month');
+    const referenceDate = new Date(2025, 3, 3);
+    const { startDate, endDate } = getDateRange('month', referenceDate);
     queryParams.append('startDate', startDate.toISOString().split('T')[0]);
     queryParams.append('endDate', endDate.toISOString().split('T')[0]);
   }

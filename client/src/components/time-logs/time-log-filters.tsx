@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getISODate } from '@/lib/date-utils';
+import { getISODate, getDateRange } from '@/lib/date-utils';
 
 interface TimeLogFiltersProps {
   filters: {
@@ -28,6 +28,17 @@ const TimeLogFilters = ({ filters, setFilters, engagements }: TimeLogFiltersProp
 
   useEffect(() => {
     setShowCustomRange(filters.dateRange === 'custom');
+    
+    // When changing to a predefined range, update the dates automatically
+    if (filters.dateRange !== 'custom') {
+      const referenceDate = new Date(2025, 3, 3); // April 3, 2025
+      const { startDate, endDate } = getDateRange(filters.dateRange, referenceDate);
+      setFilters(prev => ({
+        ...prev,
+        startDate: getISODate(startDate),
+        endDate: getISODate(endDate)
+      }));
+    }
   }, [filters.dateRange]);
 
   const handleDateRangeChange = (value: string) => {
@@ -43,11 +54,35 @@ const TimeLogFilters = ({ filters, setFilters, engagements }: TimeLogFiltersProp
   };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters(prev => ({ ...prev, startDate: e.target.value }));
+    const newStartDate = e.target.value;
+    setFilters(prev => ({ 
+      ...prev, 
+      startDate: newStartDate 
+    }));
+    
+    // If both start and end dates are set, we can trigger filtering immediately
+    if (filters.endDate) {
+      // Slight delay to ensure state updates before filtering
+      setTimeout(() => {
+        setFilters(prev => ({ ...prev })); // Force a re-render to trigger filtering
+      }, 50);
+    }
   };
 
   const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters(prev => ({ ...prev, endDate: e.target.value }));
+    const newEndDate = e.target.value;
+    setFilters(prev => ({ 
+      ...prev, 
+      endDate: newEndDate 
+    }));
+    
+    // If both start and end dates are set, we can trigger filtering immediately
+    if (filters.startDate) {
+      // Slight delay to ensure state updates before filtering
+      setTimeout(() => {
+        setFilters(prev => ({ ...prev })); // Force a re-render to trigger filtering
+      }, 50);
+    }
   };
 
   return (

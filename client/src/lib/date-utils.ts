@@ -1,4 +1,4 @@
-import { format, parse, isValid, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { format, parse, isValid, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfWeek, endOfWeek } from 'date-fns';
 
 export interface DateRange {
   startDate: Date;
@@ -35,6 +35,7 @@ export function getDateRange(range: string, referenceDate: Date = new Date()): D
         endDate: new Date(2030, 11, 31)
       };
     
+    case 'year':
     case 'current':
       // Current Year: entire current year (Jan 1st to Dec 31st)
       return {
@@ -56,6 +57,32 @@ export function getDateRange(range: string, referenceDate: Date = new Date()): D
       return {
         startDate: startOfMonth(referenceDate),
         endDate: endOfMonth(referenceDate)
+      };
+    
+    case 'week':
+      // This Week: from Monday 01:00:00 to Sunday 23:59:59
+      // Use startOfWeek with options to start on Monday
+      const weekStart = startOfWeek(referenceDate, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(referenceDate, { weekStartsOn: 1 });
+      
+      // Set time to 01:00:00 for start and 23:59:59 for end
+      weekStart.setHours(1, 0, 0, 0);
+      weekEnd.setHours(23, 59, 59, 999);
+      
+      return {
+        startDate: weekStart,
+        endDate: weekEnd
+      };
+    
+    case 'quarter':
+      // This Quarter: current quarter of the year
+      const currentQuarter = Math.floor(referenceDate.getMonth() / 3);
+      const quarterStart = new Date(referenceDate.getFullYear(), currentQuarter * 3, 1);
+      const quarterEnd = new Date(referenceDate.getFullYear(), (currentQuarter + 1) * 3, 0, 23, 59, 59, 999);
+      
+      return {
+        startDate: quarterStart,
+        endDate: quarterEnd
       };
     
     default:

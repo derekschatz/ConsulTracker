@@ -384,14 +384,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
       const search = req.query.search as string | undefined;
+      const dateRange = req.query.dateRange as string | undefined;
 
       let timeLogs;
+      
+      // First, handle engagement filter
       if (engagementId) {
         timeLogs = await storage.getTimeLogsByEngagement(engagementId);
-      } else if (startDate && endDate) {
-        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate);
       } else {
         timeLogs = await storage.getTimeLogs();
+      }
+      
+      // Next, handle date filtering
+      if (startDate && endDate) {
+        // If we have specific dates, filter by those dates
+        // Set the time components to ensure we include the entire day
+        const startWithTime = new Date(startDate);
+        startWithTime.setHours(0, 0, 0, 0); // Start of day
+        
+        const endWithTime = new Date(endDate);
+        endWithTime.setHours(23, 59, 59, 999); // End of day
+        
+        timeLogs = timeLogs.filter(log => {
+          const logDate = new Date(log.date);
+          return logDate >= startWithTime && logDate <= endWithTime;
+        });
       }
 
       // Apply search filter if present
