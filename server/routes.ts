@@ -310,11 +310,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('Received engagement data:', req.body);
       
-      // Parse the date strings to Date objects if they are strings
+      // Parse the date strings to Date objects and hourlyRate to numeric if needed
       const formattedData = {
         ...req.body,
         startDate: typeof req.body.startDate === 'string' ? new Date(req.body.startDate) : req.body.startDate,
         endDate: typeof req.body.endDate === 'string' ? new Date(req.body.endDate) : req.body.endDate,
+        // Convert hourlyRate from number to string if it's a number (for schema validation)
+        hourlyRate: typeof req.body.hourlyRate === 'number' ? String(req.body.hourlyRate) : req.body.hourlyRate,
       };
       
       const validationResult = insertEngagementSchema.safeParse(formattedData);
@@ -336,11 +338,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = Number(req.params.id);
       console.log('Received update engagement data:', req.body);
       
-      // Parse the date strings to Date objects if they are strings
+      // Parse the date strings to Date objects and handle hourlyRate type conversion
       const formattedData = {
         ...req.body,
         startDate: req.body.startDate ? (typeof req.body.startDate === 'string' ? new Date(req.body.startDate) : req.body.startDate) : undefined,
         endDate: req.body.endDate ? (typeof req.body.endDate === 'string' ? new Date(req.body.endDate) : req.body.endDate) : undefined,
+        // Convert hourlyRate from number to string if it's a number (for schema validation)
+        hourlyRate: req.body.hourlyRate ? (typeof req.body.hourlyRate === 'number' ? String(req.body.hourlyRate) : req.body.hourlyRate) : undefined,
       };
       
       const validationResult = insertEngagementSchema.partial().safeParse(formattedData);

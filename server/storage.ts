@@ -113,13 +113,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEngagement(engagement: InsertEngagement): Promise<Engagement> {
-    const [newEngagement] = await db.insert(engagements).values(engagement).returning();
+    // Handle hourlyRate conversion if needed - ensure it's a string for drizzle-orm/pg
+    const formattedEngagement = {
+      ...engagement,
+      hourlyRate: typeof engagement.hourlyRate === 'number' ? 
+        String(engagement.hourlyRate) : engagement.hourlyRate,
+    };
+    
+    const [newEngagement] = await db.insert(engagements).values(formattedEngagement).returning();
     return newEngagement;
   }
 
   async updateEngagement(id: number, engagement: Partial<InsertEngagement>): Promise<Engagement | undefined> {
+    // Handle hourlyRate conversion if needed
+    const formattedEngagement = {
+      ...engagement,
+      hourlyRate: engagement.hourlyRate !== undefined && typeof engagement.hourlyRate === 'number' ? 
+        String(engagement.hourlyRate) : engagement.hourlyRate,
+    };
+  
     const [updatedEngagement] = await db.update(engagements)
-      .set(engagement)
+      .set(formattedEngagement)
       .where(eq(engagements.id, id))
       .returning();
     return updatedEngagement;
