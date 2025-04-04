@@ -259,7 +259,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard routes
   app.get("/api/dashboard/ytd-revenue", async (req, res) => {
     try {
-      const year = Number(req.query.year) || new Date().getFullYear();
+      // Default to 2023 for demo data consistency if no year is provided
+      const year = Number(req.query.year) || 2023;
       const revenue = await storage.getYtdRevenue(year);
       res.json({ revenue });
     } catch (error) {
@@ -269,7 +270,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/monthly-revenue", async (req, res) => {
     try {
-      const year = Number(req.query.year) || new Date().getFullYear();
+      // Default to 2023 for demo data consistency if no year is provided
+      const year = Number(req.query.year) || 2023;
       const monthlyData = await storage.getMonthlyRevenueBillable(year);
       res.json(monthlyData);
     } catch (error) {
@@ -279,17 +281,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
+      // Using 2023 as the reference year for our demo data
+      const demoYear = 2023;
+      const demoMonth = 9; // October (0-based index)
       
-      // Calculate start and end of current month
-      const startOfMonth = new Date(year, month, 1);
-      const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
+      // Calculate start and end of October 2023 (current month in demo data)
+      const startOfMonth = new Date(demoYear, demoMonth, 1);
+      const endOfMonth = new Date(demoYear, demoMonth + 1, 0, 23, 59, 59);
       
-      // Calculate start and end of year
-      const startOfYear = new Date(year, 0, 1);
-      const endOfYear = new Date(year, 11, 31, 23, 59, 59);
+      // Calculate start and end of year 2023
+      const startOfYear = new Date(demoYear, 0, 1);
+      const endOfYear = new Date(demoYear, 11, 31, 23, 59, 59);
 
       // Get stats in parallel
       const [
@@ -299,7 +301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pendingInvoicesTotal
       ] = await Promise.all([
         storage.getActiveEngagements(),
-        storage.getYtdRevenue(year),
+        storage.getYtdRevenue(demoYear),
         storage.getTotalHoursLogged(startOfMonth, endOfMonth),
         storage.getPendingInvoicesTotal()
       ]);
