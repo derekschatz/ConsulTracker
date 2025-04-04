@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
@@ -8,16 +8,83 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import nodemailer from "nodemailer";
+import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
+
+// Helper function to get date range based on predefined ranges
+function getDateRange(range: string): { startDate: Date; endDate: Date } {
+  // Using data from 2023 for our demo application
+  const demoYear = 2023;
+  const demoToday = new Date(demoYear, 9, 15); // October 15, 2023
+  
+  switch (range) {
+    case 'current':
+      return {
+        startDate: startOfYear(demoToday),
+        endDate: endOfYear(demoToday)
+      };
+    
+    case 'last3':
+      return {
+        startDate: startOfMonth(subMonths(demoToday, 3)),
+        endDate: endOfMonth(demoToday)
+      };
+    
+    case 'last6':
+      return {
+        startDate: startOfMonth(subMonths(demoToday, 6)),
+        endDate: endOfMonth(demoToday)
+      };
+    
+    case 'last12':
+      return {
+        startDate: startOfMonth(subMonths(demoToday, 12)),
+        endDate: endOfMonth(demoToday)
+      };
+    
+    default:
+      return {
+        startDate: startOfYear(demoToday),
+        endDate: endOfYear(demoToday)
+      };
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // prefix all routes with /api
 
   // Engagement routes
-  app.get("/api/engagements", async (_req, res) => {
+  app.get("/api/engagements", async (req, res) => {
     try {
-      const engagements = await storage.getEngagements();
+      // Get all engagements first
+      let engagements = await storage.getEngagements();
+      
+      // Apply status filter if provided
+      const status = req.query.status as string | undefined;
+      if (status && status !== 'all') {
+        engagements = engagements.filter(engagement => engagement.status === status);
+      }
+      
+      // Apply client filter if provided
+      const clientName = req.query.client as string | undefined;
+      if (clientName && clientName !== 'all') {
+        engagements = engagements.filter(engagement => engagement.clientName === clientName);
+      }
+      
+      // Apply date range filter if provided
+      const dateRange = req.query.dateRange as string | undefined;
+      if (dateRange && dateRange !== 'all') {
+        const { startDate, endDate } = getDateRange(dateRange);
+        engagements = engagements.filter(engagement => {
+          const engagementStart = new Date(engagement.startDate);
+          const engagementEnd = new Date(engagement.endDate);
+          // Include engagement if it overlaps with the date range
+          return !(engagementEnd < startDate || engagementStart > endDate);
+        });
+      }
+      
       res.json(engagements);
     } catch (error) {
+      console.error("Error fetching engagements:", error);
       res.status(500).json({ message: "Failed to fetch engagements" });
     }
   });
@@ -171,16 +238,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/invoices", async (req, res) => {
     try {
       const status = req.query.status as string | undefined;
-
-      let invoices;
-      if (status) {
-        invoices = await storage.getInvoicesByStatus(status);
-      } else {
-        invoices = await storage.getInvoices();
+      const clientName = req.query.client as string | undefined;
+      const dateRange = req.query.dateRange as string | undefined;
+      
+      // Get all invoices first
+      let invoices = await storage.getInvoices();
+      
+      // Apply status filter
+      if (status && status !== 'all') {
+        invoices = invoices.filter(invoice => invoice.status === status);
+      }
+      
+      // Apply client filter
+      if (clientName && clientName !== 'all') {
+        invoices = invoices.filter(invoice => invoice.clientName === clientName);
+      }
+      
+      // Apply date range filter
+      if (dateRange && dateRange !== 'all') {
+        const { startDate, endDate } = getDateRange(dateRange);
+        invoices = invoices.filter(invoice => {
+          const issueDate = new Date(invoice.issueDate);
+          return issueDate >= startDate && issueDate <= endDate;
+        });
       }
 
       res.json(invoices);
     } catch (error) {
+      console.error("Error fetching invoices:", error);
       res.status(500).json({ message: "Failed to fetch invoices" });
     }
   });

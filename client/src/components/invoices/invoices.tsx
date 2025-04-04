@@ -128,10 +128,8 @@ const Invoices = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
   };
 
-  // Apply client filter
-  const filteredInvoices = (filters.client && filters.client !== 'all')
-    ? invoices.filter((invoice: any) => invoice.clientName === filters.client)
-    : invoices;
+  // No need to filter invoices client-side since we're now handling all filters server-side
+  const filteredInvoices = invoices;
 
   // Extract unique client names for filter dropdown
   const clientOptions: string[] = Array.from(
