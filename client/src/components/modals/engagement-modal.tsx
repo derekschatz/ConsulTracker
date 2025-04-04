@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -44,6 +45,9 @@ const EngagementModal = ({
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Debug log to see what data is being passed to the modal
+  console.log('EngagementModal received engagement data:', engagement);
+
   const isEditMode = !!engagement;
 
   // Initialize form with default values or existing engagement
@@ -71,7 +75,28 @@ const EngagementModal = ({
           status: 'active',
         },
   });
+  
+  // Debug - Log the form's defaultValues
+  console.log('Form defaultValues:', engagement ? {
+    ...engagement,
+    startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
+    endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
+    hourlyRate: String(engagement.hourlyRate),
+  } : 'using empty defaults');
 
+  // Effect to update form when engagement data changes
+  useEffect(() => {
+    if (engagement && isOpen) {
+      console.log('Resetting form with engagement data', engagement);
+      reset({
+        ...engagement,
+        startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
+        endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
+        hourlyRate: String(engagement.hourlyRate),
+      });
+    }
+  }, [engagement, reset, isOpen]);
+  
   // Handle modal close and reset form
   const handleClose = () => {
     reset();
@@ -210,6 +235,34 @@ const EngagementModal = ({
               />
               {errors.hourlyRate && (
                 <span className="text-xs text-red-500">{errors.hourlyRate.message}</span>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-1 gap-2">
+              <Label htmlFor="status" className="text-sm font-medium text-slate-700">
+                Status
+              </Label>
+              <Select
+                defaultValue={engagement?.status || 'active'}
+                onValueChange={(value) => {
+                  reset({
+                    ...engagement,
+                    status: value,
+                  }, { keepDefaultValues: true });
+                }}
+              >
+                <SelectTrigger className={errors.status ? 'border-red-500' : ''}>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="upcoming">Upcoming</SelectItem>
+                </SelectContent>
+              </Select>
+              <input type="hidden" {...register('status')} />
+              {errors.status && (
+                <span className="text-xs text-red-500">{errors.status.message}</span>
               )}
             </div>
             
