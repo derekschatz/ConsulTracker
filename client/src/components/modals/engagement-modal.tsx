@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,10 +28,22 @@ const formSchema = insertEngagementSchema
 
 type FormValues = z.infer<typeof formSchema>;
 
+// Define a proper type for the engagement prop
+interface Engagement {
+  id: number;
+  clientName: string;
+  projectName: string;
+  startDate: string | Date;
+  endDate: string | Date;
+  hourlyRate: number;
+  description?: string;
+  status: string;
+}
+
 interface EngagementModalProps {
   isOpen: boolean;
   onClose: () => void;
-  engagement?: any; // For editing existing engagement
+  engagement?: Engagement;
   onSuccess: () => void;
 }
 
@@ -54,23 +66,41 @@ const EngagementModal = ({
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: engagement
-      ? {
-          ...engagement,
-          startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
-          endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
-          hourlyRate: String(engagement.hourlyRate),
-        }
-      : {
-          clientName: '',
-          projectName: '',
-          startDate: getISODate(), // Uses default 2025 date
-          endDate: '',
-          hourlyRate: '',
-          description: '',
-          status: 'active',
-        },
+    defaultValues: {
+      clientName: '',
+      projectName: '',
+      startDate: getISODate(), // Uses default 2025 date
+      endDate: '',
+      hourlyRate: '',
+      description: '',
+      status: 'active',
+    },
   });
+  
+  // Update form values when engagement data changes or modal opens/closes
+  useEffect(() => {
+    if (isOpen && engagement) {
+      // Format dates properly for edit mode
+      const formattedEngagement = {
+        ...engagement,
+        startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
+        endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
+        hourlyRate: String(engagement.hourlyRate),
+      };
+      reset(formattedEngagement);
+    } else if (isOpen && !engagement) {
+      // Reset to default values in create mode
+      reset({
+        clientName: '',
+        projectName: '',
+        startDate: getISODate(),
+        endDate: '',
+        hourlyRate: '',
+        description: '',
+        status: 'active',
+      });
+    }
+  }, [engagement, isOpen, reset]);
 
   // Handle modal close and reset form
   const handleClose = () => {
