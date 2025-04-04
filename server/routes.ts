@@ -161,6 +161,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const engagementId = req.query.engagementId ? Number(req.query.engagementId) : undefined;
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const search = req.query.search as string | undefined;
 
       let timeLogs;
       if (engagementId) {
@@ -169,6 +170,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate);
       } else {
         timeLogs = await storage.getTimeLogs();
+      }
+
+      // Apply search filter if present
+      if (search) {
+        const searchLower = search.toLowerCase();
+        timeLogs = timeLogs.filter(log => 
+          log.description.toLowerCase().includes(searchLower) ||
+          log.engagement.clientName.toLowerCase().includes(searchLower) ||
+          log.engagement.projectName.toLowerCase().includes(searchLower)
+        );
       }
 
       res.json(timeLogs);
