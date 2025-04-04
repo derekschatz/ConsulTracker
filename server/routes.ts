@@ -308,14 +308,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/engagements", async (req, res) => {
     try {
-      const validationResult = insertEngagementSchema.safeParse(req.body);
+      console.log('Received engagement data:', req.body);
+      
+      // Parse the date strings to Date objects if they are strings
+      const formattedData = {
+        ...req.body,
+        startDate: typeof req.body.startDate === 'string' ? new Date(req.body.startDate) : req.body.startDate,
+        endDate: typeof req.body.endDate === 'string' ? new Date(req.body.endDate) : req.body.endDate,
+      };
+      
+      const validationResult = insertEngagementSchema.safeParse(formattedData);
       if (!validationResult.success) {
+        console.error('Validation errors:', validationResult.error.errors);
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
       }
 
       const engagement = await storage.createEngagement(validationResult.data);
       res.status(201).json(engagement);
     } catch (error) {
+      console.error('Error creating engagement:', error);
       res.status(500).json({ message: "Failed to create engagement" });
     }
   });
@@ -323,8 +334,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/engagements/:id", async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const validationResult = insertEngagementSchema.partial().safeParse(req.body);
+      console.log('Received update engagement data:', req.body);
+      
+      // Parse the date strings to Date objects if they are strings
+      const formattedData = {
+        ...req.body,
+        startDate: req.body.startDate ? (typeof req.body.startDate === 'string' ? new Date(req.body.startDate) : req.body.startDate) : undefined,
+        endDate: req.body.endDate ? (typeof req.body.endDate === 'string' ? new Date(req.body.endDate) : req.body.endDate) : undefined,
+      };
+      
+      const validationResult = insertEngagementSchema.partial().safeParse(formattedData);
       if (!validationResult.success) {
+        console.error('Update validation errors:', validationResult.error.errors);
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
       }
 
@@ -334,6 +355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(updatedEngagement);
     } catch (error) {
+      console.error('Error updating engagement:', error);
       res.status(500).json({ message: "Failed to update engagement" });
     }
   });
@@ -398,14 +420,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/time-logs", async (req, res) => {
     try {
-      const validationResult = insertTimeLogSchema.safeParse(req.body);
+      console.log('Received time log data:', req.body);
+      
+      // Parse the date strings to Date objects if they are strings
+      const formattedData = {
+        ...req.body,
+        date: typeof req.body.date === 'string' ? new Date(req.body.date) : req.body.date,
+      };
+      
+      const validationResult = insertTimeLogSchema.safeParse(formattedData);
       if (!validationResult.success) {
+        console.error('Time log validation errors:', validationResult.error.errors);
         return res.status(400).json({ message: "Invalid time log data", errors: validationResult.error.errors });
       }
 
       const timeLog = await storage.createTimeLog(validationResult.data);
       res.status(201).json(timeLog);
     } catch (error) {
+      console.error('Error creating time log:', error);
       res.status(500).json({ message: "Failed to create time log" });
     }
   });
@@ -413,8 +445,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/time-logs/:id", async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const validationResult = insertTimeLogSchema.partial().safeParse(req.body);
+      console.log('Received time log update data:', req.body);
+      
+      // Parse the date strings to Date objects if they are strings
+      const formattedData = {
+        ...req.body,
+        date: req.body.date ? (typeof req.body.date === 'string' ? new Date(req.body.date) : req.body.date) : undefined
+      };
+      
+      const validationResult = insertTimeLogSchema.partial().safeParse(formattedData);
       if (!validationResult.success) {
+        console.error('Time log update validation errors:', validationResult.error.errors);
         return res.status(400).json({ message: "Invalid time log data", errors: validationResult.error.errors });
       }
 
@@ -424,6 +465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(updatedTimeLog);
     } catch (error) {
+      console.error('Error updating time log:', error);
       res.status(500).json({ message: "Failed to update time log" });
     }
   });

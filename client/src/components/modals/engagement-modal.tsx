@@ -117,10 +117,13 @@ const EngagementModal = ({
       const formattedData = {
         ...data,
         hourlyRate: Number(data.hourlyRate),
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
+        // Send ISO string format directly without creating Date objects
+        startDate: data.startDate,
+        endDate: data.endDate,
       };
 
+      console.log('Submitting engagement data:', formattedData);
+      
       // Create or update engagement
       const response = await apiRequest(
         isEditMode ? 'PUT' : 'POST',
