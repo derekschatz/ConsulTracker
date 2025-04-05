@@ -53,12 +53,26 @@ const InvoiceModal = ({
   const [timeLogs, setTimeLogs] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
-
-  // Fetch engagements
-  const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery<any[], any[], any[]>({
-    queryKey: ['/api/engagements'],
+  const [selectedClientName, setSelectedClientName] = useState<string>('');
+  
+  // Fetch all active engagements
+  const { data: allEngagements = [], isLoading: isLoadingEngagements } = useQuery<any[], any[], any[]>({
+    queryKey: ['/api/engagements/active'],
     enabled: isOpen,
   });
+  
+  // Get unique clients from active engagements
+  const uniqueClients = allEngagements.reduce((clients: string[], engagement: any) => {
+    if (!clients.includes(engagement.clientName)) {
+      clients.push(engagement.clientName);
+    }
+    return clients;
+  }, []).sort();
+  
+  // Filter engagements by selected client
+  const filteredEngagements = allEngagements.filter((engagement: any) => 
+    engagement.clientName === selectedClientName
+  );
 
   // Get the next invoice number (in a real app this would come from the server)
   const nextInvoiceNumber = generateInvoiceNumber('INV', 25);
@@ -83,21 +97,34 @@ const InvoiceModal = ({
       notes: '',
     },
   });
+  
+  // Set initial selectedClientName based on preselectedClientName if available
+  useEffect(() => {
+    if (isOpen && preselectedClientName) {
+      setSelectedClientName(preselectedClientName);
+    }
+  }, [isOpen, preselectedClientName]);
 
   // Watch for changes to form values
   const watchEngagementId = watch('engagementId');
   const watchPeriodStart = watch('periodStart');
   const watchPeriodEnd = watch('periodEnd');
 
-  // Update client name when engagement changes
+  // Reset engagement if client changes
   useEffect(() => {
-    if (watchEngagementId) {
-      const selectedEngagement = engagements.find((e: any) => e.id.toString() === watchEngagementId.toString());
-      if (selectedEngagement) {
-        setValue('clientName', selectedEngagement.clientName);
+    // Reset engagement when client changes
+    if (selectedClientName && watchEngagementId) {
+      // Check if the selected engagement is valid for this client
+      const validEngagement = filteredEngagements.some(
+        (e: any) => e.id.toString() === watchEngagementId.toString()
+      );
+      
+      if (!validEngagement) {
+        // Reset engagement if it doesn't belong to the selected client
+        setValue('engagementId', '');
       }
     }
-  }, [watchEngagementId, engagements, setValue]);
+  }, [selectedClientName, watchEngagementId, filteredEngagements, setValue]);
 
   // Fetch time logs when engagement, period start, or period end changes
   useEffect(() => {
@@ -144,6 +171,7 @@ const InvoiceModal = ({
     setTimeLogs([]);
     setInvoiceTotal(0);
     setTotalHours(0);
+    setSelectedClientName('');
     onClose();
   };
 
@@ -241,12 +269,30 @@ const InvoiceModal = ({
                 <Label htmlFor="clientName" className="text-sm font-medium text-slate-700">
                   Client
                 </Label>
-                <Input
-                  id="clientName"
-                  placeholder="Client name"
-                  {...register('clientName')}
-                  className={errors.clientName ? 'border-red-500' : ''}
-                  readOnly
+                <Controller
+                  name="clientName"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      disabled={isLoadingEngagements}
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        setSelectedClientName(value);
+                      }}
+                    >
+                      <SelectTrigger className={errors.clientName ? 'border-red-500' : ''}>
+                        <SelectValue placeholder="Select a client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uniqueClients.map((clientName: string) => (
+                          <SelectItem key={clientName} value={clientName}>
+                            {clientName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 />
                 {errors.clientName && (
                   <span className="text-xs text-red-500">{errors.clientName.message}</span>
@@ -262,7 +308,7 @@ const InvoiceModal = ({
                   control={control}
                   render={({ field }) => (
                     <Select
-                      disabled={isLoadingEngagements}
+                      disabled={isLoadingEngagements || !selectedClientName}
                       value={field.value.toString()}
                       onValueChange={field.onChange}
                     >
@@ -270,9 +316,9 @@ const InvoiceModal = ({
                         <SelectValue placeholder="Select an engagement" />
                       </SelectTrigger>
                       <SelectContent>
-                        {engagements.map((engagement: any) => (
+                        {filteredEngagements.map((engagement: any) => (
                           <SelectItem key={engagement.id} value={engagement.id.toString()}>
-                            {engagement.clientName} - {engagement.projectName}
+                            {engagement.projectName}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -281,6 +327,9 @@ const InvoiceModal = ({
                 />
                 {errors.engagementId && (
                   <span className="text-xs text-red-500">{errors.engagementId.message}</span>
+                )}
+                {selectedClientName && filteredEngagements.length === 0 && (
+                  <span className="text-xs text-amber-500">No active engagements found for this client</span>
                 )}
               </div>
             </div>
