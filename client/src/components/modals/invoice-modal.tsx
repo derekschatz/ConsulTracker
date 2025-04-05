@@ -11,6 +11,8 @@ import { z } from 'zod';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { insertInvoiceSchema } from '@shared/schema';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { InfoIcon } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency, formatHours } from '@/lib/format-utils';
 import { getISODate } from '@/lib/date-utils';
@@ -294,7 +296,7 @@ const InvoiceModal = ({
                   id="periodStart"
                   type="date"
                   {...register('periodStart')}
-                  className={errors.periodStart ? 'border-red-500' : ''}
+                  className={`h-10 ${errors.periodStart ? 'border-red-500' : ''}`}
                 />
                 {errors.periodStart && (
                   <span className="text-xs text-red-500">{errors.periodStart.message}</span>
@@ -309,7 +311,7 @@ const InvoiceModal = ({
                   id="periodEnd"
                   type="date"
                   {...register('periodEnd')}
-                  className={errors.periodEnd ? 'border-red-500' : ''}
+                  className={`h-10 ${errors.periodEnd ? 'border-red-500' : ''}`}
                 />
                 {errors.periodEnd && (
                   <span className="text-xs text-red-500">{errors.periodEnd.message}</span>
@@ -317,9 +319,21 @@ const InvoiceModal = ({
               </div>
               
               <div className="grid grid-cols-1 gap-2">
-                <Label htmlFor="netTerms" className="text-sm font-medium text-slate-700">
-                  Net Terms
-                </Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="netTerms" className="text-sm font-medium text-slate-700">
+                    Net Terms
+                  </Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <InfoIcon className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Due date will be calculated from the billing end date. Invoices will be marked as "overdue" after this date.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <Controller
                   name="netTerms"
                   control={control}
@@ -328,7 +342,7 @@ const InvoiceModal = ({
                       value={field.value}
                       onValueChange={field.onChange}
                     >
-                      <SelectTrigger className={errors.netTerms ? 'border-red-500' : ''}>
+                      <SelectTrigger className={`h-10 ${errors.netTerms ? 'border-red-500' : ''}`}>
                         <SelectValue placeholder="Select net terms" />
                       </SelectTrigger>
                       <SelectContent>
@@ -342,7 +356,6 @@ const InvoiceModal = ({
                 {errors.netTerms && (
                   <span className="text-xs text-red-500">{errors.netTerms.message}</span>
                 )}
-                <span className="text-xs text-slate-500">Due date will be calculated from the billing end date. Invoices will be marked as "overdue" after this date.</span>
               </div>
             </div>
 
