@@ -292,29 +292,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const engagementId = req.query.engagementId ? Number(req.query.engagementId) : undefined;
       const clientName = req.query.client as string | undefined;
-      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
-      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const dateRange = req.query.dateRange as string | undefined;
+      const startDateParam = req.query.startDate as string | undefined;
+      const endDateParam = req.query.endDate as string | undefined;
       const search = req.query.search as string | undefined;
 
+      console.log('Time log request params:', {
+        engagementId,
+        clientName,
+        dateRange,
+        startDate: startDateParam,
+        endDate: endDateParam,
+        search
+      });
+      
       let timeLogs;
-      if (engagementId) {
+      let startDate, endDate;
+
+      if (startDateParam && endDateParam) {
+        // Use explicit date parameters
+        startDate = new Date(startDateParam);
+        endDate = new Date(endDateParam);
+        console.log('Using explicit date range:', startDate, 'to', endDate);
+      } else if (dateRange) {
+        // Use predefined date range
+        const range = getDateRange(dateRange);
+        startDate = range.startDate;
+        endDate = range.endDate;
+        console.log('Using date range:', dateRange, startDate, 'to', endDate);
+      } else {
+        // Default to all time logs
+        timeLogs = await storage.getTimeLogs();
+        console.log('Getting all time logs');
+      }
+
+      // Get logs filtered by date range if we have dates
+      if (startDate && endDate) {
+        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate);
+      } else if (engagementId) {
         // Filter by specific engagement ID
         timeLogs = await storage.getTimeLogsByEngagement(engagementId);
-      } else if (startDate && endDate) {
-        // Filter by date range
-        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate);
-      } else {
-        // Get all time logs
+      } else if (!timeLogs) {
+        // If we haven't loaded logs yet, get all of them
         timeLogs = await storage.getTimeLogs();
       }
       
       // If client filter is applied, filter the results by client name
-      if (clientName && clientName !== 'all') {
+      if (timeLogs && clientName && clientName !== 'all') {
         timeLogs = timeLogs.filter(log => log.engagement.clientName === clientName);
       }
 
       // Apply search filter if present
-      if (search) {
+      if (timeLogs && search) {
         const searchLower = search.toLowerCase();
         timeLogs = timeLogs.filter(log => 
           log.description.toLowerCase().includes(searchLower) ||
@@ -323,8 +352,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
-      res.json(timeLogs);
+      res.json(timeLogs || []);
     } catch (error) {
+      console.error("Error fetching time logs:", error);
       res.status(500).json({ message: "Failed to fetch time logs" });
     }
   });
