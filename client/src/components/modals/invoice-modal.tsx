@@ -49,13 +49,13 @@ const InvoiceModal = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedEngagementId, setSelectedEngagementId] = useState<string>('');
+  // State to track form fields and submission
   const [timeLogs, setTimeLogs] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
 
   // Fetch engagements
-  const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery({
+  const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery<any[], any[], any[]>({
     queryKey: ['/api/engagements'],
     enabled: isOpen,
   });
@@ -95,7 +95,6 @@ const InvoiceModal = ({
       const selectedEngagement = engagements.find((e: any) => e.id.toString() === watchEngagementId.toString());
       if (selectedEngagement) {
         setValue('clientName', selectedEngagement.clientName);
-        setSelectedEngagementId(watchEngagementId.toString());
       }
     }
   }, [watchEngagementId, engagements, setValue]);
