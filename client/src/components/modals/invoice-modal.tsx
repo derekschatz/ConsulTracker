@@ -22,10 +22,10 @@ const formSchema = z.object({
   engagementId: z.string().or(z.number()).refine(val => Number(val) > 0, {
     message: 'Engagement is required',
   }),
-  periodStart: z.string().min(1, 'Start date is required'),
-  periodEnd: z.string().min(1, 'End date is required'),
+  periodStart: z.string().min(1, 'Billing start is required'),
+  periodEnd: z.string().min(1, 'Billing end is required'),
   notes: z.string().optional(),
-  dueDate: z.string().min(1, 'Due date is required'),
+  netTerms: z.string().min(1, 'Net terms are required'),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -62,13 +62,6 @@ const InvoiceModal = ({
   // Get the next invoice number (in a real app this would come from the server)
   const nextInvoiceNumber = generateInvoiceNumber('INV', 25);
   
-  // Get due date default (30 days from today)
-  const getDefaultDueDate = () => {
-    const date = new Date();
-    date.setDate(date.getDate() + 30);
-    return getISODate(date);
-  };
-
   // Initialize form with default values
   const {
     register,
@@ -85,7 +78,7 @@ const InvoiceModal = ({
       engagementId: preselectedEngagementId?.toString() || '',
       periodStart: getISODate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)), // First day of current month
       periodEnd: getISODate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)), // Last day of current month
-      dueDate: getDefaultDueDate(),
+      netTerms: '30', // Default to Net-30
       notes: '',
     },
   });
@@ -177,13 +170,18 @@ const InvoiceModal = ({
         amount: log.billableAmount,
       }));
 
+      // Calculate due date based on billing end date and net terms
+      const periodEndDate = new Date(data.periodEnd);
+      const dueDate = new Date(periodEndDate);
+      dueDate.setDate(periodEndDate.getDate() + Number(data.netTerms));
+
       // Convert values to appropriate types
       const formattedData = {
         invoiceNumber: nextInvoiceNumber,
         clientName: data.clientName,
         engagementId: Number(data.engagementId),
         issueDate: new Date(),
-        dueDate: new Date(data.dueDate),
+        dueDate: dueDate,
         amount: invoiceTotal,
         status: 'submitted',
         notes: data.notes,
@@ -290,7 +288,7 @@ const InvoiceModal = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="grid grid-cols-1 gap-2">
                 <Label htmlFor="periodStart" className="text-sm font-medium text-slate-700">
-                  Billing Period Start
+                  Billing Start
                 </Label>
                 <Input
                   id="periodStart"
@@ -305,7 +303,7 @@ const InvoiceModal = ({
               
               <div className="grid grid-cols-1 gap-2">
                 <Label htmlFor="periodEnd" className="text-sm font-medium text-slate-700">
-                  Billing Period End
+                  Billing End
                 </Label>
                 <Input
                   id="periodEnd"
@@ -319,21 +317,32 @@ const InvoiceModal = ({
               </div>
               
               <div className="grid grid-cols-1 gap-2">
-                <Label htmlFor="dueDate" className="text-sm font-medium text-slate-700">
-                  Due Date <span className="text-xs text-slate-500 ml-1">(30 days from today)</span>
+                <Label htmlFor="netTerms" className="text-sm font-medium text-slate-700">
+                  Net Terms
                 </Label>
-                <Input
-                  id="dueDate"
-                  type="date"
-                  {...register('dueDate')}
-                  className={errors.dueDate ? 'border-red-500' : ''}
-                  readOnly
-                  title="Due date is automatically set to 30 days from issue date"
+                <Controller
+                  name="netTerms"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <SelectTrigger className={errors.netTerms ? 'border-red-500' : ''}>
+                        <SelectValue placeholder="Select net terms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30">Net 30</SelectItem>
+                        <SelectItem value="60">Net 60</SelectItem>
+                        <SelectItem value="90">Net 90</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 />
-                {errors.dueDate && (
-                  <span className="text-xs text-red-500">{errors.dueDate.message}</span>
+                {errors.netTerms && (
+                  <span className="text-xs text-red-500">{errors.netTerms.message}</span>
                 )}
-                <span className="text-xs text-slate-500">Due date is automatically set to 30 days from issue date. Invoices will be marked as "overdue" after this date.</span>
+                <span className="text-xs text-slate-500">Due date will be calculated from the billing end date. Invoices will be marked as "overdue" after this date.</span>
               </div>
             </div>
 
