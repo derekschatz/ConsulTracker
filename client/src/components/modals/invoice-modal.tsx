@@ -12,7 +12,6 @@ import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { insertInvoiceSchema } from '@shared/schema';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { InfoIcon } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency, formatHours } from '@/lib/format-utils';
 import { getISODate } from '@/lib/date-utils';
@@ -325,10 +324,10 @@ const InvoiceModal = ({
                   </Label>
                   <TooltipProvider>
                     <Tooltip>
-                      <TooltipTrigger asChild>
-                        <InfoIcon className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                      <TooltipTrigger>
+                        <div className="h-3.5 w-3.5 rounded-full flex items-center justify-center text-xs bg-slate-200 text-slate-700 cursor-help">i</div>
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
+                      <TooltipContent className="max-w-xs p-2 text-xs">
                         <p>Due date will be calculated from the billing end date. Invoices will be marked as "overdue" after this date.</p>
                       </TooltipContent>
                     </Tooltip>
