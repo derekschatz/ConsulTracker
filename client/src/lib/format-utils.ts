@@ -115,6 +115,7 @@ export function getStatusClasses(status: string): { bg: string, text: string } {
     case 'paid':
       return { bg: 'bg-green-100', text: 'text-green-700' };
     case 'pending':
+    case 'submitted':
       return { bg: 'bg-yellow-100', text: 'text-yellow-700' };
     case 'overdue':
       return { bg: 'bg-red-100', text: 'text-red-700' };

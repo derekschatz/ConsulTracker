@@ -116,10 +116,10 @@ const InvoiceTable = ({
                   Mark as Paid
                 </DropdownMenuItem>
               )}
-              {invoice.status !== 'pending' && (
-                <DropdownMenuItem onClick={() => onUpdateStatus(invoice.id, 'pending')}>
+              {invoice.status !== 'submitted' && (
+                <DropdownMenuItem onClick={() => onUpdateStatus(invoice.id, 'submitted')}>
                   <Clock className="h-4 w-4 mr-2 text-yellow-600" />
-                  Mark as Pending
+                  Mark as Submitted
                 </DropdownMenuItem>
               )}
               {invoice.status !== 'overdue' && (

@@ -21,7 +21,10 @@ export function calculateEngagementStatus(startDate: Date, endDate: Date): Engag
 }
 
 // Define invoice status enum
-export const invoiceStatusEnum = z.enum(['pending', 'paid', 'overdue']);
+// submitted: initial status when invoice is created
+// paid: marked as paid by user
+// overdue: automatically set when due date passes (for submitted invoices)
+export const invoiceStatusEnum = z.enum(['submitted', 'paid', 'overdue']);
 export type InvoiceStatus = z.infer<typeof invoiceStatusEnum>;
 
 // Client table
@@ -98,7 +101,7 @@ export const invoices = pgTable("invoices", {
   issueDate: timestamp("issue_date").notNull(),
   dueDate: timestamp("due_date").notNull(),
   amount: numeric("amount").notNull(),
-  status: text("status").notNull().default('pending'),
+  status: text("status").notNull().default('submitted'),
   notes: text("notes"),
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),

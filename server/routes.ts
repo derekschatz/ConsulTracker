@@ -372,8 +372,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Invoice routes
+  
+  // Function to check and update overdue invoices
+  const checkAndUpdateOverdueInvoices = async () => {
+    try {
+      const today = new Date();
+      
+      // Find invoices that are past due date and not already marked as overdue or paid
+      const overdueInvoices = await pool.query(
+        'SELECT id FROM invoices WHERE due_date < $1 AND status = $2',
+        [today, 'submitted']
+      );
+      
+      // Update any overdue invoices
+      for (const invoice of overdueInvoices.rows) {
+        await pool.query(
+          'UPDATE invoices SET status = $1 WHERE id = $2',
+          ['overdue', invoice.id]
+        );
+        console.log(`Updated invoice ${invoice.id} to overdue status`);
+      }
+      
+      return overdueInvoices.rows.length;
+    } catch (error) {
+      console.error('Error checking overdue invoices:', error);
+      return 0;
+    }
+  };
+  
   app.get("/api/invoices", async (req: Request, res: Response) => {
     try {
+      // Check for overdue invoices before returning results
+      await checkAndUpdateOverdueInvoices();
+      
       const { status, client, dateRange, startDate, endDate } = req.query;
       let query = `
         SELECT i.*, e.client_name, e.project_name
@@ -443,7 +474,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
         [
           engagementId, 
-          'pending', 
+          'submitted', 
           today, 
           dueDate, 
           `INV-${Date.now().toString().slice(-6)}`, // Generate simple invoice number

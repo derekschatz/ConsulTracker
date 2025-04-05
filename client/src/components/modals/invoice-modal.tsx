@@ -62,10 +62,10 @@ const InvoiceModal = ({
   // Get the next invoice number (in a real app this would come from the server)
   const nextInvoiceNumber = generateInvoiceNumber('INV', 25);
   
-  // Get due date default (15 days from today)
+  // Get due date default (30 days from today)
   const getDefaultDueDate = () => {
     const date = new Date();
-    date.setDate(date.getDate() + 15);
+    date.setDate(date.getDate() + 30);
     return getISODate(date);
   };
 
@@ -185,7 +185,7 @@ const InvoiceModal = ({
         issueDate: new Date(),
         dueDate: new Date(data.dueDate),
         amount: invoiceTotal,
-        status: 'pending',
+        status: 'submitted',
         notes: data.notes,
         periodStart: new Date(data.periodStart),
         periodEnd: new Date(data.periodEnd),
@@ -320,17 +320,20 @@ const InvoiceModal = ({
               
               <div className="grid grid-cols-1 gap-2">
                 <Label htmlFor="dueDate" className="text-sm font-medium text-slate-700">
-                  Due Date
+                  Due Date <span className="text-xs text-slate-500 ml-1">(30 days from today)</span>
                 </Label>
                 <Input
                   id="dueDate"
                   type="date"
                   {...register('dueDate')}
                   className={errors.dueDate ? 'border-red-500' : ''}
+                  readOnly
+                  title="Due date is automatically set to 30 days from issue date"
                 />
                 {errors.dueDate && (
                   <span className="text-xs text-red-500">{errors.dueDate.message}</span>
                 )}
+                <span className="text-xs text-slate-500">Due date is automatically set to 30 days from issue date. Invoices will be marked as "overdue" after this date.</span>
               </div>
             </div>
 
