@@ -7,7 +7,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Receipt } from 'lucide-react';
+import { ReceiptText } from 'lucide-react';
 
 interface InvoiceHistoryModalProps {
   isOpen: boolean;
@@ -25,7 +25,7 @@ const InvoiceHistoryModal = ({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-blue-500" />
+            <ReceiptText className="h-5 w-5 text-blue-500" />
             Invoice History: {clientName}
           </DialogTitle>
           <DialogDescription>
@@ -35,7 +35,7 @@ const InvoiceHistoryModal = ({
         
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="rounded-full bg-slate-100 p-4 mb-4">
-            <Receipt className="h-10 w-10 text-slate-400" />
+            <ReceiptText className="h-10 w-10 text-slate-400" />
           </div>
           <h3 className="text-lg font-medium mb-2">Invoice History Coming Soon</h3>
           <p className="text-sm text-slate-500 max-w-xs">
