@@ -99,11 +99,10 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
                 <SelectValue placeholder="Select Range" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Invoices</SelectItem>
                 <SelectItem value="current">Current Year</SelectItem>
                 <SelectItem value="last">Last Year</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
                 <SelectItem value="month">This Month</SelectItem>
-                <SelectItem value="quarter">This Quarter</SelectItem>
                 <SelectItem value="custom">Custom Range</SelectItem>
               </SelectContent>
             </Select>

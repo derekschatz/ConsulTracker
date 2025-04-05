@@ -28,7 +28,7 @@ const Invoices = () => {
   const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
-    dateRange: 'current'
+    dateRange: 'all'
   });
 
   const [invoices, setInvoices] = useState<any[]>([]);

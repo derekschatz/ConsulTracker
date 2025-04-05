@@ -86,6 +86,13 @@ function getDateRange(range: string, referenceDate: Date = new Date()): { startD
         endDate: today
       };
     
+    case 'all':
+      // Return a very broad date range to get all invoices
+      return {
+        startDate: new Date(1970, 0, 1), // From the beginning of time (approx)
+        endDate: new Date(2099, 11, 31, 23, 59, 59) // Far into the future
+      };
+      
     default:
       return {
         startDate: startOfYear(today),
