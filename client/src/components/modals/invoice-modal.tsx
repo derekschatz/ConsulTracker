@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { insertInvoiceSchema } from '@shared/schema';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency, formatHours } from '@/lib/format-utils';
 import { getISODate } from '@/lib/date-utils';
@@ -322,16 +322,14 @@ const InvoiceModal = ({
                   <Label htmlFor="netTerms" className="text-sm font-medium text-slate-700">
                     Net Terms
                   </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <div className="h-3.5 w-3.5 rounded-full flex items-center justify-center text-xs bg-slate-200 text-slate-700 cursor-help">i</div>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs p-2 text-xs">
-                        <p>Due date will be calculated from the billing end date. Invoices will be marked as "overdue" after this date.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <div 
+                    className="group relative inline-block"
+                  >
+                    <div className="h-3.5 w-3.5 rounded-full flex items-center justify-center text-xs bg-slate-200 text-slate-700 cursor-help">i</div>
+                    <div className="absolute z-10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity bottom-0 left-1/2 -translate-x-1/2 -translate-y-4 px-2 py-1 w-56 text-xs bg-slate-800 text-white rounded">
+                      Due date will be calculated from the billing end date. Invoices will be marked as "overdue" after this date.
+                    </div>
+                  </div>
                 </div>
                 <Controller
                   name="netTerms"
