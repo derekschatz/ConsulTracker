@@ -7,6 +7,7 @@ import InvoiceSummary from './invoice-summary';
 import InvoiceTable from './invoice-table';
 import InvoiceModal from '@/components/modals/invoice-modal';
 import EmailInvoiceModal from '@/components/modals/email-invoice-modal';
+import { DeleteConfirmationModal } from '@/components/modals/delete-confirmation-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { downloadInvoice } from '@/lib/pdf-generator';
@@ -24,7 +25,9 @@ const Invoices = () => {
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
@@ -108,32 +111,42 @@ const Invoices = () => {
     setCurrentInvoice(null);
   };
 
-  const handleDeleteInvoice = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this invoice?')) {
-      try {
-        const response = await apiRequest('DELETE', `/api/invoices/${id}`);
-        
-        if (!response.ok) {
-          throw new Error('Failed to delete invoice');
-        }
+  const handleDeleteInvoice = (id: number) => {
+    setInvoiceToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
 
-        toast({
-          title: 'Invoice deleted',
-          description: 'The invoice has been deleted successfully.',
-        });
-
-        // Refresh data
-        queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      } catch (error) {
-        console.error('Error deleting invoice:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to delete invoice',
-          variant: 'destructive',
-        });
+  const handleConfirmDelete = async () => {
+    if (!invoiceToDelete) return;
+    
+    try {
+      const response = await apiRequest('DELETE', `/api/invoices/${invoiceToDelete}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete invoice');
       }
+
+      toast({
+        title: 'Invoice deleted',
+        description: 'The invoice has been deleted successfully.',
+      });
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete invoice',
+        variant: 'destructive',
+      });
     }
+  };
+  
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setInvoiceToDelete(null);
   };
 
   const handleUpdateInvoiceStatus = async (id: number, status: string) => {
@@ -263,6 +276,15 @@ const Invoices = () => {
         onClose={handleCloseEmailModal}
         invoice={currentInvoice}
         onSuccess={handleSuccess}
+      />
+      
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        title="Delete Invoice"
+        description="Are you sure you want to delete this invoice? This action cannot be undone and will permanently remove the invoice from your records."
       />
     </div>
   );
