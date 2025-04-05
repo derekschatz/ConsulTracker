@@ -126,6 +126,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all engagements first
       let engagements = await storage.getEngagements();
       
+      // Update status for all engagements based on current date and their date ranges
+      engagements = engagements.map(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.startDate), 
+          new Date(engagement.endDate)
+        );
+        
+        // Create a new object with updated status
+        return {
+          ...engagement,
+          status: currentStatus
+        };
+      });
+      
       // Apply status filter if provided
       const status = req.query.status as string | undefined;
       if (status && status !== 'all') {
@@ -178,9 +192,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/engagements/active", async (_req, res) => {
     try {
-      const engagements = await storage.getActiveEngagements();
+      let engagements = await storage.getActiveEngagements();
+      
+      // Update status for all engagements based on current date and their date ranges
+      engagements = engagements.map(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.startDate), 
+          new Date(engagement.endDate)
+        );
+        
+        // Create a new object with updated status
+        return {
+          ...engagement,
+          status: currentStatus
+        };
+      });
+      
+      // Filter to only return truly active engagements based on calculated status
+      engagements = engagements.filter(engagement => engagement.status === 'active');
+      
       res.json(engagements);
     } catch (error) {
+      console.error("Error fetching active engagements:", error);
       res.status(500).json({ message: "Failed to fetch active engagements" });
     }
   });
@@ -191,8 +224,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!engagement) {
         return res.status(404).json({ message: "Engagement not found" });
       }
-      res.json(engagement);
+      
+      // Update status based on current date and engagement dates
+      const currentStatus = calculateEngagementStatus(
+        new Date(engagement.startDate), 
+        new Date(engagement.endDate)
+      );
+      
+      // Create a new object with updated status
+      const updatedEngagement = {
+        ...engagement,
+        status: currentStatus
+      };
+      
+      res.json(updatedEngagement);
     } catch (error) {
+      console.error("Error fetching engagement:", error);
       res.status(500).json({ message: "Failed to fetch engagement" });
     }
   });

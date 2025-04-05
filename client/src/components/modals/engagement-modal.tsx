@@ -9,7 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { insertEngagementSchema } from '@shared/schema';
+import { insertEngagementSchema, calculateEngagementStatus } from '@shared/schema';
 import { getISODate } from '@/lib/date-utils';
 
 // Extend the engagement schema with additional validation
@@ -119,11 +119,18 @@ const EngagementModal = ({
       setIsSubmitting(true);
 
       // Convert values to appropriate types
+      const startDate = new Date(data.startDate);
+      const endDate = new Date(data.endDate);
+      
+      // Automatically calculate status based on dates
+      const status = calculateEngagementStatus(startDate, endDate);
+      
       const formattedData = {
         ...data,
         hourlyRate: Number(data.hourlyRate),
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
+        startDate,
+        endDate,
+        status, // Add the calculated status
       };
 
       // Create or update engagement

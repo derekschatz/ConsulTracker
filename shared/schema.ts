@@ -7,14 +7,19 @@ import { relations } from "drizzle-orm";
 export const engagementStatusEnum = z.enum(['active', 'completed', 'upcoming']);
 export type EngagementStatus = z.infer<typeof engagementStatusEnum>;
 
-// Helper function to calculate engagement status based on dates
+/**
+ * Calculate the engagement status based on start and end dates
+ * @param startDate The engagement start date
+ * @param endDate The engagement end date
+ * @returns The calculated engagement status
+ */
 export function calculateEngagementStatus(startDate: Date, endDate: Date): EngagementStatus {
   const today = new Date();
   
-  if (today < startDate) {
-    return 'upcoming';
-  } else if (today > endDate) {
+  if (today > endDate) {
     return 'completed';
+  } else if (today < startDate) {
+    return 'upcoming';
   } else {
     return 'active';
   }
