@@ -40,11 +40,14 @@ const TimeLogs = () => {
     queryParams.append('startDate', filters.startDate);
     queryParams.append('endDate', filters.endDate);
   } else if (filters.dateRange !== 'custom' && filters.dateRange) {
+    // Add the named date range AND the calculated dates for redundancy
+    queryParams.append('dateRange', filters.dateRange);
     const { startDate, endDate } = getDateRange(filters.dateRange);
     queryParams.append('startDate', startDate.toISOString().split('T')[0]);
     queryParams.append('endDate', endDate.toISOString().split('T')[0]);
   } else {
     // Default to current month if no date range specified
+    queryParams.append('dateRange', 'month');
     const { startDate, endDate } = getDateRange('month');
     queryParams.append('startDate', startDate.toISOString().split('T')[0]);
     queryParams.append('endDate', endDate.toISOString().split('T')[0]);
@@ -58,6 +61,15 @@ const TimeLogs = () => {
   // Fetch time logs with filters
   const { data: timeLogs = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/time-logs', queryParams.toString()],
+    queryFn: async ({ queryKey }) => {
+      const url = `${queryKey[0]}?${queryKey[1]}`;
+      console.log('Fetching time logs with URL:', url);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch time logs');
+      }
+      return response.json();
+    },
   });
 
   // Fetch engagements for client filter dropdown and the editing form

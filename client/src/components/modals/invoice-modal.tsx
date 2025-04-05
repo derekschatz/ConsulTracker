@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { insertInvoiceSchema } from '@shared/schema';
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency, formatHours } from '@/lib/format-utils';
 import { getISODate } from '@/lib/date-utils';
@@ -22,10 +23,10 @@ const formSchema = z.object({
   engagementId: z.string().or(z.number()).refine(val => Number(val) > 0, {
     message: 'Engagement is required',
   }),
-  periodStart: z.string().min(1, 'Start date is required'),
-  periodEnd: z.string().min(1, 'End date is required'),
+  periodStart: z.string().min(1, 'Billing start is required'),
+  periodEnd: z.string().min(1, 'Billing end is required'),
   notes: z.string().optional(),
-  dueDate: z.string().min(1, 'Due date is required'),
+  netTerms: z.string().min(1, 'Net terms are required'),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -48,27 +49,34 @@ const InvoiceModal = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedEngagementId, setSelectedEngagementId] = useState<string>('');
+  // State to track form fields and submission
   const [timeLogs, setTimeLogs] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
-
-  // Fetch engagements
-  const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery({
-    queryKey: ['/api/engagements'],
+  const [selectedClientName, setSelectedClientName] = useState<string>('');
+  
+  // Fetch all active engagements
+  const { data: allEngagements = [], isLoading: isLoadingEngagements } = useQuery<any[], any[], any[]>({
+    queryKey: ['/api/engagements/active'],
     enabled: isOpen,
   });
+  
+  // Get unique clients from active engagements
+  const uniqueClients = allEngagements.reduce((clients: string[], engagement: any) => {
+    if (!clients.includes(engagement.clientName)) {
+      clients.push(engagement.clientName);
+    }
+    return clients;
+  }, []).sort();
+  
+  // Filter active engagements by selected client
+  const filteredEngagements = allEngagements.filter((engagement: any) => 
+    engagement.clientName === selectedClientName && engagement.status === 'active'
+  );
 
   // Get the next invoice number (in a real app this would come from the server)
   const nextInvoiceNumber = generateInvoiceNumber('INV', 25);
   
-  // Get due date default (15 days from today)
-  const getDefaultDueDate = () => {
-    const date = new Date();
-    date.setDate(date.getDate() + 15);
-    return getISODate(date);
-  };
-
   // Initialize form with default values
   const {
     register,
@@ -85,26 +93,38 @@ const InvoiceModal = ({
       engagementId: preselectedEngagementId?.toString() || '',
       periodStart: getISODate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)), // First day of current month
       periodEnd: getISODate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)), // Last day of current month
-      dueDate: getDefaultDueDate(),
+      netTerms: '30', // Default to Net-30
       notes: '',
     },
   });
+  
+  // Set initial selectedClientName based on preselectedClientName if available
+  useEffect(() => {
+    if (isOpen && preselectedClientName) {
+      setSelectedClientName(preselectedClientName);
+    }
+  }, [isOpen, preselectedClientName]);
 
   // Watch for changes to form values
   const watchEngagementId = watch('engagementId');
   const watchPeriodStart = watch('periodStart');
   const watchPeriodEnd = watch('periodEnd');
 
-  // Update client name when engagement changes
+  // Reset engagement if client changes
   useEffect(() => {
-    if (watchEngagementId) {
-      const selectedEngagement = engagements.find((e: any) => e.id.toString() === watchEngagementId.toString());
-      if (selectedEngagement) {
-        setValue('clientName', selectedEngagement.clientName);
-        setSelectedEngagementId(watchEngagementId.toString());
+    // Reset engagement when client changes
+    if (selectedClientName && watchEngagementId) {
+      // Check if the selected engagement is valid for this client
+      const validEngagement = filteredEngagements.some(
+        (e: any) => e.id.toString() === watchEngagementId.toString()
+      );
+      
+      if (!validEngagement) {
+        // Reset engagement if it doesn't belong to the selected client
+        setValue('engagementId', '');
       }
     }
-  }, [watchEngagementId, engagements, setValue]);
+  }, [selectedClientName, watchEngagementId, filteredEngagements, setValue]);
 
   // Fetch time logs when engagement, period start, or period end changes
   useEffect(() => {
@@ -151,6 +171,7 @@ const InvoiceModal = ({
     setTimeLogs([]);
     setInvoiceTotal(0);
     setTotalHours(0);
+    setSelectedClientName('');
     onClose();
   };
 
@@ -177,15 +198,20 @@ const InvoiceModal = ({
         amount: log.billableAmount,
       }));
 
+      // Calculate due date based on billing end date and net terms
+      const periodEndDate = new Date(data.periodEnd);
+      const dueDate = new Date(periodEndDate);
+      dueDate.setDate(periodEndDate.getDate() + Number(data.netTerms));
+
       // Convert values to appropriate types
       const formattedData = {
         invoiceNumber: nextInvoiceNumber,
         clientName: data.clientName,
         engagementId: Number(data.engagementId),
         issueDate: new Date(),
-        dueDate: new Date(data.dueDate),
+        dueDate: dueDate,
         amount: invoiceTotal,
-        status: 'pending',
+        status: 'submitted',
         notes: data.notes,
         periodStart: new Date(data.periodStart),
         periodEnd: new Date(data.periodEnd),
@@ -243,12 +269,30 @@ const InvoiceModal = ({
                 <Label htmlFor="clientName" className="text-sm font-medium text-slate-700">
                   Client
                 </Label>
-                <Input
-                  id="clientName"
-                  placeholder="Client name"
-                  {...register('clientName')}
-                  className={errors.clientName ? 'border-red-500' : ''}
-                  readOnly
+                <Controller
+                  name="clientName"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      disabled={isLoadingEngagements}
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        setSelectedClientName(value);
+                      }}
+                    >
+                      <SelectTrigger className={errors.clientName ? 'border-red-500' : ''}>
+                        <SelectValue placeholder="Select a client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uniqueClients.map((clientName: string) => (
+                          <SelectItem key={clientName} value={clientName}>
+                            {clientName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 />
                 {errors.clientName && (
                   <span className="text-xs text-red-500">{errors.clientName.message}</span>
@@ -264,17 +308,17 @@ const InvoiceModal = ({
                   control={control}
                   render={({ field }) => (
                     <Select
-                      disabled={isLoadingEngagements}
+                      disabled={isLoadingEngagements || !selectedClientName}
                       value={field.value.toString()}
                       onValueChange={field.onChange}
                     >
                       <SelectTrigger className={errors.engagementId ? 'border-red-500' : ''}>
-                        <SelectValue placeholder="Select an engagement" />
+                        <SelectValue placeholder="Select an active engagement" />
                       </SelectTrigger>
                       <SelectContent>
-                        {engagements.map((engagement: any) => (
+                        {filteredEngagements.map((engagement: any) => (
                           <SelectItem key={engagement.id} value={engagement.id.toString()}>
-                            {engagement.clientName} - {engagement.projectName}
+                            {engagement.projectName}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -284,19 +328,22 @@ const InvoiceModal = ({
                 {errors.engagementId && (
                   <span className="text-xs text-red-500">{errors.engagementId.message}</span>
                 )}
+                {selectedClientName && filteredEngagements.length === 0 && (
+                  <span className="text-xs text-amber-500">No active engagements found for {selectedClientName}</span>
+                )}
               </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="grid grid-cols-1 gap-2">
                 <Label htmlFor="periodStart" className="text-sm font-medium text-slate-700">
-                  Billing Period Start
+                  Billing Start
                 </Label>
                 <Input
                   id="periodStart"
                   type="date"
                   {...register('periodStart')}
-                  className={errors.periodStart ? 'border-red-500' : ''}
+                  className={`h-10 ${errors.periodStart ? 'border-red-500' : ''}`}
                 />
                 {errors.periodStart && (
                   <span className="text-xs text-red-500">{errors.periodStart.message}</span>
@@ -305,13 +352,13 @@ const InvoiceModal = ({
               
               <div className="grid grid-cols-1 gap-2">
                 <Label htmlFor="periodEnd" className="text-sm font-medium text-slate-700">
-                  Billing Period End
+                  Billing End
                 </Label>
                 <Input
                   id="periodEnd"
                   type="date"
                   {...register('periodEnd')}
-                  className={errors.periodEnd ? 'border-red-500' : ''}
+                  className={`h-10 ${errors.periodEnd ? 'border-red-500' : ''}`}
                 />
                 {errors.periodEnd && (
                   <span className="text-xs text-red-500">{errors.periodEnd.message}</span>
@@ -319,17 +366,40 @@ const InvoiceModal = ({
               </div>
               
               <div className="grid grid-cols-1 gap-2">
-                <Label htmlFor="dueDate" className="text-sm font-medium text-slate-700">
-                  Due Date
-                </Label>
-                <Input
-                  id="dueDate"
-                  type="date"
-                  {...register('dueDate')}
-                  className={errors.dueDate ? 'border-red-500' : ''}
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="netTerms" className="text-sm font-medium text-slate-700">
+                    Net Terms
+                  </Label>
+                  <div 
+                    className="group relative inline-block"
+                  >
+                    <div className="h-3.5 w-3.5 rounded-full flex items-center justify-center text-xs bg-slate-200 text-slate-700 cursor-help">i</div>
+                    <div className="absolute z-10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity bottom-0 left-1/2 -translate-x-1/2 -translate-y-4 px-2 py-1 w-56 text-xs bg-slate-800 text-white rounded">
+                      Due date will be calculated from the billing end date. Invoices will be marked as "overdue" after this date.
+                    </div>
+                  </div>
+                </div>
+                <Controller
+                  name="netTerms"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <SelectTrigger className={`h-10 ${errors.netTerms ? 'border-red-500' : ''}`}>
+                        <SelectValue placeholder="Select net terms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30">Net 30</SelectItem>
+                        <SelectItem value="60">Net 60</SelectItem>
+                        <SelectItem value="90">Net 90</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 />
-                {errors.dueDate && (
-                  <span className="text-xs text-red-500">{errors.dueDate.message}</span>
+                {errors.netTerms && (
+                  <span className="text-xs text-red-500">{errors.netTerms.message}</span>
                 )}
               </div>
             </div>

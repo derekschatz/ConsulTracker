@@ -7,8 +7,29 @@ import { relations } from "drizzle-orm";
 export const engagementStatusEnum = z.enum(['active', 'completed', 'upcoming']);
 export type EngagementStatus = z.infer<typeof engagementStatusEnum>;
 
+/**
+ * Calculate the engagement status based on start and end dates
+ * @param startDate The engagement start date
+ * @param endDate The engagement end date
+ * @returns The calculated engagement status
+ */
+export function calculateEngagementStatus(startDate: Date, endDate: Date): EngagementStatus {
+  const today = new Date();
+  
+  if (today > endDate) {
+    return 'completed';
+  } else if (today < startDate) {
+    return 'upcoming';
+  } else {
+    return 'active';
+  }
+}
+
 // Define invoice status enum
-export const invoiceStatusEnum = z.enum(['pending', 'paid', 'overdue']);
+// submitted: initial status when invoice is created
+// paid: marked as paid by user
+// overdue: automatically set when due date passes (for submitted invoices)
+export const invoiceStatusEnum = z.enum(['submitted', 'paid', 'overdue']);
 export type InvoiceStatus = z.infer<typeof invoiceStatusEnum>;
 
 // Client table
@@ -85,10 +106,11 @@ export const invoices = pgTable("invoices", {
   issueDate: timestamp("issue_date").notNull(),
   dueDate: timestamp("due_date").notNull(),
   amount: numeric("amount").notNull(),
-  status: text("status").notNull().default('pending'),
+  status: text("status").notNull().default('submitted'),
   notes: text("notes"),
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
+  projectName: text("project_name"),
 });
 
 export const invoicesRelations = relations(invoices, ({ one, many }) => ({
@@ -110,13 +132,14 @@ export const insertInvoiceSchema = createInsertSchema(invoices).pick({
   notes: true,
   periodStart: true,
   periodEnd: true,
+  projectName: true,
 });
 
 // Invoice line items table
 export const invoiceLineItems = pgTable("invoice_line_items", {
   id: serial("id").primaryKey(),
   invoiceId: integer("invoice_id").notNull(),
-  timeLogId: integer("time_log_id").notNull(),
+  timeLogId: integer("time_log_id"), // Making this optional to support manual line items
   description: text("description").notNull(),
   hours: doublePrecision("hours").notNull(),
   rate: numeric("rate").notNull(),

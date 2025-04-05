@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { 
   insertEngagementSchema, 
   insertTimeLogSchema, 
-  insertInvoiceSchema 
+  insertInvoiceSchema,
+  calculateEngagementStatus
 } from "@shared/schema";
 import { z } from "zod";
 import nodemailer from "nodemailer";
@@ -29,9 +30,17 @@ function getDateRange(range: string, referenceDate: Date = new Date()): { startD
       };
 
     case 'week':
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1)); // Monday
+      weekStart.setHours(0, 0, 0, 0);
+      
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+      weekEnd.setHours(23, 59, 59, 999);
+      
       return {
-        startDate: startOfWeek(today, { weekStartsOn: 1 }),
-        endDate: endOfWeek(today, { weekStartsOn: 1 })
+        startDate: weekStart,
+        endDate: weekEnd
       };
     
     case 'month':
@@ -77,6 +86,13 @@ function getDateRange(range: string, referenceDate: Date = new Date()): { startD
         endDate: today
       };
     
+    case 'all':
+      // Return a very broad date range to get all invoices
+      return {
+        startDate: new Date(1970, 0, 1), // From the beginning of time (approx)
+        endDate: new Date(2099, 11, 31, 23, 59, 59) // Far into the future
+      };
+      
     default:
       return {
         startDate: startOfYear(today),
@@ -109,6 +125,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get all engagements first
       let engagements = await storage.getEngagements();
+      
+      // Update status for all engagements based on current date and their date ranges
+      engagements = engagements.map(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.startDate), 
+          new Date(engagement.endDate)
+        );
+        
+        // Create a new object with updated status
+        return {
+          ...engagement,
+          status: currentStatus
+        };
+      });
       
       // Apply status filter if provided
       const status = req.query.status as string | undefined;
@@ -162,9 +192,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/engagements/active", async (_req, res) => {
     try {
-      const engagements = await storage.getActiveEngagements();
+      let engagements = await storage.getActiveEngagements();
+      
+      // Update status for all engagements based on current date and their date ranges
+      engagements = engagements.map(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.startDate), 
+          new Date(engagement.endDate)
+        );
+        
+        // Create a new object with updated status
+        return {
+          ...engagement,
+          status: currentStatus
+        };
+      });
+      
+      // Filter to only return truly active engagements based on calculated status
+      engagements = engagements.filter(engagement => engagement.status === 'active');
+      
       res.json(engagements);
     } catch (error) {
+      console.error("Error fetching active engagements:", error);
       res.status(500).json({ message: "Failed to fetch active engagements" });
     }
   });
@@ -175,8 +224,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!engagement) {
         return res.status(404).json({ message: "Engagement not found" });
       }
-      res.json(engagement);
+      
+      // Update status based on current date and engagement dates
+      const currentStatus = calculateEngagementStatus(
+        new Date(engagement.startDate), 
+        new Date(engagement.endDate)
+      );
+      
+      // Create a new object with updated status
+      const updatedEngagement = {
+        ...engagement,
+        status: currentStatus
+      };
+      
+      res.json(updatedEngagement);
     } catch (error) {
+      console.error("Error fetching engagement:", error);
       res.status(500).json({ message: "Failed to fetch engagement" });
     }
   });
@@ -187,8 +250,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
       }
+      
+      // Calculate the status based on start and end dates
+      const status = calculateEngagementStatus(
+        new Date(validationResult.data.startDate),
+        new Date(validationResult.data.endDate)
+      );
+      
+      // Override any status provided with the calculated one
+      const data = {
+        ...validationResult.data,
+        status
+      };
 
-      const engagement = await storage.createEngagement(validationResult.data);
+      const engagement = await storage.createEngagement(data);
       res.status(201).json(engagement);
     } catch (error) {
       res.status(500).json({ message: "Failed to create engagement" });
@@ -202,8 +277,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
       }
+      
+      // Get the input data
+      const inputData = validationResult.data;
+      
+      // Only calculate status if both dates are provided in this update
+      if (inputData.startDate !== undefined && inputData.endDate !== undefined) {
+        // Calculate the status based on start and end dates
+        const status = calculateEngagementStatus(
+          new Date(inputData.startDate), 
+          new Date(inputData.endDate)
+        );
+        
+        // Override the status in the input data
+        inputData.status = status;
+      } 
+      // If only one date is provided, we need to get the other one from the database
+      else if (inputData.startDate !== undefined || inputData.endDate !== undefined) {
+        // Get the current engagement
+        const currentEngagement = await storage.getEngagement(id);
+        if (!currentEngagement) {
+          return res.status(404).json({ message: "Engagement not found" });
+        }
+        
+        // Get the dates (use the new one if provided, otherwise use the existing one)
+        const startDate = inputData.startDate ? new Date(inputData.startDate) : new Date(currentEngagement.startDate);
+        const endDate = inputData.endDate ? new Date(inputData.endDate) : new Date(currentEngagement.endDate);
+        
+        // Calculate the status based on the combined dates
+        const status = calculateEngagementStatus(startDate, endDate);
+        
+        // Override the status in the input data
+        inputData.status = status;
+      }
 
-      const updatedEngagement = await storage.updateEngagement(id, validationResult.data);
+      const updatedEngagement = await storage.updateEngagement(id, inputData);
       if (!updatedEngagement) {
         return res.status(404).json({ message: "Engagement not found" });
       }
@@ -231,29 +339,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const engagementId = req.query.engagementId ? Number(req.query.engagementId) : undefined;
       const clientName = req.query.client as string | undefined;
-      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
-      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const dateRange = req.query.dateRange as string | undefined;
+      const startDateParam = req.query.startDate as string | undefined;
+      const endDateParam = req.query.endDate as string | undefined;
       const search = req.query.search as string | undefined;
 
+      console.log('Time log request params:', {
+        engagementId,
+        clientName,
+        dateRange,
+        startDate: startDateParam,
+        endDate: endDateParam,
+        search
+      });
+      
       let timeLogs;
-      if (engagementId) {
+      let startDate, endDate;
+
+      if (startDateParam && endDateParam) {
+        // Use explicit date parameters
+        startDate = new Date(startDateParam);
+        endDate = new Date(endDateParam);
+        console.log('Using explicit date range:', startDate, 'to', endDate);
+      } else if (dateRange) {
+        // Use predefined date range
+        const range = getDateRange(dateRange);
+        startDate = range.startDate;
+        endDate = range.endDate;
+        console.log('Using date range:', dateRange, startDate, 'to', endDate);
+      } else {
+        // Default to all time logs
+        timeLogs = await storage.getTimeLogs();
+        console.log('Getting all time logs');
+      }
+
+      // Get logs filtered by date range if we have dates
+      if (startDate && endDate) {
+        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate);
+      } else if (engagementId) {
         // Filter by specific engagement ID
         timeLogs = await storage.getTimeLogsByEngagement(engagementId);
-      } else if (startDate && endDate) {
-        // Filter by date range
-        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate);
-      } else {
-        // Get all time logs
+      } else if (!timeLogs) {
+        // If we haven't loaded logs yet, get all of them
         timeLogs = await storage.getTimeLogs();
       }
       
       // If client filter is applied, filter the results by client name
-      if (clientName && clientName !== 'all') {
+      if (timeLogs && clientName && clientName !== 'all') {
         timeLogs = timeLogs.filter(log => log.engagement.clientName === clientName);
       }
 
       // Apply search filter if present
-      if (search) {
+      if (timeLogs && search) {
         const searchLower = search.toLowerCase();
         timeLogs = timeLogs.filter(log => 
           log.description.toLowerCase().includes(searchLower) ||
@@ -262,8 +399,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
-      res.json(timeLogs);
+      res.json(timeLogs || []);
     } catch (error) {
+      console.error("Error fetching time logs:", error);
       res.status(500).json({ message: "Failed to fetch time logs" });
     }
   });
@@ -326,11 +464,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Invoice routes
+  
+  // Function to check and update overdue invoices
+  const checkAndUpdateOverdueInvoices = async () => {
+    try {
+      const today = new Date();
+      
+      // Find invoices that are past due date and not already marked as overdue or paid
+      const overdueInvoices = await pool.query(
+        'SELECT id FROM invoices WHERE due_date < $1 AND status = $2',
+        [today, 'submitted']
+      );
+      
+      // Update any overdue invoices
+      for (const invoice of overdueInvoices.rows) {
+        await pool.query(
+          'UPDATE invoices SET status = $1 WHERE id = $2',
+          ['overdue', invoice.id]
+        );
+        console.log(`Updated invoice ${invoice.id} to overdue status`);
+      }
+      
+      return overdueInvoices.rows.length;
+    } catch (error) {
+      console.error('Error checking overdue invoices:', error);
+      return 0;
+    }
+  };
+  
   app.get("/api/invoices", async (req: Request, res: Response) => {
     try {
+      // Check for overdue invoices before returning results
+      await checkAndUpdateOverdueInvoices();
+      
       const { status, client, dateRange, startDate, endDate } = req.query;
       let query = `
-        SELECT i.*, e.client_name, e.project_name
+        SELECT i.*
         FROM invoices i
         JOIN engagements e ON i.engagement_id = e.id
         WHERE 1=1
@@ -345,14 +514,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Apply client filter
       if (client && client !== 'all') {
-        query += ` AND e.client_name = $${params.length + 1}`;
+        query += ` AND i.client_name = $${params.length + 1}`;
         params.push(client);
       }
 
       // Apply date range filter
       if (dateRange === 'custom' && startDate && endDate) {
+        // Format the custom date range with time to include the full end date
+        const formattedStartDate = `${startDate as string} 00:00:00`;
+        const formattedEndDate = `${endDate as string} 23:59:59`;
+        
         query += ` AND i.issue_date >= $${params.length + 1} AND i.issue_date <= $${params.length + 2}`;
-        params.push(startDate as string, endDate as string);
+        params.push(formattedStartDate, formattedEndDate);
       } else if (dateRange && dateRange !== 'all') {
         const { startDate: rangeStart, endDate: rangeEnd } = getDateRange(dateRange as string);
         query += ` AND i.issue_date >= $${params.length + 1} AND i.issue_date <= $${params.length + 2}`;
@@ -386,45 +559,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/invoices', async (req: Request, res: Response) => {
     try {
-      const { engagementId, timeLogs } = req.body;
+      const { engagementId, timeLogs = [] } = req.body;
+
+      // Validate required fields
+      if (!engagementId) {
+        return res.status(400).json({ error: 'Engagement ID is required' });
+      }
 
       // Create invoice
       const today = new Date();
       const dueDate = new Date();
       dueDate.setDate(today.getDate() + 30); // Due date 30 days from now
       
+      // Get engagement details
+      const engagementResult = await pool.query(
+        'SELECT client_name, project_name, hourly_rate FROM engagements WHERE id = $1',
+        [engagementId]
+      );
+      
+      if (engagementResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Engagement not found' });
+      }
+      
+      const engagement = engagementResult.rows[0];
+      const clientName = engagement.client_name;
+      const projectName = engagement.project_name;
+      
+      // Calculate total invoice amount
+      const totalAmount = timeLogs.reduce((sum: number, log: any) => 
+        sum + (parseFloat(log.amount) || 0), 0);
+      
       const invoiceResult = await pool.query(
-        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end, project_name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id',
         [
           engagementId, 
-          'pending', 
+          'submitted', 
           today, 
           dueDate, 
           `INV-${Date.now().toString().slice(-6)}`, // Generate simple invoice number
-          'Client', // This will be updated after we get engagement details
-          0, // Initial amount, will be calculated from line items
-          today, // Using today as period start
-          today  // Using today as period end (will be updated)
+          clientName,
+          totalAmount,
+          req.body.periodStart || today, 
+          req.body.periodEnd || today,
+          projectName
         ]
       );
+      
       const invoiceId = invoiceResult.rows[0].id;
 
-      // Create invoice items from time logs
-      const invoiceItems = timeLogs.map((log: any) => ({
-        description: log.description,
-        hours: log.hours,
-        amount: log.amount.toString(),
-        timeLogId: log.timeLogId,
-        rate: log.rate.toString(),
-        invoiceId
-      }));
+      // Only create invoice items if there are time logs
+      if (timeLogs.length > 0) {
+        // Create invoice items from time logs
+        const invoiceItems = timeLogs.map((log: any) => ({
+          description: log.description,
+          hours: log.hours,
+          amount: log.amount ? log.amount.toString() : '0',
+          timeLogId: log.timeLogId || log.id, // Support both formats
+          rate: log.rate ? log.rate.toString() : engagement.hourly_rate.toString(),
+          invoiceId
+        }));
 
-      // Insert invoice items
-      await pool.query(
-        'INSERT INTO invoice_items (description, hours, amount, time_log_id, rate, invoice_id) VALUES ' +
-        invoiceItems.map((_: any, i: number) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', '),
-        invoiceItems.flatMap((item: InvoiceItem) => [item.description, item.hours, item.amount, item.timeLogId, item.rate, item.invoiceId])
-      );
+        // Insert invoice items
+        await pool.query(
+          'INSERT INTO invoice_line_items (description, hours, amount, time_log_id, rate, invoice_id) VALUES ' +
+          invoiceItems.map((_: any, i: number) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', '),
+          invoiceItems.flatMap((item: InvoiceItem) => [item.description, item.hours, item.amount, item.timeLogId, item.rate, item.invoiceId])
+        );
+      }
 
       res.json({ id: invoiceId });
     } catch (error) {

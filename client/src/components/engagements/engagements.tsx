@@ -6,6 +6,7 @@ import EngagementFilters from './engagement-filters';
 import EngagementTable from './engagement-table';
 import EngagementModal from '@/components/modals/engagement-modal';
 import { DeleteConfirmationModal } from '@/components/modals/delete-confirmation-modal';
+import InvoiceHistoryModal from '@/components/modals/invoice-history-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -23,8 +24,10 @@ const Engagements = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isInvoiceHistoryModalOpen, setIsInvoiceHistoryModalOpen] = useState(false);
   const [currentEngagement, setCurrentEngagement] = useState<any>(null);
   const [engagementToDelete, setEngagementToDelete] = useState<number | null>(null);
+  const [selectedClient, setSelectedClient] = useState<string>('');
   const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
@@ -55,6 +58,15 @@ const Engagements = () => {
   // Fetch engagements with filters
   const { data: engagements = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/engagements', queryParams.toString()],
+    queryFn: async ({ queryKey }) => {
+      const url = `${queryKey[0]}?${queryKey[1]}`;
+      console.log('Fetching engagements with URL:', url);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch engagements');
+      }
+      return response.json();
+    },
   });
 
   const handleOpenCreateModal = () => {
@@ -116,6 +128,16 @@ const Engagements = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/engagements'] });
   };
 
+  const handleViewInvoiceHistory = (clientName: string) => {
+    setSelectedClient(clientName);
+    setIsInvoiceHistoryModalOpen(true);
+  };
+
+  const handleCloseInvoiceHistoryModal = () => {
+    setIsInvoiceHistoryModalOpen(false);
+    setSelectedClient('');
+  };
+
   // No need to filter engagements client-side since we're handling it on the server
   const filteredEngagements = engagements;
 
@@ -128,7 +150,9 @@ const Engagements = () => {
     <div>
       <header className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-semibold text-slate-900">Engagements</h1>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Engagements</h1>
+          </div>
           <Button 
             onClick={handleOpenCreateModal} 
             className="mt-3 sm:mt-0"
@@ -153,6 +177,7 @@ const Engagements = () => {
         isLoading={isLoading}
         onEdit={handleOpenEditModal}
         onDelete={handleDeleteEngagement}
+        onViewInvoiceHistory={handleViewInvoiceHistory}
       />
 
       {/* Create Modal */}
@@ -177,6 +202,13 @@ const Engagements = () => {
         onConfirm={handleConfirmDelete}
         title="Delete Engagement"
         description="Are you sure you want to delete this engagement? This action cannot be undone and will remove all associated time logs."
+      />
+
+      {/* Invoice History Modal */}
+      <InvoiceHistoryModal
+        isOpen={isInvoiceHistoryModalOpen}
+        onClose={handleCloseInvoiceHistoryModal}
+        clientName={selectedClient}
       />
     </div>
   );

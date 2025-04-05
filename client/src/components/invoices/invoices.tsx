@@ -7,6 +7,7 @@ import InvoiceSummary from './invoice-summary';
 import InvoiceTable from './invoice-table';
 import InvoiceModal from '@/components/modals/invoice-modal';
 import EmailInvoiceModal from '@/components/modals/email-invoice-modal';
+import { DeleteConfirmationModal } from '@/components/modals/delete-confirmation-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { downloadInvoice } from '@/lib/pdf-generator';
@@ -24,16 +25,26 @@ const Invoices = () => {
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
-    dateRange: 'current'
+    dateRange: 'all'
   });
 
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [allClients, setAllClients] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fetch all unique client names once on component mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchAllClients();
+  }, []);
+
+  // Fetch filtered invoices whenever filters change
   useEffect(() => {
     const fetchInvoices = async () => {
       setLoading(true);
@@ -51,7 +62,22 @@ const Invoices = () => {
         const response = await fetch(`/api/invoices?${queryParams.toString()}`);
         if (!response.ok) throw new Error('Failed to fetch invoices');
         const data = await response.json();
-        setInvoices(data);
+        
+        // Map snake_case properties to camelCase for consistency
+        const mappedData = data.map((invoice: any) => ({
+          id: invoice.id,
+          invoiceNumber: invoice.invoice_number,
+          clientName: invoice.client_name,
+          projectName: invoice.project_name,
+          issueDate: invoice.issue_date,
+          dueDate: invoice.due_date,
+          amount: invoice.amount,
+          status: invoice.status,
+          engagementId: invoice.engagement_id,
+          lineItems: invoice.line_items || []
+        }));
+        
+        setInvoices(mappedData);
       } catch (error) {
         console.error('Error fetching invoices:', error);
       } finally {
@@ -85,32 +111,42 @@ const Invoices = () => {
     setCurrentInvoice(null);
   };
 
-  const handleDeleteInvoice = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this invoice?')) {
-      try {
-        const response = await apiRequest('DELETE', `/api/invoices/${id}`);
-        
-        if (!response.ok) {
-          throw new Error('Failed to delete invoice');
-        }
+  const handleDeleteInvoice = (id: number) => {
+    setInvoiceToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
 
-        toast({
-          title: 'Invoice deleted',
-          description: 'The invoice has been deleted successfully.',
-        });
-
-        // Refresh data
-        queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      } catch (error) {
-        console.error('Error deleting invoice:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to delete invoice',
-          variant: 'destructive',
-        });
+  const handleConfirmDelete = async () => {
+    if (!invoiceToDelete) return;
+    
+    try {
+      const response = await apiRequest('DELETE', `/api/invoices/${invoiceToDelete}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete invoice');
       }
+
+      toast({
+        title: 'Invoice deleted',
+        description: 'The invoice has been deleted successfully.',
+      });
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete invoice',
+        variant: 'destructive',
+      });
     }
+  };
+  
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setInvoiceToDelete(null);
   };
 
   const handleUpdateInvoiceStatus = async (id: number, status: string) => {
@@ -142,12 +178,40 @@ const Invoices = () => {
   const handleSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
     queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    
+    // Refresh the client list in case a new client was added
+    fetchAllClients();
+  };
+  
+  // Function to fetch all clients
+  const fetchAllClients = async () => {
+    try {
+      // Request all invoices with no filters to get all client names
+      const response = await fetch(`/api/invoices?dateRange=all`);
+      if (!response.ok) throw new Error('Failed to fetch invoices');
+      const data = await response.json();
+      
+      // Extract unique client names
+      const clientNames: string[] = [];
+      
+      // Extract client names with proper type checking
+      data.forEach((invoice: any) => {
+        if (typeof invoice.client_name === 'string' && invoice.client_name) {
+          clientNames.push(invoice.client_name);
+        }
+      });
+      
+      // Remove duplicates
+      const uniqueClients = Array.from(new Set(clientNames));
+      
+      setAllClients(uniqueClients);
+    } catch (error) {
+      console.error('Error fetching client names:', error);
+    }
   };
 
-  // Extract unique client names for filter dropdown
-  const clientOptions: string[] = Array.from(
-    new Set(invoices.map((invoice: any) => invoice.clientName))
-  );
+  // Use the separately fetched client list for the dropdown
+  const clientOptions: string[] = allClients;
 
   // Calculate summary stats
   const totalInvoiced = invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.amount), 0);
@@ -212,6 +276,15 @@ const Invoices = () => {
         onClose={handleCloseEmailModal}
         invoice={currentInvoice}
         onSuccess={handleSuccess}
+      />
+      
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        title="Delete Invoice"
+        description="Are you sure you want to delete this invoice? This action cannot be undone and will permanently remove the invoice from your records."
       />
     </div>
   );

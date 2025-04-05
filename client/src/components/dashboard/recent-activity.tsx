@@ -18,12 +18,12 @@ interface Activity {
 const RecentActivity = () => {
   // Replace with actual API call when available
   // For now, construct activities from time logs and invoices
-  const { data: timeLogs = [], isLoading: isLoadingTimeLogs } = useQuery({
+  const { data: timeLogs = [], isLoading: isLoadingTimeLogs } = useQuery<any[], any[], any[]>({
     queryKey: ['/api/time-logs'],
     select: (data) => data.slice(0, 3), // Just get latest 3
   });
 
-  const { data: invoices = [], isLoading: isLoadingInvoices } = useQuery({
+  const { data: invoices = [], isLoading: isLoadingInvoices } = useQuery<any[], any[], any[]>({
     queryKey: ['/api/invoices'],
     select: (data) => data.slice(0, 2), // Just get latest 2
   });
@@ -56,7 +56,12 @@ const RecentActivity = () => {
   });
 
   // Sort by timestamp descending
-  activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  activities.sort((a, b) => {
+    // Ensure timestamps are valid before comparing
+    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return timeB - timeA;
+  });
 
   // Limit to 3 most recent
   const recentActivities = activities.slice(0, 3);
@@ -120,17 +125,19 @@ const RecentActivity = () => {
               <div>
                 <p className="text-sm text-slate-900 font-medium">{activity.title}</p>
                 <p className="text-xs text-slate-500 mt-1">{activity.description}</p>
-                <p className="text-xs text-slate-400 mt-1">{formatRelativeTime(activity.timestamp)}</p>
+                <p className="text-xs text-slate-400 mt-1">{activity.timestamp ? formatRelativeTime(activity.timestamp) : 'Recently'}</p>
               </div>
             </div>
           </div>
         ))
       )}
-      <Link href={activities[0]?.type === 'time_log' ? '/time-logs' : '/invoices'}>
-        <Button variant="link" className="p-0 h-auto text-sm text-blue-600 hover:text-blue-700 font-medium">
-          View all activity
-        </Button>
-      </Link>
+      {activities.length > 0 && (
+        <Link href={activities[0]?.type === 'time_log' ? '/time-logs' : '/invoices'}>
+          <Button variant="link" className="p-0 h-auto text-sm text-blue-600 hover:text-blue-700 font-medium">
+            View all activity
+          </Button>
+        </Link>
+      )}
     </div>
   );
 };

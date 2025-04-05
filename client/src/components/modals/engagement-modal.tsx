@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { insertEngagementSchema } from '@shared/schema';
+import { insertEngagementSchema, calculateEngagementStatus } from '@shared/schema';
 import { getISODate } from '@/lib/date-utils';
 
 // Extend the engagement schema with additional validation
@@ -21,8 +21,20 @@ const formSchema = insertEngagementSchema
       message: 'Hourly rate must be a positive number',
     }),
   })
-  .refine(data => new Date(data.startDate) <= new Date(data.endDate), {
-    message: 'End date must be after start date',
+  .refine(data => {
+    // Parse dates for comparison
+    const startDate = new Date(data.startDate);
+    const endDate = new Date(data.endDate);
+    
+    // Validate that both dates are valid before comparing
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return false;
+    }
+    
+    // Return true if start date is before or equal to end date
+    return startDate <= endDate;
+  }, {
+    message: 'End date must be on or after start date',
     path: ['endDate'],
   });
 
@@ -43,6 +55,9 @@ const EngagementModal = ({
 }: EngagementModalProps) => {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Debug log to see what data is being passed to the modal
+  console.log('EngagementModal received engagement data:', engagement);
 
   const isEditMode = !!engagement;
 
@@ -68,10 +83,30 @@ const EngagementModal = ({
           endDate: '',
           hourlyRate: '',
           description: '',
-          status: 'active',
         },
   });
+  
+  // Debug - Log the form's defaultValues
+  console.log('Form defaultValues:', engagement ? {
+    ...engagement,
+    startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
+    endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
+    hourlyRate: String(engagement.hourlyRate),
+  } : 'using empty defaults');
 
+  // Effect to update form when engagement data changes
+  useEffect(() => {
+    if (engagement && isOpen) {
+      console.log('Resetting form with engagement data', engagement);
+      reset({
+        ...engagement,
+        startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
+        endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
+        hourlyRate: String(engagement.hourlyRate),
+      });
+    }
+  }, [engagement, reset, isOpen]);
+  
   // Handle modal close and reset form
   const handleClose = () => {
     reset();
@@ -84,11 +119,18 @@ const EngagementModal = ({
       setIsSubmitting(true);
 
       // Convert values to appropriate types
+      const startDate = new Date(data.startDate);
+      const endDate = new Date(data.endDate);
+      
+      // Automatically calculate status based on dates
+      const status = calculateEngagementStatus(startDate, endDate);
+      
       const formattedData = {
         ...data,
         hourlyRate: Number(data.hourlyRate),
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
+        startDate,
+        endDate,
+        status, // Add the calculated status
       };
 
       // Create or update engagement
@@ -212,6 +254,8 @@ const EngagementModal = ({
                 <span className="text-xs text-red-500">{errors.hourlyRate.message}</span>
               )}
             </div>
+            
+            {/* Status field removed - now automatically calculated based on dates */}
             
             <div className="grid grid-cols-1 gap-2">
               <Label htmlFor="description" className="text-sm font-medium text-slate-700">
