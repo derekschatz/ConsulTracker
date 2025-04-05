@@ -1,7 +1,8 @@
 import { Card } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
-import { Receipt, Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2 } from 'lucide-react';
+import ReceiptIcon from '@/components/icons/receipt-icon';
 import { formatDate } from '@/lib/date-utils';
 import { formatCurrency } from '@/lib/format-utils';
 import { getStatusClasses } from '@/lib/format-utils';
@@ -70,7 +71,7 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
             className="h-8 w-8 text-slate-600 hover:text-blue-600"
             title="View Invoice History"
           >
-            <Receipt className="h-4 w-4" />
+            <ReceiptIcon size={16} className="text-current" />
           </Button>
           <Button 
             variant="ghost" 
