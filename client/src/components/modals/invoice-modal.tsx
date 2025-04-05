@@ -69,9 +69,9 @@ const InvoiceModal = ({
     return clients;
   }, []).sort();
   
-  // Filter engagements by selected client
+  // Filter active engagements by selected client
   const filteredEngagements = allEngagements.filter((engagement: any) => 
-    engagement.clientName === selectedClientName
+    engagement.clientName === selectedClientName && engagement.status === 'active'
   );
 
   // Get the next invoice number (in a real app this would come from the server)
@@ -313,7 +313,7 @@ const InvoiceModal = ({
                       onValueChange={field.onChange}
                     >
                       <SelectTrigger className={errors.engagementId ? 'border-red-500' : ''}>
-                        <SelectValue placeholder="Select an engagement" />
+                        <SelectValue placeholder="Select an active engagement" />
                       </SelectTrigger>
                       <SelectContent>
                         {filteredEngagements.map((engagement: any) => (
@@ -329,7 +329,7 @@ const InvoiceModal = ({
                   <span className="text-xs text-red-500">{errors.engagementId.message}</span>
                 )}
                 {selectedClientName && filteredEngagements.length === 0 && (
-                  <span className="text-xs text-amber-500">No active engagements found for this client</span>
+                  <span className="text-xs text-amber-500">No active engagements found for {selectedClientName}</span>
                 )}
               </div>
             </div>
