@@ -30,9 +30,17 @@ function getDateRange(range: string, referenceDate: Date = new Date()): { startD
       };
 
     case 'week':
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1)); // Monday
+      weekStart.setHours(0, 0, 0, 0);
+      
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+      weekEnd.setHours(23, 59, 59, 999);
+      
       return {
-        startDate: startOfWeek(today, { weekStartsOn: 1 }),
-        endDate: endOfWeek(today, { weekStartsOn: 1 })
+        startDate: weekStart,
+        endDate: weekEnd
       };
     
     case 'month':
@@ -428,8 +436,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Apply date range filter
       if (dateRange === 'custom' && startDate && endDate) {
+        // Format the custom date range with time to include the full end date
+        const formattedStartDate = `${startDate as string} 00:00:00`;
+        const formattedEndDate = `${endDate as string} 23:59:59`;
+        
         query += ` AND i.issue_date >= $${params.length + 1} AND i.issue_date <= $${params.length + 2}`;
-        params.push(startDate as string, endDate as string);
+        params.push(formattedStartDate, formattedEndDate);
       } else if (dateRange && dateRange !== 'all') {
         const { startDate: rangeStart, endDate: rangeEnd } = getDateRange(dateRange as string);
         query += ` AND i.issue_date >= $${params.length + 1} AND i.issue_date <= $${params.length + 2}`;
