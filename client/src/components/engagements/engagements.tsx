@@ -57,7 +57,16 @@ const Engagements = () => {
 
   // Fetch engagements with filters
   const { data: engagements = [], isLoading } = useQuery<any[]>({
-    queryKey: ['/api/engagements', queryParams.toString()],
+    queryKey: ['/api/engagements', filters],
+    queryFn: async () => {
+      const response = await fetch(`/api/engagements?${queryParams.toString()}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch engagements');
+      }
+      return response.json();
+    }
   });
 
   const handleOpenCreateModal = () => {
