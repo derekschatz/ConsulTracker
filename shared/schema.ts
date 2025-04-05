@@ -132,7 +132,7 @@ export const insertInvoiceSchema = createInsertSchema(invoices).pick({
 export const invoiceLineItems = pgTable("invoice_line_items", {
   id: serial("id").primaryKey(),
   invoiceId: integer("invoice_id").notNull(),
-  timeLogId: integer("time_log_id").notNull(),
+  timeLogId: integer("time_log_id"), // Making this optional to support manual line items
   description: text("description").notNull(),
   hours: doublePrecision("hours").notNull(),
   rate: numeric("rate").notNull(),

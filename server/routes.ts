@@ -463,12 +463,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/invoices', async (req: Request, res: Response) => {
     try {
-      const { engagementId, timeLogs } = req.body;
+      const { engagementId, timeLogs = [] } = req.body;
+
+      // Validate required fields
+      if (!engagementId) {
+        return res.status(400).json({ error: 'Engagement ID is required' });
+      }
 
       // Create invoice
       const today = new Date();
       const dueDate = new Date();
       dueDate.setDate(today.getDate() + 30); // Due date 30 days from now
+      
+      // Get engagement details
+      const engagementResult = await pool.query(
+        'SELECT client_name, project_name, hourly_rate FROM engagements WHERE id = $1',
+        [engagementId]
+      );
+      
+      if (engagementResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Engagement not found' });
+      }
+      
+      const engagement = engagementResult.rows[0];
+      const clientName = engagement.client_name;
+      
+      // Calculate total invoice amount
+      const totalAmount = timeLogs.reduce((sum: number, log: any) => 
+        sum + (parseFloat(log.amount) || 0), 0);
       
       const invoiceResult = await pool.query(
         'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
@@ -478,30 +500,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           today, 
           dueDate, 
           `INV-${Date.now().toString().slice(-6)}`, // Generate simple invoice number
-          'Client', // This will be updated after we get engagement details
-          0, // Initial amount, will be calculated from line items
-          today, // Using today as period start
-          today  // Using today as period end (will be updated)
+          clientName,
+          totalAmount,
+          req.body.periodStart || today, 
+          req.body.periodEnd || today
         ]
       );
+      
       const invoiceId = invoiceResult.rows[0].id;
 
-      // Create invoice items from time logs
-      const invoiceItems = timeLogs.map((log: any) => ({
-        description: log.description,
-        hours: log.hours,
-        amount: log.amount.toString(),
-        timeLogId: log.timeLogId,
-        rate: log.rate.toString(),
-        invoiceId
-      }));
+      // Only create invoice items if there are time logs
+      if (timeLogs.length > 0) {
+        // Create invoice items from time logs
+        const invoiceItems = timeLogs.map((log: any) => ({
+          description: log.description,
+          hours: log.hours,
+          amount: log.amount ? log.amount.toString() : '0',
+          timeLogId: log.timeLogId || log.id, // Support both formats
+          rate: log.rate ? log.rate.toString() : engagement.hourly_rate.toString(),
+          invoiceId
+        }));
 
-      // Insert invoice items
-      await pool.query(
-        'INSERT INTO invoice_items (description, hours, amount, time_log_id, rate, invoice_id) VALUES ' +
-        invoiceItems.map((_: any, i: number) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', '),
-        invoiceItems.flatMap((item: InvoiceItem) => [item.description, item.hours, item.amount, item.timeLogId, item.rate, item.invoiceId])
-      );
+        // Insert invoice items
+        await pool.query(
+          'INSERT INTO invoice_items (description, hours, amount, time_log_id, rate, invoice_id) VALUES ' +
+          invoiceItems.map((_: any, i: number) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', '),
+          invoiceItems.flatMap((item: InvoiceItem) => [item.description, item.hours, item.amount, item.timeLogId, item.rate, item.invoiceId])
+        );
+      }
 
       res.json({ id: invoiceId });
     } catch (error) {
