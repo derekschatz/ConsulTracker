@@ -105,6 +105,7 @@ export const invoices = pgTable("invoices", {
   notes: text("notes"),
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
+  projectName: text("project_name"),
 });
 
 export const invoicesRelations = relations(invoices, ({ one, many }) => ({
@@ -126,6 +127,7 @@ export const insertInvoiceSchema = createInsertSchema(invoices).pick({
   notes: true,
   periodStart: true,
   periodEnd: true,
+  projectName: true,
 });
 
 // Invoice line items table

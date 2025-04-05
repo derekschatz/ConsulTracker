@@ -407,7 +407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { status, client, dateRange, startDate, endDate } = req.query;
       let query = `
-        SELECT i.*, e.client_name, e.project_name
+        SELECT i.*
         FROM invoices i
         JOIN engagements e ON i.engagement_id = e.id
         WHERE 1=1
@@ -422,7 +422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Apply client filter
       if (client && client !== 'all') {
-        query += ` AND e.client_name = $${params.length + 1}`;
+        query += ` AND i.client_name = $${params.length + 1}`;
         params.push(client);
       }
 
@@ -487,13 +487,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const engagement = engagementResult.rows[0];
       const clientName = engagement.client_name;
+      const projectName = engagement.project_name;
       
       // Calculate total invoice amount
       const totalAmount = timeLogs.reduce((sum: number, log: any) => 
         sum + (parseFloat(log.amount) || 0), 0);
       
       const invoiceResult = await pool.query(
-        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end, project_name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id',
         [
           engagementId, 
           'submitted', 
@@ -503,7 +504,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clientName,
           totalAmount,
           req.body.periodStart || today, 
-          req.body.periodEnd || today
+          req.body.periodEnd || today,
+          projectName
         ]
       );
       
@@ -523,7 +525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Insert invoice items
         await pool.query(
-          'INSERT INTO invoice_items (description, hours, amount, time_log_id, rate, invoice_id) VALUES ' +
+          'INSERT INTO invoice_line_items (description, hours, amount, time_log_id, rate, invoice_id) VALUES ' +
           invoiceItems.map((_: any, i: number) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', '),
           invoiceItems.flatMap((item: InvoiceItem) => [item.description, item.hours, item.amount, item.timeLogId, item.rate, item.invoiceId])
         );
