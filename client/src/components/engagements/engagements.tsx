@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, Info } from 'lucide-react';
 import EngagementFilters from './engagement-filters';
 import EngagementTable from './engagement-table';
 import EngagementModal from '@/components/modals/engagement-modal';
@@ -141,7 +141,13 @@ const Engagements = () => {
     <div>
       <header className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-semibold text-slate-900">Engagements</h1>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Engagements</h1>
+            <p className="text-sm text-slate-500 mt-1 flex items-center">
+              <Info className="h-4 w-4 mr-1" />
+              Status is automatically calculated based on start and end dates
+            </p>
+          </div>
           <Button 
             onClick={handleOpenCreateModal} 
             className="mt-3 sm:mt-0"

@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { 
   insertEngagementSchema, 
   insertTimeLogSchema, 
-  insertInvoiceSchema 
+  insertInvoiceSchema,
+  calculateEngagementStatus
 } from "@shared/schema";
 import { z } from "zod";
 import nodemailer from "nodemailer";
@@ -187,8 +188,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
       }
+      
+      // Calculate the status based on start and end dates
+      const status = calculateEngagementStatus(
+        new Date(validationResult.data.startDate),
+        new Date(validationResult.data.endDate)
+      );
+      
+      // Override any status provided with the calculated one
+      const data = {
+        ...validationResult.data,
+        status
+      };
 
-      const engagement = await storage.createEngagement(validationResult.data);
+      const engagement = await storage.createEngagement(data);
       res.status(201).json(engagement);
     } catch (error) {
       res.status(500).json({ message: "Failed to create engagement" });
@@ -202,8 +215,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
       }
+      
+      // Get the input data
+      const inputData = validationResult.data;
+      
+      // Only calculate status if both dates are provided in this update
+      if (inputData.startDate !== undefined && inputData.endDate !== undefined) {
+        // Calculate the status based on start and end dates
+        const status = calculateEngagementStatus(
+          new Date(inputData.startDate), 
+          new Date(inputData.endDate)
+        );
+        
+        // Override the status in the input data
+        inputData.status = status;
+      } 
+      // If only one date is provided, we need to get the other one from the database
+      else if (inputData.startDate !== undefined || inputData.endDate !== undefined) {
+        // Get the current engagement
+        const currentEngagement = await storage.getEngagement(id);
+        if (!currentEngagement) {
+          return res.status(404).json({ message: "Engagement not found" });
+        }
+        
+        // Get the dates (use the new one if provided, otherwise use the existing one)
+        const startDate = inputData.startDate ? new Date(inputData.startDate) : new Date(currentEngagement.startDate);
+        const endDate = inputData.endDate ? new Date(inputData.endDate) : new Date(currentEngagement.endDate);
+        
+        // Calculate the status based on the combined dates
+        const status = calculateEngagementStatus(startDate, endDate);
+        
+        // Override the status in the input data
+        inputData.status = status;
+      }
 
-      const updatedEngagement = await storage.updateEngagement(id, validationResult.data);
+      const updatedEngagement = await storage.updateEngagement(id, inputData);
       if (!updatedEngagement) {
         return res.status(404).json({ message: "Engagement not found" });
       }

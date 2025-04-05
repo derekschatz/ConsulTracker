@@ -72,7 +72,6 @@ const EngagementModal = ({
           endDate: '',
           hourlyRate: '',
           description: '',
-          status: 'active',
         },
   });
   
@@ -238,33 +237,7 @@ const EngagementModal = ({
               )}
             </div>
             
-            <div className="grid grid-cols-1 gap-2">
-              <Label htmlFor="status" className="text-sm font-medium text-slate-700">
-                Status
-              </Label>
-              <Select
-                defaultValue={engagement?.status || 'active'}
-                onValueChange={(value) => {
-                  reset({
-                    ...engagement,
-                    status: value,
-                  }, { keepDefaultValues: true });
-                }}
-              >
-                <SelectTrigger className={errors.status ? 'border-red-500' : ''}>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="upcoming">Upcoming</SelectItem>
-                </SelectContent>
-              </Select>
-              <input type="hidden" {...register('status')} />
-              {errors.status && (
-                <span className="text-xs text-red-500">{errors.status.message}</span>
-              )}
-            </div>
+            {/* Status field removed - now automatically calculated based on dates */}
             
             <div className="grid grid-cols-1 gap-2">
               <Label htmlFor="description" className="text-sm font-medium text-slate-700">
