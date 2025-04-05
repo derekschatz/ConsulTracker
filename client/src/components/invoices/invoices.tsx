@@ -32,8 +32,16 @@ const Invoices = () => {
   });
 
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [allClients, setAllClients] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fetch all unique client names once on component mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchAllClients();
+  }, []);
+
+  // Fetch filtered invoices whenever filters change
   useEffect(() => {
     const fetchInvoices = async () => {
       setLoading(true);
@@ -157,12 +165,40 @@ const Invoices = () => {
   const handleSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
     queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    
+    // Refresh the client list in case a new client was added
+    fetchAllClients();
+  };
+  
+  // Function to fetch all clients
+  const fetchAllClients = async () => {
+    try {
+      // Request all invoices with no filters to get all client names
+      const response = await fetch(`/api/invoices?dateRange=all`);
+      if (!response.ok) throw new Error('Failed to fetch invoices');
+      const data = await response.json();
+      
+      // Extract unique client names
+      const clientNames: string[] = [];
+      
+      // Extract client names with proper type checking
+      data.forEach((invoice: any) => {
+        if (typeof invoice.client_name === 'string' && invoice.client_name) {
+          clientNames.push(invoice.client_name);
+        }
+      });
+      
+      // Remove duplicates
+      const uniqueClients = Array.from(new Set(clientNames));
+      
+      setAllClients(uniqueClients);
+    } catch (error) {
+      console.error('Error fetching client names:', error);
+    }
   };
 
-  // Extract unique client names for filter dropdown
-  const clientOptions: string[] = Array.from(
-    new Set(invoices.map((invoice: any) => invoice.clientName))
-  );
+  // Use the separately fetched client list for the dropdown
+  const clientOptions: string[] = allClients;
 
   // Calculate summary stats
   const totalInvoiced = invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.amount), 0);
