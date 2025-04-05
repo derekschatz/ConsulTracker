@@ -99,7 +99,9 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
                 <SelectValue placeholder="Select Range" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Engagements</SelectItem>
                 <SelectItem value="current">Current Year</SelectItem>
+                <SelectItem value="last">Last Year</SelectItem>
                 <SelectItem value="custom">Custom Range</SelectItem>
               </SelectContent>
             </Select>
