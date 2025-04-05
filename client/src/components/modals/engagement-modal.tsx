@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,8 +21,20 @@ const formSchema = insertEngagementSchema
       message: 'Hourly rate must be a positive number',
     }),
   })
-  .refine(data => new Date(data.startDate) <= new Date(data.endDate), {
-    message: 'End date must be after start date',
+  .refine(data => {
+    // Parse dates for comparison
+    const startDate = new Date(data.startDate);
+    const endDate = new Date(data.endDate);
+    
+    // Validate that both dates are valid before comparing
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return false;
+    }
+    
+    // Return true if start date is before or equal to end date
+    return startDate <= endDate;
+  }, {
+    message: 'End date must be on or after start date',
     path: ['endDate'],
   });
 
