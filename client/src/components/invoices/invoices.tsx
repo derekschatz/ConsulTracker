@@ -51,7 +51,22 @@ const Invoices = () => {
         const response = await fetch(`/api/invoices?${queryParams.toString()}`);
         if (!response.ok) throw new Error('Failed to fetch invoices');
         const data = await response.json();
-        setInvoices(data);
+        
+        // Map snake_case properties to camelCase for consistency
+        const mappedData = data.map((invoice: any) => ({
+          id: invoice.id,
+          invoiceNumber: invoice.invoice_number,
+          clientName: invoice.client_name,
+          projectName: invoice.project_name,
+          issueDate: invoice.issue_date,
+          dueDate: invoice.due_date,
+          amount: invoice.amount,
+          status: invoice.status,
+          engagementId: invoice.engagement_id,
+          lineItems: invoice.line_items || []
+        }));
+        
+        setInvoices(mappedData);
       } catch (error) {
         console.error('Error fetching invoices:', error);
       } finally {
