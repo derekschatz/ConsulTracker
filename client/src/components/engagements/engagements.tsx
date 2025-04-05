@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import EngagementFilters from './engagement-filters';
 import EngagementTable from './engagement-table';
 import EngagementModal from '@/components/modals/engagement-modal';
+import { DeleteConfirmationModal } from '@/components/modals/delete-confirmation-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -21,7 +22,9 @@ const Engagements = () => {
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [currentEngagement, setCurrentEngagement] = useState<any>(null);
+  const [engagementToDelete, setEngagementToDelete] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
@@ -72,31 +75,41 @@ const Engagements = () => {
     setCurrentEngagement(null);
   };
 
-  const handleDeleteEngagement = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this engagement?')) {
-      try {
-        const response = await apiRequest('DELETE', `/api/engagements/${id}`);
-        
-        if (!response.ok) {
-          throw new Error('Failed to delete engagement');
-        }
+  const handleDeleteEngagement = (id: number) => {
+    setEngagementToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
 
-        toast({
-          title: 'Engagement deleted',
-          description: 'The engagement has been deleted successfully.',
-        });
-
-        // Refresh data
-        queryClient.invalidateQueries({ queryKey: ['/api/engagements'] });
-      } catch (error) {
-        console.error('Error deleting engagement:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to delete engagement',
-          variant: 'destructive',
-        });
+  const handleConfirmDelete = async () => {
+    if (!engagementToDelete) return;
+    
+    try {
+      const response = await apiRequest('DELETE', `/api/engagements/${engagementToDelete}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete engagement');
       }
+
+      toast({
+        title: 'Engagement deleted',
+        description: 'The engagement has been deleted successfully.',
+      });
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/engagements'] });
+    } catch (error) {
+      console.error('Error deleting engagement:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete engagement',
+        variant: 'destructive',
+      });
     }
+  };
+
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setEngagementToDelete(null);
   };
 
   const handleSuccess = () => {
@@ -155,6 +168,15 @@ const Engagements = () => {
         onClose={handleCloseEditModal}
         engagement={currentEngagement}
         onSuccess={handleSuccess}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        title="Delete Engagement"
+        description="Are you sure you want to delete this engagement? This action cannot be undone and will remove all associated time logs."
       />
     </div>
   );

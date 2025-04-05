@@ -8,22 +8,22 @@ import { getISODate } from '@/lib/date-utils';
 interface TimeLogFiltersProps {
   filters: {
     dateRange: string;
-    engagementId: string;
+    client: string;
     search: string;
     startDate: string;
     endDate: string;
   };
   setFilters: React.Dispatch<React.SetStateAction<{
     dateRange: string;
-    engagementId: string;
+    client: string;
     search: string;
     startDate: string;
     endDate: string;
   }>>;
-  engagements: any[];
+  clientOptions: string[];
 }
 
-const TimeLogFilters = ({ filters, setFilters, engagements }: TimeLogFiltersProps) => {
+const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersProps) => {
   const [showCustomRange, setShowCustomRange] = useState(filters.dateRange === 'custom');
 
   useEffect(() => {
@@ -34,8 +34,8 @@ const TimeLogFilters = ({ filters, setFilters, engagements }: TimeLogFiltersProp
     setFilters(prev => ({ ...prev, dateRange: value }));
   };
 
-  const handleEngagementChange = (value: string) => {
-    setFilters(prev => ({ ...prev, engagementId: value }));
+  const handleClientChange = (value: string) => {
+    setFilters(prev => ({ ...prev, client: value }));
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,16 +70,16 @@ const TimeLogFilters = ({ filters, setFilters, engagements }: TimeLogFiltersProp
             </Select>
           </div>
           <div>
-            <Label htmlFor="engagementLogFilter" className="block text-sm font-medium text-slate-700 mb-1">Engagement</Label>
-            <Select value={filters.engagementId} onValueChange={handleEngagementChange}>
-              <SelectTrigger id="engagementLogFilter">
-                <SelectValue placeholder="All Engagements" />
+            <Label htmlFor="clientLogFilter" className="block text-sm font-medium text-slate-700 mb-1">Client</Label>
+            <Select value={filters.client} onValueChange={handleClientChange}>
+              <SelectTrigger id="clientLogFilter">
+                <SelectValue placeholder="All Clients" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Engagements</SelectItem>
-                {engagements.map((engagement: any) => (
-                  <SelectItem key={engagement.id} value={engagement.id.toString()}>
-                    {engagement.clientName} - {engagement.projectName}
+                <SelectItem value="all">All Clients</SelectItem>
+                {clientOptions.map((clientName: string) => (
+                  <SelectItem key={clientName} value={clientName}>
+                    {clientName}
                   </SelectItem>
                 ))}
               </SelectContent>

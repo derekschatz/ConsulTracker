@@ -230,17 +230,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/time-logs", async (req, res) => {
     try {
       const engagementId = req.query.engagementId ? Number(req.query.engagementId) : undefined;
+      const clientName = req.query.client as string | undefined;
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
       const search = req.query.search as string | undefined;
 
       let timeLogs;
       if (engagementId) {
+        // Filter by specific engagement ID
         timeLogs = await storage.getTimeLogsByEngagement(engagementId);
       } else if (startDate && endDate) {
+        // Filter by date range
         timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate);
       } else {
+        // Get all time logs
         timeLogs = await storage.getTimeLogs();
+      }
+      
+      // If client filter is applied, filter the results by client name
+      if (clientName && clientName !== 'all') {
+        timeLogs = timeLogs.filter(log => log.engagement.clientName === clientName);
       }
 
       // Apply search filter if present
