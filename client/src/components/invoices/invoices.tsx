@@ -96,9 +96,66 @@ const Invoices = () => {
     setIsCreateModalOpen(false);
   };
 
-  const handleViewInvoice = (invoice: any) => {
-    // Download the invoice as PDF
-    downloadInvoice(invoice);
+  const handleViewInvoice = async (invoice: any) => {
+    try {
+      setLoading(true);
+      console.log(`Attempting to download invoice ID ${invoice.id} (${invoice.invoiceNumber})`);
+      
+      // Fetch the complete invoice data with line items
+      const response = await fetch(`/api/invoices/${invoice.id}`);
+      if (!response.ok) {
+        console.error(`API error: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to fetch invoice details: ${response.status} ${response.statusText}`);
+      }
+      
+      const completeInvoice = await response.json();
+      console.log('Received invoice data:', completeInvoice);
+      
+      if (!completeInvoice || !completeInvoice.id) {
+        console.error('Invalid invoice data received:', completeInvoice);
+        throw new Error('Invalid invoice data received from server');
+      }
+      
+      // Check if line items exist
+      if (!completeInvoice.lineItems && !completeInvoice.line_items) {
+        console.error('Invoice has no line items:', completeInvoice);
+        throw new Error('This invoice has no line items and cannot be downloaded');
+      }
+      
+      // Map snake_case properties to camelCase for consistency
+      const formattedInvoice = {
+        id: completeInvoice.id,
+        invoiceNumber: completeInvoice.invoice_number || completeInvoice.invoiceNumber,
+        clientName: completeInvoice.client_name || completeInvoice.clientName,
+        projectName: completeInvoice.project_name || completeInvoice.projectName,
+        issueDate: completeInvoice.issue_date || completeInvoice.issueDate,
+        dueDate: completeInvoice.due_date || completeInvoice.dueDate,
+        amount: completeInvoice.amount,
+        status: completeInvoice.status,
+        notes: completeInvoice.notes,
+        periodStart: completeInvoice.period_start || completeInvoice.periodStart,
+        periodEnd: completeInvoice.period_end || completeInvoice.periodEnd,
+        engagementId: completeInvoice.engagement_id || completeInvoice.engagementId,
+        lineItems: completeInvoice.lineItems || completeInvoice.line_items || [],
+        totalHours: completeInvoice.totalHours || completeInvoice.total_hours || 
+          (completeInvoice.lineItems || completeInvoice.line_items || [])
+            .reduce((total: number, item: any) => total + Number(item.hours), 0)
+      };
+      
+      console.log('Formatted invoice data for PDF:', formattedInvoice);
+      
+      // Download the invoice as PDF
+      downloadInvoice(formattedInvoice);
+    } catch (error: any) {
+      console.error('Error downloading invoice:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to download invoice. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEmailInvoice = (invoice: any) => {

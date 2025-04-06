@@ -547,13 +547,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices/:id", async (req, res) => {
     try {
-      const invoice = await storage.getInvoice(Number(req.params.id));
+      const invoiceId = Number(req.params.id);
+      
+      if (isNaN(invoiceId) || invoiceId <= 0) {
+        console.error(`Invalid invoice ID requested: ${req.params.id}`);
+        return res.status(400).json({ message: "Invalid invoice ID format" });
+      }
+      
+      console.log(`Fetching invoice details for ID: ${invoiceId}`);
+      const invoice = await storage.getInvoice(invoiceId);
+      
       if (!invoice) {
+        console.error(`Invoice not found with ID: ${invoiceId}`);
         return res.status(404).json({ message: "Invoice not found" });
       }
+      
+      // Verify invoice has required fields
+      if (!invoice.invoiceNumber || !invoice.clientName) {
+        console.error(`Invoice ${invoiceId} has missing required fields:`, invoice);
+        return res.status(500).json({ message: "Invoice data is incomplete" });
+      }
+      
+      // Verify line items
+      if (!Array.isArray(invoice.lineItems) || invoice.lineItems.length === 0) {
+        console.warn(`Invoice ${invoiceId} (${invoice.invoiceNumber}) has no line items`);
+        // Continue anyway, client will handle this case
+      }
+      
+      console.log(`Successfully retrieved invoice ${invoiceId} (${invoice.invoiceNumber}) with ${invoice.lineItems.length} line items`);
       res.json(invoice);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch invoice" });
+      console.error(`Error fetching invoice ${req.params.id}:`, error);
+      res.status(500).json({ 
+        message: "Failed to fetch invoice", 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
     }
   });
 
@@ -738,71 +766,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Invoice not found" });
       }
 
-      const emailSchema = z.object({
-        to: z.string().email(),
-        subject: z.string().optional(),
-        message: z.string().optional()
+      // Generate PDF for attachment
+      console.log("Generating PDF attachment...");
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF();
+      
+      // Add invoice details to PDF
+      pdf.setFontSize(16);
+      pdf.text(`INVOICE #${invoice.invoiceNumber}`, 105, 20, { align: 'center' });
+      
+      pdf.setFontSize(12);
+      pdf.text(`Client: ${invoice.clientName}`, 20, 40);
+      pdf.text(`Amount: $${invoice.amount}`, 20, 50);
+      pdf.text(`Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}`, 20, 60);
+      pdf.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`, 20, 70);
+      
+      // Line items table
+      pdf.setFontSize(12);
+      pdf.text("Service Items:", 20, 90);
+      
+      let yPos = 100;
+      pdf.setFontSize(10);
+      
+      // Table header
+      pdf.text("Description", 20, yPos);
+      pdf.text("Hours", 120, yPos);
+      pdf.text("Rate", 140, yPos);
+      pdf.text("Amount", 170, yPos);
+      
+      yPos += 10;
+      
+      // Table data
+      invoice.lineItems.forEach(item => {
+        pdf.text(item.description.substring(0, 50), 20, yPos);
+        pdf.text(item.hours.toString(), 120, yPos);
+        pdf.text(`$${item.rate}`, 140, yPos);
+        pdf.text(`$${item.amount}`, 170, yPos);
+        yPos += 10;
       });
-
-      const validationResult = emailSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid email data", errors: validationResult.error.errors });
-      }
-
-      const { to, subject, message } = validationResult.data;
       
-      // Get email configuration from environment variables
-      const emailUser = process.env.EMAIL_USER || "";
-      const emailPass = process.env.EMAIL_PASS || "";
-      const emailHost = process.env.EMAIL_HOST || "smtp.example.com";
+      // Total
+      yPos += 10;
+      pdf.text(`Total Amount: $${invoice.amount}`, 120, yPos);
       
-      // Setup nodemailer if credentials are provided
-      if (emailUser && emailPass) {
-        const transporter = nodemailer.createTransport({
-          host: emailHost,
-          port: 587,
-          secure: false,
-          auth: {
-            user: emailUser,
-            pass: emailPass
-          }
-        });
-
-        // Email content with invoice details
-        const emailSubject = subject || `Invoice #${invoice.invoiceNumber} from Your Consulting Service`;
-        const emailText = message || `Please find attached invoice #${invoice.invoiceNumber} for ${invoice.clientName} in the amount of $${invoice.amount}.`;
-
-        // In a real app, we would generate a PDF and attach it
-        // For now, just send email text
-        await transporter.sendMail({
-          from: emailUser,
-          to,
-          subject: emailSubject,
-          text: emailText,
-          html: `<p>${emailText}</p><p>Invoice Details:</p>
-                <ul>
-                  <li>Invoice Number: ${invoice.invoiceNumber}</li>
-                  <li>Client: ${invoice.clientName}</li>
-                  <li>Amount: $${invoice.amount}</li>
-                  <li>Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}</li>
-                  <li>Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}</li>
-                </ul>`
-        });
-
-        res.json({ message: "Email sent successfully" });
-      } else {
-        // If email credentials aren't provided, return a simulation success
-        res.json({ 
-          message: "Email would be sent (email credentials not configured)",
-          details: {
-            to,
-            subject: subject || `Invoice #${invoice.invoiceNumber} from Your Consulting Service`,
-            invoiceNumber: invoice.invoiceNumber
-          }
-        });
-      }
+      // Convert PDF to base64
+      const pdfBase64 = pdf.output('datauristring');
+      
+      // Return the PDF data and email details
+      const emailSubject = `Invoice #${invoice.invoiceNumber} from Your Consulting Service`;
+      const emailBody = `Please find attached invoice #${invoice.invoiceNumber} for ${invoice.clientName} in the amount of $${invoice.amount}.
+      
+Invoice Details:
+- Invoice Number: ${invoice.invoiceNumber}
+- Client: ${invoice.clientName}
+- Amount: $${invoice.amount}
+- Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}
+- Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`;
+      
+      res.json({ 
+        message: "PDF generated successfully",
+        pdfData: pdfBase64,
+        emailSubject,
+        emailBody,
+        filename: `Invoice-${invoice.invoiceNumber}.pdf`
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to send invoice email" });
+      console.error("General error:", error);
+      res.status(500).json({ 
+        message: "Failed to generate invoice PDF",
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
     }
   });
 

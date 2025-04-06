@@ -1,6 +1,27 @@
 // Format a number as currency
-export function formatCurrency(amount: number | string, options = {}): string {
+export function formatCurrency(amount: number | string | null | undefined, options = {}): string {
+  if (amount === null || amount === undefined) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      ...options
+    }).format(0);
+  }
+  
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  
+  // Handle NaN
+  if (isNaN(numAmount)) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      ...options
+    }).format(0);
+  }
   
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -12,8 +33,23 @@ export function formatCurrency(amount: number | string, options = {}): string {
 }
 
 // Format a number with specified decimal places
-export function formatNumber(value: number | string, decimals = 2): string {
+export function formatNumber(value: number | string | null | undefined, decimals = 2): string {
+  if (value === null || value === undefined) {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    }).format(0);
+  }
+  
   const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  // Handle NaN
+  if (isNaN(numValue)) {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    }).format(0);
+  }
   
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
@@ -22,8 +58,23 @@ export function formatNumber(value: number | string, decimals = 2): string {
 }
 
 // Format hours with proper decimal places
-export function formatHours(hours: number | string): string {
+export function formatHours(hours: number | string | null | undefined): string {
+  if (hours === null || hours === undefined) {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 2
+    }).format(0);
+  }
+  
   const numHours = typeof hours === 'string' ? parseFloat(hours) : hours;
+  
+  // Handle NaN
+  if (isNaN(numHours)) {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 2
+    }).format(0);
+  }
   
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 1,

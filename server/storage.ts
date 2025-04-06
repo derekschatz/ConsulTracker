@@ -293,15 +293,42 @@ export class DatabaseStorage implements IStorage {
   }
 
   private async enrichInvoice(invoice: Invoice): Promise<InvoiceWithLineItems> {
-    // Get the line items for this invoice
-    const lineItems = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
-    const totalHours = lineItems.reduce((total, item) => total + Number(item.hours), 0);
-    
-    return {
-      ...invoice,
-      lineItems,
-      totalHours
-    };
+    try {
+      if (!invoice || !invoice.id) {
+        console.error('Invalid invoice passed to enrichInvoice:', invoice);
+        throw new Error('Invalid invoice data');
+      }
+      
+      // Get the line items for this invoice
+      const lineItems = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
+      
+      console.log(`Retrieved ${lineItems.length} line items for invoice ${invoice.id} (${invoice.invoiceNumber})`);
+      
+      // Convert numeric types to ensure consistency
+      const processedLineItems = lineItems.map(item => ({
+        ...item,
+        // Ensure numeric values are properly converted
+        hours: Number(item.hours),
+        rate: item.rate.toString(),
+        amount: item.amount.toString()
+      }));
+      
+      const totalHours = processedLineItems.reduce((total, item) => total + Number(item.hours), 0);
+      
+      return {
+        ...invoice,
+        lineItems: processedLineItems,
+        totalHours
+      };
+    } catch (error) {
+      console.error(`Error enriching invoice ${invoice?.id}:`, error);
+      // Return basic data without line items rather than failing completely
+      return {
+        ...invoice,
+        lineItems: [],
+        totalHours: 0
+      };
+    }
   }
 }
 

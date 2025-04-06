@@ -1,69 +1,49 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useToast } from '@/hooks/use-toast';
-import { emailService } from '@/lib/email-service';
-import { formatCurrency } from '@/lib/format-utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { FormField, FormItem, FormLabel, FormControl, FormMessage, Form } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { useState } from "react";
+import { emailService } from "@/lib/email-service";
+import { InvoiceWithLineItems } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
+// Form schema for email
 const formSchema = z.object({
-  to: z.string().email('Please enter a valid email address'),
-  subject: z.string().min(1, 'Subject is required'),
-  message: z.string().min(1, 'Message is required'),
+  to: z.string().email({ message: "Please enter a valid email address" }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 interface EmailInvoiceModalProps {
+  invoice: InvoiceWithLineItems | null;
   isOpen: boolean;
   onClose: () => void;
-  invoice: any;
   onSuccess: () => void;
 }
 
 const EmailInvoiceModal = ({
+  invoice,
   isOpen,
   onClose,
-  invoice,
   onSuccess,
 }: EmailInvoiceModalProps) => {
-  const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
-  // Initialize form with default values
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<FormValues>({
+  // Initialize form
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      to: '',
-      subject: invoice ? emailService.generateDefaultSubject(invoice) : '',
-      message: invoice ? emailService.generateDefaultMessage(invoice) : '',
+      to: "",
     },
   });
 
-  // Update form values when invoice changes
-  useState(() => {
-    if (invoice) {
-      reset({
-        to: '',
-        subject: emailService.generateDefaultSubject(invoice),
-        message: emailService.generateDefaultMessage(invoice),
-      });
-    }
-  });
-
-  // Handle modal close and reset form
+  // Reset form when modal closes
   const handleClose = () => {
-    reset();
+    form.reset();
     onClose();
   };
 
@@ -73,23 +53,21 @@ const EmailInvoiceModal = ({
 
     try {
       setIsSubmitting(true);
+      toast({
+        title: 'Preparing Invoice',
+        description: 'Generating PDF and opening your email client...',
+      });
 
-      // Send email
-      const response = await emailService.sendInvoice(
+      // Open system email client with invoice
+      await emailService.openEmailWithInvoice(
         invoice,
-        data.to,
-        data.subject,
-        data.message
+        data.to
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to send invoice');
-      }
 
       // Success toast
       toast({
-        title: 'Invoice sent',
-        description: `Invoice has been sent to ${data.to}`,
+        title: 'Email Ready',
+        description: 'Your default email client has been opened with the invoice attached.',
       });
 
       // Close modal and reset form
@@ -97,11 +75,15 @@ const EmailInvoiceModal = ({
       
       // Trigger success callback
       onSuccess();
-    } catch (error) {
-      console.error('Error sending invoice:', error);
+    } catch (error: any) {
+      console.error('Error preparing invoice email:', error);
+      
+      // Provide a more detailed error message
+      const errorMessage = error.message || 'Failed to prepare invoice email. Please try again.';
+      
       toast({
         title: 'Error',
-        description: 'Failed to send invoice',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -112,89 +94,43 @@ const EmailInvoiceModal = ({
   if (!invoice) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Email Invoice</DialogTitle>
+          <DialogTitle>Email Invoice #{invoice.invoiceNumber}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 gap-2">
-              <Label htmlFor="invoiceInfo" className="text-sm font-medium text-slate-700">
-                Invoice Information
-              </Label>
-              <div className="text-sm p-3 bg-slate-50 rounded-md">
-                <p className="font-medium">{invoice.invoiceNumber}</p>
-                <p>{invoice.clientName}</p>
-                <p>{formatCurrency(invoice.amount)}</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-2">
-              <Label htmlFor="to" className="text-sm font-medium text-slate-700">
-                Recipient Email
-              </Label>
-              <Input
-                id="to"
-                type="email"
-                placeholder="client@example.com"
-                {...register('to')}
-                className={errors.to ? 'border-red-500' : ''}
-              />
-              {errors.to && (
-                <span className="text-xs text-red-500">{errors.to.message}</span>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="to"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Recipient Email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="client@example.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
+            />
+
+            <div className="flex justify-end space-x-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Processing..." : "Open Email Client"}
+              </Button>
             </div>
-            
-            <div className="grid grid-cols-1 gap-2">
-              <Label htmlFor="subject" className="text-sm font-medium text-slate-700">
-                Subject
-              </Label>
-              <Input
-                id="subject"
-                placeholder="Invoice subject"
-                {...register('subject')}
-                className={errors.subject ? 'border-red-500' : ''}
-              />
-              {errors.subject && (
-                <span className="text-xs text-red-500">{errors.subject.message}</span>
-              )}
-            </div>
-            
-            <div className="grid grid-cols-1 gap-2">
-              <Label htmlFor="message" className="text-sm font-medium text-slate-700">
-                Message
-              </Label>
-              <Textarea
-                id="message"
-                rows={6}
-                placeholder="Enter message"
-                {...register('message')}
-                className={errors.message ? 'border-red-500' : ''}
-              />
-              {errors.message && (
-                <span className="text-xs text-red-500">{errors.message.message}</span>
-              )}
-            </div>
-          </div>
-          
-          <DialogFooter className="gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Sending...' : 'Send Invoice'}
-            </Button>
-          </DialogFooter>
-        </form>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
