@@ -9,6 +9,7 @@ import { useState } from "react";
 import { emailService } from "@/lib/email-service";
 import { InvoiceWithLineItems } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 // Form schema for email
 const formSchema = z.object({
@@ -19,19 +20,20 @@ type FormValues = z.infer<typeof formSchema>;
 
 interface EmailInvoiceModalProps {
   invoice: InvoiceWithLineItems | null;
-  isOpen: boolean;
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
 
 const EmailInvoiceModal = ({
   invoice,
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   onSuccess,
 }: EmailInvoiceModalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Initialize form
   const form = useForm<FormValues>({
@@ -44,7 +46,7 @@ const EmailInvoiceModal = ({
   // Reset form when modal closes
   const handleClose = () => {
     form.reset();
-    onClose();
+    onOpenChange(false);
   };
 
   // Submit form data
@@ -73,6 +75,12 @@ const EmailInvoiceModal = ({
       // Close modal and reset form
       handleClose();
       
+      // Use more specific query invalidation to ensure all related data is refreshed
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      // Also invalidate specific invoice data if needed
+      queryClient.invalidateQueries({ queryKey: [`/api/invoices/${invoice.id}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      
       // Trigger success callback
       onSuccess();
     } catch (error: any) {
@@ -94,7 +102,7 @@ const EmailInvoiceModal = ({
   if (!invoice) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Email Invoice #{invoice.invoiceNumber}</DialogTitle>

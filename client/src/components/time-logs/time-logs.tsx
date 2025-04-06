@@ -70,6 +70,10 @@ const TimeLogs = () => {
       }
       return response.json();
     },
+    // Ensure we always get fresh data
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    gcTime: 0, // Don't keep old data in cache
   });
 
   // Fetch engagements for client filter dropdown and the editing form
@@ -86,8 +90,8 @@ const TimeLogs = () => {
     setIsCreateModalOpen(true);
   };
 
-  const handleCloseCreateModal = () => {
-    setIsCreateModalOpen(false);
+  const handleCloseCreateModal = (open: boolean) => {
+    if (!open) setIsCreateModalOpen(false);
   };
 
   const handleOpenEditModal = (timeLog: any) => {
@@ -95,9 +99,11 @@ const TimeLogs = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setCurrentTimeLog(null);
+  const handleCloseEditModal = (open: boolean) => {
+    if (!open) {
+      setIsEditModalOpen(false);
+      setCurrentTimeLog(null);
+    }
   };
 
   const handleDeleteTimeLog = (id: number) => {
@@ -120,9 +126,22 @@ const TimeLogs = () => {
         description: 'The time log has been deleted successfully.',
       });
 
-      // Refresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/time-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      // Force a fresh refetch to update the UI immediately
+      console.log('Force refreshing time log data after deletion');
+      await queryClient.refetchQueries({ 
+        queryKey: ['/api/time-logs', queryParams.toString()],
+        exact: true, 
+        type: 'active'
+      });
+      
+      // Also invalidate other time log queries and dashboard stats
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const queryKey = query.queryKey[0];
+          return typeof queryKey === 'string' && 
+            (queryKey.startsWith('/api/time-logs') || queryKey.startsWith('/api/dashboard'));
+        }
+      });
     } catch (error) {
       console.error('Error deleting time log:', error);
       toast({
@@ -133,14 +152,30 @@ const TimeLogs = () => {
     }
   };
 
-  const handleCloseDeleteModal = () => {
-    setIsDeleteModalOpen(false);
-    setTimeLogToDelete(null);
+  const handleCloseDeleteModal = (open: boolean) => {
+    if (!open) {
+      setIsDeleteModalOpen(false);
+      setTimeLogToDelete(null);
+    }
   };
 
-  const handleSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/time-logs'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+  const handleSuccess = async () => {
+    // Force a fresh refetch to update the UI immediately
+    console.log('Force refreshing time log data after operation');
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/time-logs', queryParams.toString()],
+      exact: true, 
+      type: 'active'
+    });
+    
+    // Also invalidate other time log queries and dashboard stats
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const queryKey = query.queryKey[0];
+        return typeof queryKey === 'string' && 
+          (queryKey.startsWith('/api/time-logs') || queryKey.startsWith('/api/dashboard'));
+      }
+    });
   };
 
   // Remove client-side filtering and use server-filtered data directly
@@ -202,23 +237,23 @@ const TimeLogs = () => {
 
       {/* Create Modal */}
       <TimeLogModal
-        isOpen={isCreateModalOpen}
-        onClose={handleCloseCreateModal}
+        open={isCreateModalOpen}
+        onOpenChange={handleCloseCreateModal}
         onSuccess={handleSuccess}
       />
 
       {/* Edit Modal */}
       <TimeLogModal
-        isOpen={isEditModalOpen}
-        onClose={handleCloseEditModal}
+        open={isEditModalOpen}
+        onOpenChange={handleCloseEditModal}
         timeLog={currentTimeLog}
         onSuccess={handleSuccess}
       />
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal
-        isOpen={isDeleteModalOpen}
-        onClose={handleCloseDeleteModal}
+        open={isDeleteModalOpen}
+        onOpenChange={handleCloseDeleteModal}
         onConfirm={handleConfirmDelete}
         title="Delete Time Log"
         description="Are you sure you want to delete this time log? This action cannot be undone."

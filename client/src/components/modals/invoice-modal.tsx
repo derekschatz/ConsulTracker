@@ -32,16 +32,16 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 interface InvoiceModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   preselectedClientName?: string;
   preselectedEngagementId?: number;
 }
 
 const InvoiceModal = ({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   onSuccess,
   preselectedClientName,
   preselectedEngagementId,
@@ -58,7 +58,7 @@ const InvoiceModal = ({
   // Fetch all active engagements
   const { data: allEngagements = [], isLoading: isLoadingEngagements } = useQuery<any[], any[], any[]>({
     queryKey: ['/api/engagements/active'],
-    enabled: isOpen,
+    enabled: open,
   });
   
   // Get unique clients from active engagements
@@ -100,10 +100,10 @@ const InvoiceModal = ({
   
   // Set initial selectedClientName based on preselectedClientName if available
   useEffect(() => {
-    if (isOpen && preselectedClientName) {
+    if (open && preselectedClientName) {
       setSelectedClientName(preselectedClientName);
     }
-  }, [isOpen, preselectedClientName]);
+  }, [open, preselectedClientName]);
 
   // Watch for changes to form values
   const watchEngagementId = watch('engagementId');
@@ -165,14 +165,14 @@ const InvoiceModal = ({
     fetchTimeLogs();
   }, [watchEngagementId, watchPeriodStart, watchPeriodEnd]);
 
-  // Handle modal close and reset form
+  // Define close handler
   const handleClose = () => {
     reset();
+    setSelectedClientName('');
     setTimeLogs([]);
     setInvoiceTotal(0);
     setTotalHours(0);
-    setSelectedClientName('');
-    onClose();
+    onOpenChange(false);
   };
 
   // Submit form data
@@ -238,9 +238,20 @@ const InvoiceModal = ({
       // Close modal and reset form
       handleClose();
       
-      // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      // Force a refresh of all invoice queries to ensure UI is updated
+      console.log('Force refreshing data after creating invoice');
+      
+      // First force refresh all queries that might show this invoice
+      await queryClient.refetchQueries({ 
+        predicate: (query) => {
+          const queryKey = query.queryKey[0];
+          return typeof queryKey === 'string' && (
+            queryKey.startsWith('/api/invoices') || 
+            queryKey.startsWith('/api/dashboard')
+          );
+        },
+        type: 'active'
+      });
       
       // Trigger success callback
       onSuccess();
@@ -257,8 +268,8 @@ const InvoiceModal = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Generate Invoice</DialogTitle>
         </DialogHeader>

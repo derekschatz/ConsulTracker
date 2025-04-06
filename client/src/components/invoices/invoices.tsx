@@ -7,6 +7,7 @@ import InvoiceSummary from './invoice-summary';
 import InvoiceTable from './invoice-table';
 import InvoiceModal from '@/components/modals/invoice-modal';
 import EmailInvoiceModal from '@/components/modals/email-invoice-modal';
+import InvoicePreviewModal from '@/components/modals/invoice-preview-modal';
 import { DeleteConfirmationModal } from '@/components/modals/delete-confirmation-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
@@ -26,6 +27,7 @@ const Invoices = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>({
@@ -34,69 +36,156 @@ const Invoices = () => {
     dateRange: 'all'
   });
 
-  const [invoices, setInvoices] = useState<any[]>([]);
   const [allClients, setAllClients] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  // Build query params for invoice fetch
+  const queryParams = new URLSearchParams();
+  if (filters.status !== 'all') queryParams.append('status', filters.status);
+  if (filters.client !== 'all') queryParams.append('client', filters.client);
+  if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
+    queryParams.append('startDate', filters.startDate);
+    queryParams.append('endDate', filters.endDate);
+  } else {
+    queryParams.append('dateRange', filters.dateRange);
+  }
+
+  // Fetch invoices using React Query instead of useEffect
+  const { data: invoices = [], isLoading: isLoadingInvoices } = useQuery<any[]>({
+    queryKey: ['/api/invoices', queryParams.toString()],
+    queryFn: async ({ queryKey }) => {
+      const url = `${queryKey[0]}?${queryKey[1]}`;
+      console.log('Fetching invoices with URL:', url);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch invoices');
+      }
+      const data = await response.json();
+      
+      // Map snake_case properties to camelCase for consistency
+      return data.map((invoice: any) => ({
+        id: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        clientName: invoice.client_name,
+        projectName: invoice.project_name,
+        issueDate: invoice.issue_date,
+        dueDate: invoice.due_date,
+        amount: invoice.amount,
+        status: invoice.status,
+        engagementId: invoice.engagement_id,
+        lineItems: invoice.line_items || []
+      }));
+    },
+    // Ensure the query is always fresh
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    gcTime: 0, // Don't keep old data in cache - always fetch fresh
+  });
 
   // Fetch all unique client names once on component mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchAllClients();
   }, []);
 
-  // Fetch filtered invoices whenever filters change
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      setLoading(true);
-      try {
-        const queryParams = new URLSearchParams();
-        if (filters.status !== 'all') queryParams.append('status', filters.status);
-        if (filters.client !== 'all') queryParams.append('client', filters.client);
-        if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
-          queryParams.append('startDate', filters.startDate);
-          queryParams.append('endDate', filters.endDate);
-        } else {
-          queryParams.append('dateRange', filters.dateRange);
+  // Function to fetch all clients
+  const fetchAllClients = async () => {
+    try {
+      // Request all invoices with no filters to get all client names
+      const response = await fetch(`/api/invoices?dateRange=all`);
+      if (!response.ok) throw new Error('Failed to fetch invoices');
+      const data = await response.json();
+      
+      // Extract unique client names
+      const clientNames: string[] = [];
+      
+      // Extract client names with proper type checking
+      data.forEach((invoice: any) => {
+        if (typeof invoice.client_name === 'string' && invoice.client_name) {
+          clientNames.push(invoice.client_name);
         }
-
-        const response = await fetch(`/api/invoices?${queryParams.toString()}`);
-        if (!response.ok) throw new Error('Failed to fetch invoices');
-        const data = await response.json();
-        
-        // Map snake_case properties to camelCase for consistency
-        const mappedData = data.map((invoice: any) => ({
-          id: invoice.id,
-          invoiceNumber: invoice.invoice_number,
-          clientName: invoice.client_name,
-          projectName: invoice.project_name,
-          issueDate: invoice.issue_date,
-          dueDate: invoice.due_date,
-          amount: invoice.amount,
-          status: invoice.status,
-          engagementId: invoice.engagement_id,
-          lineItems: invoice.line_items || []
-        }));
-        
-        setInvoices(mappedData);
-      } catch (error) {
-        console.error('Error fetching invoices:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInvoices();
-  }, [filters]);
+      });
+      
+      // Remove duplicates
+      const uniqueClients = Array.from(new Set(clientNames));
+      
+      setAllClients(uniqueClients);
+    } catch (error) {
+      console.error('Error fetching client names:', error);
+    }
+  };
 
   const handleOpenCreateModal = () => {
     setIsCreateModalOpen(true);
   };
 
-  const handleCloseCreateModal = () => {
-    setIsCreateModalOpen(false);
+  const handleCloseCreateModal = (open: boolean) => {
+    setIsCreateModalOpen(open);
   };
 
   const handleViewInvoice = async (invoice: any) => {
+    try {
+      setLoading(true);
+      console.log(`Attempting to preview invoice ID ${invoice.id} (${invoice.invoiceNumber})`);
+      
+      // Fetch the complete invoice data with line items
+      const response = await fetch(`/api/invoices/${invoice.id}`);
+      if (!response.ok) {
+        console.error(`API error: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to fetch invoice details: ${response.status} ${response.statusText}`);
+      }
+      
+      const completeInvoice = await response.json();
+      console.log('Received invoice data:', completeInvoice);
+      
+      if (!completeInvoice || !completeInvoice.id) {
+        console.error('Invalid invoice data received:', completeInvoice);
+        throw new Error('Invalid invoice data received from server');
+      }
+      
+      // Check if line items exist
+      if (!completeInvoice.lineItems && !completeInvoice.line_items) {
+        console.error('Invoice has no line items:', completeInvoice);
+        throw new Error('This invoice has no line items and cannot be previewed');
+      }
+      
+      // Map snake_case properties to camelCase for consistency
+      const formattedInvoice = {
+        id: completeInvoice.id,
+        invoiceNumber: completeInvoice.invoice_number || completeInvoice.invoiceNumber,
+        clientName: completeInvoice.client_name || completeInvoice.clientName,
+        projectName: completeInvoice.project_name || completeInvoice.projectName,
+        issueDate: completeInvoice.issue_date || completeInvoice.issueDate,
+        dueDate: completeInvoice.due_date || completeInvoice.dueDate,
+        amount: completeInvoice.amount,
+        status: completeInvoice.status,
+        notes: completeInvoice.notes,
+        periodStart: completeInvoice.period_start || completeInvoice.periodStart,
+        periodEnd: completeInvoice.period_end || completeInvoice.periodEnd,
+        engagementId: completeInvoice.engagement_id || completeInvoice.engagementId,
+        lineItems: completeInvoice.lineItems || completeInvoice.line_items || [],
+        totalHours: completeInvoice.totalHours || completeInvoice.total_hours || 
+          (completeInvoice.lineItems || completeInvoice.line_items || [])
+            .reduce((total: number, item: any) => total + Number(item.hours), 0)
+      };
+      
+      console.log('Formatted invoice data for preview:', formattedInvoice);
+      
+      // Set current invoice and open preview modal
+      setCurrentInvoice(formattedInvoice);
+      setIsPreviewModalOpen(true);
+    } catch (error: any) {
+      console.error('Error previewing invoice:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to preview invoice. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadInvoice = async (invoice: any) => {
     try {
       setLoading(true);
       console.log(`Attempting to download invoice ID ${invoice.id} (${invoice.invoiceNumber})`);
@@ -142,7 +231,7 @@ const Invoices = () => {
             .reduce((total: number, item: any) => total + Number(item.hours), 0)
       };
       
-      console.log('Formatted invoice data for PDF:', formattedInvoice);
+      console.log('Formatted invoice data for download:', formattedInvoice);
       
       // Download the invoice as PDF
       downloadInvoice(formattedInvoice);
@@ -163,9 +252,11 @@ const Invoices = () => {
     setIsEmailModalOpen(true);
   };
 
-  const handleCloseEmailModal = () => {
-    setIsEmailModalOpen(false);
-    setCurrentInvoice(null);
+  const handleCloseEmailModal = (open: boolean) => {
+    setIsEmailModalOpen(open);
+    if (!open) {
+      setCurrentInvoice(null);
+    }
   };
 
   const handleDeleteInvoice = (id: number) => {
@@ -188,9 +279,22 @@ const Invoices = () => {
         description: 'The invoice has been deleted successfully.',
       });
 
-      // Refresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      // Refresh data - force a fresh refetch to update the UI immediately
+      console.log('Force refreshing invoice data after deletion');
+      await queryClient.refetchQueries({ 
+        queryKey: ['/api/invoices', queryParams.toString()],
+        exact: true, 
+        type: 'active'
+      });
+      
+      // Also invalidate other invoice queries and dashboard stats
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const queryKey = query.queryKey[0];
+          return typeof queryKey === 'string' && 
+            (queryKey.startsWith('/api/invoices') || queryKey.startsWith('/api/dashboard'));
+        }
+      });
     } catch (error) {
       console.error('Error deleting invoice:', error);
       toast({
@@ -201,9 +305,11 @@ const Invoices = () => {
     }
   };
   
-  const handleCloseDeleteModal = () => {
-    setIsDeleteModalOpen(false);
-    setInvoiceToDelete(null);
+  const handleCloseDeleteModal = (open: boolean) => {
+    setIsDeleteModalOpen(open);
+    if (!open) {
+      setInvoiceToDelete(null);
+    }
   };
 
   const handleUpdateInvoiceStatus = async (id: number, status: string) => {
@@ -219,9 +325,22 @@ const Invoices = () => {
         description: `Invoice status changed to ${status}.`,
       });
 
-      // Refresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      // Refresh data - force a fresh refetch to update the UI immediately
+      console.log('Force refreshing invoice data after status update');
+      await queryClient.refetchQueries({ 
+        queryKey: ['/api/invoices', queryParams.toString()],
+        exact: true, 
+        type: 'active'
+      });
+      
+      // Also invalidate other invoice queries and dashboard stats
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const queryKey = query.queryKey[0];
+          return typeof queryKey === 'string' && 
+            (queryKey.startsWith('/api/invoices') || queryKey.startsWith('/api/dashboard'));
+        }
+      });
     } catch (error) {
       console.error('Error updating invoice status:', error);
       toast({
@@ -232,45 +351,32 @@ const Invoices = () => {
     }
   };
 
-  const handleSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+  const handleSuccess = async () => {
+    // Force a fresh refetch to update the UI immediately
+    console.log('Force refreshing invoice data after operation');
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/invoices', queryParams.toString()],
+      exact: true, 
+      type: 'active'
+    });
+    
+    // Also invalidate other invoice queries and dashboard stats
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const queryKey = query.queryKey[0];
+        return typeof queryKey === 'string' && 
+          (queryKey.startsWith('/api/invoices') || queryKey.startsWith('/api/dashboard'));
+      }
+    });
     
     // Refresh the client list in case a new client was added
     fetchAllClients();
   };
   
-  // Function to fetch all clients
-  const fetchAllClients = async () => {
-    try {
-      // Request all invoices with no filters to get all client names
-      const response = await fetch(`/api/invoices?dateRange=all`);
-      if (!response.ok) throw new Error('Failed to fetch invoices');
-      const data = await response.json();
-      
-      // Extract unique client names
-      const clientNames: string[] = [];
-      
-      // Extract client names with proper type checking
-      data.forEach((invoice: any) => {
-        if (typeof invoice.client_name === 'string' && invoice.client_name) {
-          clientNames.push(invoice.client_name);
-        }
-      });
-      
-      // Remove duplicates
-      const uniqueClients = Array.from(new Set(clientNames));
-      
-      setAllClients(uniqueClients);
-    } catch (error) {
-      console.error('Error fetching client names:', error);
-    }
-  };
-
   // Use the separately fetched client list for the dropdown
   const clientOptions: string[] = allClients;
 
-  // Calculate summary stats
+  // Calculate summary stats based on react-query data (using invoices from the query)
   const totalInvoiced = invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.amount), 0);
   const paidInvoices = invoices
     .filter((invoice: any) => invoice.status === 'paid')
@@ -278,6 +384,10 @@ const Invoices = () => {
   const outstandingInvoices = invoices
     .filter((invoice: any) => invoice.status === 'pending' || invoice.status === 'overdue')
     .reduce((sum: number, invoice: any) => sum + Number(invoice.amount), 0);
+
+  const handleClosePreviewModal = (open: boolean) => {
+    setIsPreviewModalOpen(open);
+  };
 
   return (
     <div>
@@ -302,43 +412,53 @@ const Invoices = () => {
         clientOptions={clientOptions}
       />
 
-      {/* Summary Stats */}
+      {/* Summary Stats - ensured to use latest state from query */}
       <InvoiceSummary
         totalInvoiced={totalInvoiced}
         paidInvoices={paidInvoices}
         outstandingInvoices={outstandingInvoices}
-        year={new Date().getFullYear()}
+        dateRange={filters.dateRange}
+        startDate={filters.startDate}
+        endDate={filters.endDate}
       />
 
       {/* Invoices Table */}
       <InvoiceTable
         invoices={invoices}
-        isLoading={loading}
+        isLoading={isLoadingInvoices || loading}
         onView={handleViewInvoice}
         onEmail={handleEmailInvoice}
         onUpdateStatus={handleUpdateInvoiceStatus}
         onDelete={handleDeleteInvoice}
+        onDownload={handleDownloadInvoice}
       />
 
       {/* Create Modal */}
       <InvoiceModal
-        isOpen={isCreateModalOpen}
-        onClose={handleCloseCreateModal}
+        open={isCreateModalOpen}
+        onOpenChange={handleCloseCreateModal}
         onSuccess={handleSuccess}
       />
 
       {/* Email Modal */}
       <EmailInvoiceModal
-        isOpen={isEmailModalOpen}
-        onClose={handleCloseEmailModal}
+        open={isEmailModalOpen}
+        onOpenChange={handleCloseEmailModal}
         invoice={currentInvoice}
         onSuccess={handleSuccess}
       />
       
+      {/* Preview Modal */}
+      <InvoicePreviewModal
+        open={isPreviewModalOpen}
+        onOpenChange={handleClosePreviewModal}
+        invoice={currentInvoice}
+      />
+      
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal
-        isOpen={isDeleteModalOpen}
-        onClose={handleCloseDeleteModal}
+        open={isDeleteModalOpen}
+        onOpenChange={handleCloseDeleteModal}
         onConfirm={handleConfirmDelete}
         title="Delete Invoice"
         description="Are you sure you want to delete this invoice? This action cannot be undone and will permanently remove the invoice from your records."

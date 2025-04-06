@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,18 +11,18 @@ import { Button } from '@/components/ui/button';
 import ReceiptIcon from '@/components/icons/receipt-icon';
 
 interface InvoiceHistoryModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   clientName: string;
 }
 
-const InvoiceHistoryModal = ({
-  isOpen,
-  onClose,
+const InvoiceHistoryModal: React.FC<InvoiceHistoryModalProps> = ({
+  open,
+  onOpenChange,
   clientName,
-}: InvoiceHistoryModalProps) => {
+}) => {
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -44,7 +45,7 @@ const InvoiceHistoryModal = ({
         </div>
         
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>

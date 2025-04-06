@@ -37,16 +37,16 @@ const formSchema = insertTimeLogSchema
 type FormValues = z.infer<typeof formSchema>;
 
 interface TimeLogModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   timeLog?: any; // For editing existing time log
   onSuccess: () => void;
   preselectedEngagementId?: number;
 }
 
 const TimeLogModal = ({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   timeLog,
   onSuccess,
   preselectedEngagementId,
@@ -61,7 +61,7 @@ const TimeLogModal = ({
   // Fetch only active engagements
   const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery<Engagement[]>({
     queryKey: ['/api/engagements/active'],
-    enabled: isOpen,
+    enabled: open,
   });
 
   // Get engagement ID from either direct property or nested engagement object
@@ -114,7 +114,7 @@ const TimeLogModal = ({
 
   // Update form fields when modal opens with timeLog data
   useEffect(() => {
-    if (isOpen) {
+    if (open) {
       // If editing, set the engagement ID explicitly
       if (isEditMode && timeLog) {
         const engagementId = getEngagementId();
@@ -126,11 +126,11 @@ const TimeLogModal = ({
         setValue('engagementId', preselectedEngagementId);
       }
     }
-  }, [isOpen, timeLog, isEditMode, preselectedEngagementId, setValue]);
+  }, [open, timeLog, isEditMode, preselectedEngagementId, setValue]);
   
   // Find and set the rate when an engagement is selected
   useEffect(() => {
-    if (isOpen && engagements && engagements.length > 0) {
+    if (open && engagements && engagements.length > 0) {
       // Get engagementId from either direct property or nested engagement object
       let currentEngagementId;
       if (timeLog) {
@@ -150,7 +150,7 @@ const TimeLogModal = ({
         }
       }
     }
-  }, [isOpen, engagements, timeLog, preselectedEngagementId]);
+  }, [open, engagements, timeLog, preselectedEngagementId]);
   
   // Handle engagement change
   const handleEngagementChange = (engagementId: string) => {
@@ -166,7 +166,7 @@ const TimeLogModal = ({
   // Handle modal close and reset form
   const handleClose = () => {
     reset();
-    onClose();
+    onOpenChange(false);
   };
 
   // Submit form data
@@ -202,9 +202,20 @@ const TimeLogModal = ({
       // Close modal and reset form
       handleClose();
       
-      // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/time-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      // Force a refresh of all time log queries to ensure UI is updated
+      console.log('Force refreshing data after time log operation');
+      
+      // First force refresh all queries that might show this time log
+      await queryClient.refetchQueries({ 
+        predicate: (query) => {
+          const queryKey = query.queryKey[0];
+          return typeof queryKey === 'string' && (
+            queryKey.startsWith('/api/time-logs') || 
+            queryKey.startsWith('/api/dashboard')
+          );
+        },
+        type: 'active'
+      });
       
       // Trigger success callback
       onSuccess();
@@ -221,7 +232,7 @@ const TimeLogModal = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Edit Time Log' : 'New Time Log'}</DialogTitle>

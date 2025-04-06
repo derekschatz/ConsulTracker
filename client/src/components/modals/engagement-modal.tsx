@@ -41,15 +41,15 @@ const formSchema = insertEngagementSchema
 type FormValues = z.infer<typeof formSchema>;
 
 interface EngagementModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   engagement?: any; // For editing existing engagement
   onSuccess: () => void;
 }
 
 const EngagementModal = ({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   engagement,
   onSuccess,
 }: EngagementModalProps) => {
@@ -96,7 +96,7 @@ const EngagementModal = ({
 
   // Effect to update form when engagement data changes
   useEffect(() => {
-    if (engagement && isOpen) {
+    if (engagement && open) {
       console.log('Resetting form with engagement data', engagement);
       reset({
         ...engagement,
@@ -105,12 +105,12 @@ const EngagementModal = ({
         hourlyRate: String(engagement.hourlyRate),
       });
     }
-  }, [engagement, reset, isOpen]);
+  }, [engagement, reset, open]);
   
   // Handle modal close and reset form
   const handleClose = () => {
     reset();
-    onClose();
+    onOpenChange(false);
   };
 
   // Submit form data
@@ -168,7 +168,7 @@ const EngagementModal = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Edit Engagement' : 'New Engagement'}</DialogTitle>

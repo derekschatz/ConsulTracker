@@ -27,6 +27,7 @@ interface InvoiceTableProps {
   onEmail: (invoice: any) => void;
   onUpdateStatus: (id: number, status: string) => void;
   onDelete: (id: number) => void;
+  onDownload?: (invoice: any) => void;
 }
 
 const InvoiceTable = ({ 
@@ -35,7 +36,8 @@ const InvoiceTable = ({
   onView, 
   onEmail, 
   onUpdateStatus,
-  onDelete 
+  onDelete,
+  onDownload 
 }: InvoiceTableProps) => {
   const isMobile = useMobile();
   
@@ -81,9 +83,13 @@ const InvoiceTable = ({
       header: 'Status',
       cell: (invoice) => {
         const { bg, text } = getStatusClasses(invoice.status);
+        const displayStatus = invoice.status.toLowerCase() === 'pending' 
+          ? 'Not Submitted' 
+          : invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1);
+        
         return (
           <span className={`inline-flex rounded-full ${bg} ${text} px-2 py-1 text-xs font-medium`}>
-            {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+            {displayStatus}
           </span>
         );
       },
@@ -94,8 +100,13 @@ const InvoiceTable = ({
       cell: (invoice) => (
         <div className="flex justify-end items-center space-x-2">
           <Button variant="ghost" size="icon" onClick={() => onView(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
-            <Download className="h-4 w-4" />
+            <Eye className="h-4 w-4" />
           </Button>
+          {onDownload && (
+            <Button variant="ghost" size="icon" onClick={() => onDownload(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
+              <Download className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={() => onEmail(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
             <Mail className="h-4 w-4" />
           </Button>
@@ -106,10 +117,6 @@ const InvoiceTable = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onView(invoice)}>
-                <Eye className="h-4 w-4 mr-2" />
-                View
-              </DropdownMenuItem>
               {invoice.status !== 'paid' && (
                 <DropdownMenuItem onClick={() => onUpdateStatus(invoice.id, 'paid')}>
                   <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
@@ -118,8 +125,14 @@ const InvoiceTable = ({
               )}
               {invoice.status !== 'submitted' && (
                 <DropdownMenuItem onClick={() => onUpdateStatus(invoice.id, 'submitted')}>
-                  <Clock className="h-4 w-4 mr-2 text-yellow-600" />
+                  <Clock className="h-4 w-4 mr-2 text-blue-600" />
                   Mark as Submitted
+                </DropdownMenuItem>
+              )}
+              {invoice.status !== 'pending' && (
+                <DropdownMenuItem onClick={() => onUpdateStatus(invoice.id, 'pending')}>
+                  <Clock className="h-4 w-4 mr-2 text-slate-600" />
+                  Mark as Not Submitted
                 </DropdownMenuItem>
               )}
               {invoice.status !== 'overdue' && (

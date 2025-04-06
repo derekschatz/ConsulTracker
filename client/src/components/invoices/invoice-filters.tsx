@@ -74,6 +74,7 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="submitted">Submitted</SelectItem>
+                <SelectItem value="pending">Not Submitted</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
               </SelectContent>
             </Select>

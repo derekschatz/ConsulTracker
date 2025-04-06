@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
@@ -28,11 +28,17 @@ const Engagements = () => {
   const [currentEngagement, setCurrentEngagement] = useState<any>(null);
   const [engagementToDelete, setEngagementToDelete] = useState<number | null>(null);
   const [selectedClient, setSelectedClient] = useState<string>('');
+  const [allClients, setAllClients] = useState<string[]>([]);
   const [filters, setFilters] = useState<Filters>({
     status: 'all',
     client: 'all',
     dateRange: 'current'
   });
+
+  // Fetch all unique client names once on component mount
+  useEffect(() => {
+    fetchAllClients();
+  }, []);
 
   // Build query params
   let queryParams = new URLSearchParams();
@@ -69,12 +75,31 @@ const Engagements = () => {
     },
   });
 
+  // Function to fetch all clients
+  const fetchAllClients = async () => {
+    try {
+      // Request all engagements with no client filter to get all client names
+      const response = await fetch(`/api/engagements?dateRange=all`);
+      if (!response.ok) throw new Error('Failed to fetch engagements');
+      const data = await response.json();
+      
+      // Extract unique client names with proper type safety
+      const clientNames: string[] = Array.from(
+        new Set(data.map((engagement: any) => engagement.clientName as string))
+      ).filter((name): name is string => typeof name === 'string' && name !== '');
+      
+      setAllClients(clientNames);
+    } catch (error) {
+      console.error('Error fetching client names:', error);
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setIsCreateModalOpen(true);
   };
 
-  const handleCloseCreateModal = () => {
-    setIsCreateModalOpen(false);
+  const handleCloseCreateModal = (open: boolean) => {
+    if (!open) setIsCreateModalOpen(false);
   };
 
   const handleOpenEditModal = (engagement: any) => {
@@ -82,9 +107,11 @@ const Engagements = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setCurrentEngagement(null);
+  const handleCloseEditModal = (open: boolean) => {
+    if (!open) {
+      setIsEditModalOpen(false);
+      setCurrentEngagement(null);
+    }
   };
 
   const handleDeleteEngagement = (id: number) => {
@@ -119,13 +146,17 @@ const Engagements = () => {
     }
   };
 
-  const handleCloseDeleteModal = () => {
-    setIsDeleteModalOpen(false);
-    setEngagementToDelete(null);
+  const handleCloseDeleteModal = (open: boolean) => {
+    if (!open) {
+      setIsDeleteModalOpen(false);
+      setEngagementToDelete(null);
+    }
   };
 
   const handleSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/engagements'] });
+    // Refresh the client list in case a new client was added
+    fetchAllClients();
   };
 
   const handleViewInvoiceHistory = (clientName: string) => {
@@ -133,18 +164,18 @@ const Engagements = () => {
     setIsInvoiceHistoryModalOpen(true);
   };
 
-  const handleCloseInvoiceHistoryModal = () => {
-    setIsInvoiceHistoryModalOpen(false);
-    setSelectedClient('');
+  const handleCloseInvoiceHistoryModal = (open: boolean) => {
+    if (!open) {
+      setIsInvoiceHistoryModalOpen(false);
+      setSelectedClient('');
+    }
   };
 
   // No need to filter engagements client-side since we're handling it on the server
   const filteredEngagements = engagements;
 
-  // Extract unique client names for filter dropdown
-  const clientOptions: string[] = Array.from(
-    new Set(engagements.map((engagement: any) => engagement.clientName))
-  );
+  // Use the separately fetched client list for the dropdown
+  const clientOptions: string[] = allClients;
 
   return (
     <div>
@@ -182,23 +213,23 @@ const Engagements = () => {
 
       {/* Create Modal */}
       <EngagementModal
-        isOpen={isCreateModalOpen}
-        onClose={handleCloseCreateModal}
+        open={isCreateModalOpen}
+        onOpenChange={handleCloseCreateModal}
         onSuccess={handleSuccess}
       />
 
       {/* Edit Modal */}
       <EngagementModal
-        isOpen={isEditModalOpen}
-        onClose={handleCloseEditModal}
+        open={isEditModalOpen}
+        onOpenChange={handleCloseEditModal}
         engagement={currentEngagement}
         onSuccess={handleSuccess}
       />
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal
-        isOpen={isDeleteModalOpen}
-        onClose={handleCloseDeleteModal}
+        open={isDeleteModalOpen}
+        onOpenChange={handleCloseDeleteModal}
         onConfirm={handleConfirmDelete}
         title="Delete Engagement"
         description="Are you sure you want to delete this engagement? This action cannot be undone and will remove all associated time logs."
@@ -206,8 +237,8 @@ const Engagements = () => {
 
       {/* Invoice History Modal */}
       <InvoiceHistoryModal
-        isOpen={isInvoiceHistoryModalOpen}
-        onClose={handleCloseInvoiceHistoryModal}
+        open={isInvoiceHistoryModalOpen}
+        onOpenChange={handleCloseInvoiceHistoryModal}
         clientName={selectedClient}
       />
     </div>
