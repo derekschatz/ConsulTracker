@@ -256,6 +256,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/engagements", async (req, res) => {
     try {
+      // Check if the user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to create an engagement" });
+      }
+
       const validationResult = insertEngagementSchema.safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
@@ -267,22 +272,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         new Date(validationResult.data.endDate)
       );
       
-      // Override any status provided with the calculated one
+      // Get the user ID from the session
+      const userId = (req.user as any).id;
+      
+      // Override any status provided with the calculated one and add the userId
       const data = {
         ...validationResult.data,
-        status
+        status,
+        userId // Add the user ID from the authenticated session
       };
 
+      console.log("Creating engagement with data:", data);
       const engagement = await storage.createEngagement(data);
+      console.log("Engagement created:", engagement);
       res.status(201).json(engagement);
     } catch (error) {
+      console.error("Failed to create engagement:", error);
       res.status(500).json({ message: "Failed to create engagement" });
     }
   });
 
   app.put("/api/engagements/:id", async (req, res) => {
     try {
+      // Check if the user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to update an engagement" });
+      }
+      
       const id = Number(req.params.id);
+      // Get the user ID from the session
+      const userId = (req.user as any).id;
+      
       const validationResult = insertEngagementSchema.partial().safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
@@ -305,7 +325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If only one date is provided, we need to get the other one from the database
       else if (inputData.startDate !== undefined || inputData.endDate !== undefined) {
         // Get the current engagement
-        const currentEngagement = await storage.getEngagement(id);
+        const currentEngagement = await storage.getEngagement(id, userId);
         if (!currentEngagement) {
           return res.status(404).json({ message: "Engagement not found" });
         }
@@ -321,25 +341,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         inputData.status = status;
       }
 
-      const updatedEngagement = await storage.updateEngagement(id, inputData);
+      const updatedEngagement = await storage.updateEngagement(id, inputData, userId);
       if (!updatedEngagement) {
         return res.status(404).json({ message: "Engagement not found" });
       }
+      
+      console.log("Updated engagement:", updatedEngagement);
       res.json(updatedEngagement);
     } catch (error) {
+      console.error("Failed to update engagement:", error);
       res.status(500).json({ message: "Failed to update engagement" });
     }
   });
 
   app.delete("/api/engagements/:id", async (req, res) => {
     try {
+      // Check if the user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to delete an engagement" });
+      }
+      
       const id = Number(req.params.id);
-      const success = await storage.deleteEngagement(id);
+      // Get the user ID from the session
+      const userId = (req.user as any).id;
+      
+      console.log(`Attempting to delete engagement ${id} for user ${userId}`);
+      const success = await storage.deleteEngagement(id, userId);
       if (!success) {
         return res.status(404).json({ message: "Engagement not found" });
       }
+      
+      console.log(`Successfully deleted engagement ${id}`);
       res.status(204).send();
     } catch (error) {
+      console.error("Failed to delete engagement:", error);
       res.status(500).json({ message: "Failed to delete engagement" });
     }
   });
