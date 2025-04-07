@@ -117,6 +117,7 @@ const EngagementModal = ({
   const onSubmit = async (data: FormValues) => {
     try {
       setIsSubmitting(true);
+      console.log('Starting engagement submission with data:', data);
 
       // Convert values to appropriate types
       const startDate = new Date(data.startDate);
@@ -130,8 +131,10 @@ const EngagementModal = ({
         hourlyRate: Number(data.hourlyRate),
         startDate,
         endDate,
-        status, // Add the calculated status
+        status,
       };
+
+      console.log('Sending formatted data to server:', formattedData);
 
       // Create or update engagement
       const response = await apiRequest(
@@ -140,8 +143,12 @@ const EngagementModal = ({
         formattedData
       );
 
+      // Get the response data
+      const responseData = await response.json().catch(e => ({ error: 'Failed to parse response' }));
+      console.log('Server response:', { status: response.status, data: responseData });
+
       if (!response.ok) {
-        throw new Error('Failed to save engagement');
+        throw new Error(responseData.message || 'Failed to save engagement');
       }
 
       // Success toast
@@ -157,9 +164,10 @@ const EngagementModal = ({
       onSuccess();
     } catch (error) {
       console.error('Error saving engagement:', error);
+      // More descriptive error message
       toast({
         title: 'Error',
-        description: `Failed to ${isEditMode ? 'update' : 'create'} engagement`,
+        description: error instanceof Error ? error.message : 'Failed to save engagement. Please try again.',
         variant: 'destructive',
       });
     } finally {

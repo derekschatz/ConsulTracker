@@ -256,38 +256,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/engagements", async (req, res) => {
     try {
-      // Check if the user is authenticated
+      console.log("Received engagement creation request:", req.body);
+      console.log("Request user:", req.user);
+      
+      // Check authentication
       if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "You must be logged in to create an engagement" });
-      }
-
-      const validationResult = insertEngagementSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
+        console.log("User not authenticated");
+        return res.status(401).json({ message: "Not authenticated" });
       }
       
-      // Calculate the status based on start and end dates
-      const status = calculateEngagementStatus(
-        new Date(validationResult.data.startDate),
-        new Date(validationResult.data.endDate)
-      );
-      
-      // Get the user ID from the session
       const userId = (req.user as any).id;
-      
-      // Override any status provided with the calculated one and add the userId
-      const data = {
-        ...validationResult.data,
-        status,
-        userId // Add the user ID from the authenticated session
-      };
+      console.log("User ID:", userId);
 
-      console.log("Creating engagement with data:", data);
-      const engagement = await storage.createEngagement(data);
-      console.log("Engagement created:", engagement);
-      res.status(201).json(engagement);
+      // Ensure the body is a proper object
+      if (!req.body || typeof req.body !== 'object') {
+        console.log("Invalid request body format:", req.body);
+        return res.status(400).json({ message: "Invalid request format" });
+      }
+
+      const dataWithUserId = {
+        ...req.body,
+        userId
+      };
+      
+      console.log("Data with userId added:", dataWithUserId);
+
+      // Parse and validate the engagement data
+      const result = insertEngagementSchema.safeParse(dataWithUserId);
+
+      if (!result.success) {
+        console.log("Validation failed:", result.error);
+        return res.status(400).json({ message: "Invalid engagement data", errors: result.error.errors });
+      }
+
+      console.log("Validated engagement data:", result.data);
+
+      // Calculate status based on dates
+      const status = calculateEngagementStatus(
+        new Date(result.data.startDate),
+        new Date(result.data.endDate)
+      );
+
+      console.log("Calculated status:", status);
+
+      // Create the engagement
+      try {
+        const engagement = await storage.createEngagement({
+          ...result.data,
+          status
+        });
+        console.log("Created engagement:", engagement);
+        res.json(engagement);
+      } catch (error) {
+        console.error("Error creating engagement:", error);
+        throw error;
+      }
     } catch (error) {
-      console.error("Failed to create engagement:", error);
+      console.error("Error in POST /api/engagements:", error);
       res.status(500).json({ message: "Failed to create engagement" });
     }
   });

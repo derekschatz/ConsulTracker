@@ -73,6 +73,10 @@ const Engagements = () => {
       }
       return response.json();
     },
+    // Ensure we always get fresh data
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    gcTime: 0, // Don't keep old data in cache
   });
 
   // Function to fetch all clients
@@ -153,8 +157,26 @@ const Engagements = () => {
     }
   };
 
-  const handleSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/engagements'] });
+  const handleSuccess = async () => {
+    // Force a fresh refetch to update the UI immediately
+    console.log('Force refreshing engagement data after operation');
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/engagements'],
+      type: 'all',
+      exact: false,
+      stale: true
+    });
+    
+    // Also invalidate dashboard stats and any other related queries
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const queryKey = query.queryKey[0];
+        return typeof queryKey === 'string' && 
+          (queryKey.startsWith('/api/dashboard') || 
+           queryKey.startsWith('/api/engagements'));
+      }
+    });
+    
     // Refresh the client list in case a new client was added
     fetchAllClients();
   };
