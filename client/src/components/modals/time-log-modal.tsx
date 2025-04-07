@@ -31,6 +31,9 @@ const formSchema = insertTimeLogSchema
     date: z.string().min(1, 'Date is required'),
     hours: z.string().or(z.number()).refine(val => !isNaN(Number(val)) && Number(val) > 0, {
       message: 'Hours must be a positive number',
+    })
+    .refine(val => Number(val) <= 8, {
+      message: 'Hours cannot exceed 8 per entry',
     }),
   });
 
@@ -302,15 +305,26 @@ const TimeLogModal = ({
               
               <div className="grid grid-cols-1 gap-2">
                 <Label htmlFor="hours" className="text-sm font-medium text-slate-700">
-                  Hours
+                  Hours (max 8)
                 </Label>
                 <Input
                   id="hours"
                   type="number"
                   min="0.25"
+                  max="8"
                   step="0.25"
                   placeholder="0.00"
-                  {...register('hours')}
+                  {...register('hours', {
+                    onChange: (e) => {
+                      // Real-time validation as user types
+                      const value = e.target.value;
+                      if (value && Number(value) > 8) {
+                        e.target.setCustomValidity('Hours cannot exceed 8');
+                      } else {
+                        e.target.setCustomValidity('');
+                      }
+                    }
+                  })}
                   className={errors.hours ? 'border-red-500' : ''}
                 />
                 {errors.hours && (

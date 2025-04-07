@@ -1,6 +1,6 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatCurrency } from '@/lib/format-utils';
+import { formatCurrency, formatHours } from '@/lib/format-utils';
 
 interface MonthlyRevenueData {
   month: number;
@@ -36,11 +36,11 @@ const MonthlyRevenueChart = ({ data, loading = false }: MonthlyRevenueChartProps
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="name" />
         <YAxis yAxisId="left" orientation="left" tickFormatter={(value) => formatCurrency(value, { notation: 'compact' })} />
-        <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${value}h`} />
+        <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${formatHours(value)}h`} />
         <Tooltip 
           formatter={(value, name) => {
             if (name === 'Revenue') return formatCurrency(value as number);
-            if (name === 'Hours') return `${value} hours`;
+            if (name === 'Hours') return `${formatHours(value as number)} hours`;
             return value;
           }}
         />

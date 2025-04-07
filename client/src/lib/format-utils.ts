@@ -57,11 +57,11 @@ export function formatNumber(value: number | string | null | undefined, decimals
   }).format(numValue);
 }
 
-// Format hours with proper decimal places
+// Format hours with exactly 2 decimal places
 export function formatHours(hours: number | string | null | undefined): string {
   if (hours === null || hours === undefined) {
     return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 1,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(0);
   }
@@ -71,13 +71,13 @@ export function formatHours(hours: number | string | null | undefined): string {
   // Handle NaN
   if (isNaN(numHours)) {
     return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 1,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(0);
   }
   
   return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 1,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(numHours);
 }

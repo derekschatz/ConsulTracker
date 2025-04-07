@@ -86,6 +86,30 @@ const Invoices = () => {
   useEffect(() => {
     fetchAllClients();
   }, []);
+  
+  // Add event listener for opening email modal from preview modal
+  useEffect(() => {
+    const handleOpenEmailModal = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const invoiceId = customEvent.detail?.invoiceId;
+      
+      if (invoiceId) {
+        console.log(`Email modal requested for invoice ID: ${invoiceId}`);
+        // Find the invoice by ID
+        const invoice = invoices.find(inv => inv.id === invoiceId);
+        if (invoice) {
+          setCurrentInvoice(invoice);
+          setIsEmailModalOpen(true);
+        }
+      }
+    };
+    
+    window.addEventListener('openEmailModal', handleOpenEmailModal);
+    
+    return () => {
+      window.removeEventListener('openEmailModal', handleOpenEmailModal);
+    };
+  }, [invoices]);
 
   // Function to fetch all clients
   const fetchAllClients = async () => {

@@ -22,10 +22,10 @@ export function generateInvoicePDF(
 ): jsPDF {
   // Default options
   const defaultOptions: InvoiceGeneratorOptions = {
-    companyName: 'Your Consulting Services',
-    companyAddress: '123 Business St, Business City, 12345',
-    companyEmail: 'contact@yourcompany.com',
-    companyPhone: '(123) 456-7890',
+    companyName: 'Derek Schatz',
+    companyAddress: '100 Danby Court\nChurchville, PA 18966',
+    companyEmail: 'bobschatz@agileinfusion.com',
+    companyPhone: '(215) 435-3240',
     footerText: 'Thank you for your business!',
   };
 
@@ -35,113 +35,146 @@ export function generateInvoicePDF(
   // Create PDF document
   const doc = new jsPDF();
 
-  // Add header with logo if available
+  // Page width for alignment
   const pageWidth = doc.internal.pageSize.getWidth();
-  doc.setFontSize(20);
-  doc.setTextColor(0, 51, 102); // Dark blue for header
-  doc.text("INVOICE", pageWidth / 2, 20, { align: 'center' });
-
-  // Company information
-  doc.setFontSize(12);
-  doc.setTextColor(0, 0, 0);
-  doc.text(opts.companyName!, 14, 30);
-  doc.setFontSize(10);
-  doc.text(opts.companyAddress!, 14, 35);
-  doc.text(`Email: ${opts.companyEmail}`, 14, 40);
-  doc.text(`Phone: ${opts.companyPhone}`, 14, 45);
-
-  // Invoice details
-  doc.setFontSize(12);
-  doc.setTextColor(0, 51, 102);
-  doc.text("Invoice Details", pageWidth - 90, 30);
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text(`Invoice Number: ${invoice.invoiceNumber}`, pageWidth - 90, 35);
-  doc.text(`Issue Date: ${formatDate(invoice.issueDate)}`, pageWidth - 90, 40);
-  doc.text(`Due Date: ${formatDate(invoice.dueDate)}`, pageWidth - 90, 45);
-
-  // Bill to
-  doc.setFontSize(12);
-  doc.setTextColor(0, 51, 102);
-  doc.text("Bill To:", 14, 60);
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text(invoice.clientName, 14, 65);
-
-  // Period
-  doc.setFontSize(10);
-  doc.text(`Billing Period: ${formatDate(invoice.periodStart)} - ${formatDate(invoice.periodEnd)}`, 14, 75);
-
-  // Line items
-  doc.setFontSize(12);
-  doc.setTextColor(0, 51, 102);
-  doc.text("Services", 14, 90);
-
-  // Format line items for autotable
-  const lineItems = (invoice.lineItems || []).map(item => [
-    formatDate(item.description?.includes('Date:') ? item.description.split('Date:')[1]?.trim() : ''),
-    item.description || 'Service',
-    formatHours(item.hours || 0),
-    formatCurrency(item.rate || 0),
-    formatCurrency(item.amount || 0)
-  ]);
-
-  // Add table with line items - use imported autoTable function
-  autoTable(doc, {
-    startY: 95,
-    head: [['Date', 'Description', 'Hours', 'Rate', 'Amount']],
-    body: lineItems.length > 0 ? lineItems : [['', 'No line items', '', '', '']],
-    theme: 'striped',
-    headStyles: {
-      fillColor: [0, 51, 102],
-      textColor: [255, 255, 255]
-    },
-    styles: {
-      cellPadding: 5,
-      fontSize: 10
-    },
-    columnStyles: {
-      0: { cellWidth: 25 },
-      1: { cellWidth: 'auto' },
-      2: { cellWidth: 20, halign: 'right' },
-      3: { cellWidth: 25, halign: 'right' },
-      4: { cellWidth: 30, halign: 'right' }
-    }
-  });
-
-  // Get the final Y position after the table
-  // @ts-ignore - Access internal API
-  const finalY = (doc as any).lastAutoTable?.finalY || 150;
-
-  // Totals
-  doc.setFontSize(11);
-  doc.text("Total Hours:", pageWidth - 80, finalY + 15);
-  doc.text(formatHours(invoice.totalHours), pageWidth - 20, finalY + 15, { align: 'right' });
   
-  doc.setFontSize(12);
+  // Company information (left side)
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text("Total Amount:", pageWidth - 80, finalY + 25);
-  doc.text(formatCurrency(invoice.amount), pageWidth - 20, finalY + 25, { align: 'right' });
+  doc.setTextColor(0, 0, 0);
+  doc.text(opts.companyName!, 14, 20);
+  
+  // Tagline in blue
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(0, 0, 255); // Blue color
+  doc.text("Learning Through Experience", 14, 26);
+  
+  // Company details
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Agile Infusion, LLC", 14, 34);
+  doc.text(opts.companyAddress!.split('\n'), 14, 39);
+  doc.text(`Phone ${opts.companyPhone}`, 14, 49);
+  doc.text(opts.companyEmail!, 14, 54);
+  doc.text(`Federal Tax ID: 20-5199056`, 14, 59);
 
-  // Add notes if present
-  if (invoice.notes) {
-    doc.setFontSize(11);
-    doc.setTextColor(0, 51, 102);
-    doc.text("Notes:", 14, finalY + 40);
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.text(invoice.notes, 14, finalY + 45);
+  // INVOICE on right side
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text("INVOICE", pageWidth - 14, 20, { align: 'right' });
+  
+  // Invoice details on right
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`INVOICE #${invoice.invoiceNumber}`, pageWidth - 14, 30, { align: 'right' });
+  doc.text(`DATE: ${formatDate(invoice.issueDate).toUpperCase()}`, pageWidth - 14, 35, { align: 'right' });
+
+  // Bill to section
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text("TO:", 14, 75);
+  doc.setFont('helvetica', 'normal');
+  doc.text(invoice.clientName, 14, 80);
+  // Placeholder for more client info that would be added later
+  
+  // For section - project details
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text("FOR:", pageWidth - 90, 75);
+  doc.setFont('helvetica', 'normal');
+  doc.text(invoice.projectName || "Consulting Services", pageWidth - 90, 80);
+  
+  // Table for line items
+  const startY = 100;
+  
+  // Define table headers
+  doc.setFillColor(255, 255, 255); // White background
+  doc.setDrawColor(0, 0, 0); // Black border
+  doc.setLineWidth(0.1);
+  
+  // Draw table header
+  doc.setFont('helvetica', 'bold');
+  doc.rect(14, startY, pageWidth - 28, 10, 'S');
+  doc.text("DESCRIPTION", 24, startY + 7);
+  doc.text("HOURS", pageWidth - 95, startY + 7, { align: 'center' });
+  doc.text("RATE", pageWidth - 55, startY + 7, { align: 'center' });
+  doc.text("AMOUNT", pageWidth - 20, startY + 7, { align: 'right' });
+  
+  // Format line items
+  let currentY = startY + 10;
+  
+  // If there are line items, display them
+  if (invoice.lineItems && invoice.lineItems.length > 0) {
+    // Main line items
+    invoice.lineItems.forEach((item, index) => {
+      // Extract the project description without the date information
+      let description = item.description || '';
+      if (description.includes('Date:')) {
+        description = description.split('Date:')[0].trim();
+      }
+      
+      // For the example format, we'll create a period/date range description
+      const projectDesc = `Consultant ${invoice.projectName || "Services"} Activities`;
+      const period = `Period: ${formatDate(invoice.periodStart)}-${formatDate(invoice.periodEnd)}`;
+      const finalNote = invoice.status === 'final' ? '****Final Invoice****' : '';
+      
+      if (index === 0) {
+        // Draw first row with description
+        doc.setFont('helvetica', 'normal');
+        doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+        doc.text(projectDesc, 24, currentY + 7);
+        
+        // Add period on the next line
+        currentY += 10;
+        doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+        doc.text(period, 24, currentY + 7);
+        
+        // If final invoice, add that note
+        if (finalNote) {
+          currentY += 10;
+          doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+          doc.text(finalNote, 24, currentY + 7);
+        }
+        
+        // Add hours, rate and amount only to the first row
+        doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
+        doc.text(`$${item.rate}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
+        doc.text(`$${parseFloat(String(invoice.amount)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, pageWidth - 20, startY + 17, { align: 'right' });
+      }
+    });
+  } else {
+    // If no line items, show placeholder
+    doc.setFont('helvetica', 'normal');
+    doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+    doc.text("No items", 24, currentY + 7);
+    currentY += 10;
   }
-
+  
+  // Add empty rows to make the table look fuller
+  const emptyRows = 3 - (invoice.lineItems?.length || 0);
+  for (let i = 0; i < emptyRows; i++) {
+    doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+    currentY += 10;
+  }
+  
+  // Add total row
+  doc.setFont('helvetica', 'bold');
+  doc.text("TOTAL", pageWidth - 65, currentY + 15);
+  doc.text(`$${parseFloat(String(invoice.amount)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, pageWidth - 20, currentY + 15, { align: 'right' });
+  
+  // Add payment instructions
+  currentY += 35;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Make all checks payable to ${opts.companyName}`, 14, currentY);
+  doc.text(`Total due in 30 days.`, 14, currentY + 5);
+  
   // Add footer
   doc.setFontSize(10);
-  doc.setTextColor(128, 128, 128);
-  doc.text(opts.footerText!, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-
-  // Add page number
-  doc.setFontSize(8);
-  doc.text(`Page 1 of 1`, pageWidth - 20, doc.internal.pageSize.getHeight() - 10, { align: 'right' });
+  doc.text(opts.footerText!, pageWidth / 2, doc.internal.pageSize.getHeight() - 20, { align: 'center' });
 
   return doc;
 }
@@ -173,10 +206,10 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   
   // Default options 
   const defaultOptions: InvoiceGeneratorOptions = {
-    companyName: 'Your Consulting Services',
-    companyAddress: '123 Business St, Business City, 12345',
-    companyEmail: 'contact@yourcompany.com',
-    companyPhone: '(123) 456-7890',
+    companyName: 'Derek Schatz',
+    companyAddress: '100 Danby Court\nChurchville, PA 18966',
+    companyEmail: 'bobschatz@agileinfusion.com',
+    companyPhone: '(215) 435-3240',
     footerText: 'Thank you for your business!',
   };
 
@@ -186,115 +219,146 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   // Create PDF document using the global jsPDF
   const doc = new jsPDF() as any;
   
-  // Rest of the implementation is the same as generateInvoicePDF
-  // but uses the doc.autoTable method directly instead of the imported autoTable function
-  
-  // Add header with logo if available
+  // Page width for alignment
   const pageWidth = doc.internal.pageSize.getWidth();
-  doc.setFontSize(20);
-  doc.setTextColor(0, 51, 102); // Dark blue for header
-  doc.text("INVOICE", pageWidth / 2, 20, { align: 'center' });
-
-  // Company information
-  doc.setFontSize(12);
-  doc.setTextColor(0, 0, 0);
-  doc.text(opts.companyName!, 14, 30);
-  doc.setFontSize(10);
-  doc.text(opts.companyAddress!, 14, 35);
-  doc.text(`Email: ${opts.companyEmail}`, 14, 40);
-  doc.text(`Phone: ${opts.companyPhone}`, 14, 45);
-
-  // Invoice details
-  doc.setFontSize(12);
-  doc.setTextColor(0, 51, 102);
-  doc.text("Invoice Details", pageWidth - 90, 30);
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text(`Invoice Number: ${invoice.invoiceNumber}`, pageWidth - 90, 35);
-  doc.text(`Issue Date: ${formatDate(invoice.issueDate)}`, pageWidth - 90, 40);
-  doc.text(`Due Date: ${formatDate(invoice.dueDate)}`, pageWidth - 90, 45);
-
-  // Bill to
-  doc.setFontSize(12);
-  doc.setTextColor(0, 51, 102);
-  doc.text("Bill To:", 14, 60);
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text(invoice.clientName, 14, 65);
-
-  // Period
-  doc.setFontSize(10);
-  doc.text(`Billing Period: ${formatDate(invoice.periodStart)} - ${formatDate(invoice.periodEnd)}`, 14, 75);
-
-  // Line items
-  doc.setFontSize(12);
-  doc.setTextColor(0, 51, 102);
-  doc.text("Services", 14, 90);
-
-  // Format line items for autotable
-  const lineItems = (invoice.lineItems || []).map(item => [
-    formatDate(item.description?.includes('Date:') ? item.description.split('Date:')[1]?.trim() : ''),
-    item.description || 'Service',
-    formatHours(item.hours || 0),
-    formatCurrency(item.rate || 0),
-    formatCurrency(item.amount || 0)
-  ]);
-
-  // Use the autoTable method directly on the doc object
-  doc.autoTable({
-    startY: 95,
-    head: [['Date', 'Description', 'Hours', 'Rate', 'Amount']],
-    body: lineItems.length > 0 ? lineItems : [['', 'No line items', '', '', '']],
-    theme: 'striped',
-    headStyles: {
-      fillColor: [0, 51, 102],
-      textColor: [255, 255, 255]
-    },
-    styles: {
-      cellPadding: 5,
-      fontSize: 10
-    },
-    columnStyles: {
-      0: { cellWidth: 25 },
-      1: { cellWidth: 'auto' },
-      2: { cellWidth: 20, halign: 'right' },
-      3: { cellWidth: 25, halign: 'right' },
-      4: { cellWidth: 30, halign: 'right' }
-    }
-  });
-
-  // Calculate total position (after table)
-  const finalY = (doc as any).lastAutoTable?.finalY || 150;
-
-  // Totals
-  doc.setFontSize(11);
-  doc.text("Total Hours:", pageWidth - 80, finalY + 15);
-  doc.text(formatHours(invoice.totalHours), pageWidth - 20, finalY + 15, { align: 'right' });
   
-  doc.setFontSize(12);
+  // Company information (left side)
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text("Total Amount:", pageWidth - 80, finalY + 25);
-  doc.text(formatCurrency(invoice.amount), pageWidth - 20, finalY + 25, { align: 'right' });
+  doc.setTextColor(0, 0, 0);
+  doc.text(opts.companyName!, 14, 20);
+  
+  // Tagline in blue
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(0, 0, 255); // Blue color
+  doc.text("Learning Through Experience", 14, 26);
+  
+  // Company details
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Agile Infusion, LLC", 14, 34);
+  doc.text(opts.companyAddress!.split('\n'), 14, 39);
+  doc.text(`Phone ${opts.companyPhone}`, 14, 49);
+  doc.text(opts.companyEmail!, 14, 54);
+  doc.text(`Federal Tax ID: 20-5199056`, 14, 59);
 
-  // Add notes if present
-  if (invoice.notes) {
-    doc.setFontSize(11);
-    doc.setTextColor(0, 51, 102);
-    doc.text("Notes:", 14, finalY + 40);
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.text(invoice.notes, 14, finalY + 45);
+  // INVOICE on right side
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text("INVOICE", pageWidth - 14, 20, { align: 'right' });
+  
+  // Invoice details on right
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`INVOICE #${invoice.invoiceNumber}`, pageWidth - 14, 30, { align: 'right' });
+  doc.text(`DATE: ${formatDate(invoice.issueDate).toUpperCase()}`, pageWidth - 14, 35, { align: 'right' });
+
+  // Bill to section
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text("TO:", 14, 75);
+  doc.setFont('helvetica', 'normal');
+  doc.text(invoice.clientName, 14, 80);
+  // Placeholder for more client info that would be added later
+  
+  // For section - project details
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text("FOR:", pageWidth - 90, 75);
+  doc.setFont('helvetica', 'normal');
+  doc.text(invoice.projectName || "Consulting Services", pageWidth - 90, 80);
+  
+  // Table for line items
+  const startY = 100;
+  
+  // Define table headers
+  doc.setFillColor(255, 255, 255); // White background
+  doc.setDrawColor(0, 0, 0); // Black border
+  doc.setLineWidth(0.1);
+  
+  // Draw table header
+  doc.setFont('helvetica', 'bold');
+  doc.rect(14, startY, pageWidth - 28, 10, 'S');
+  doc.text("DESCRIPTION", 24, startY + 7);
+  doc.text("HOURS", pageWidth - 95, startY + 7, { align: 'center' });
+  doc.text("RATE", pageWidth - 55, startY + 7, { align: 'center' });
+  doc.text("AMOUNT", pageWidth - 20, startY + 7, { align: 'right' });
+  
+  // Format line items
+  let currentY = startY + 10;
+  
+  // If there are line items, display them
+  if (invoice.lineItems && invoice.lineItems.length > 0) {
+    // Main line items
+    invoice.lineItems.forEach((item, index) => {
+      // Extract the project description without the date information
+      let description = item.description || '';
+      if (description.includes('Date:')) {
+        description = description.split('Date:')[0].trim();
+      }
+      
+      // For the example format, we'll create a period/date range description
+      const projectDesc = `Consultant ${invoice.projectName || "Services"} Activities`;
+      const period = `Period: ${formatDate(invoice.periodStart)}-${formatDate(invoice.periodEnd)}`;
+      const finalNote = invoice.status === 'final' ? '****Final Invoice****' : '';
+      
+      if (index === 0) {
+        // Draw first row with description
+        doc.setFont('helvetica', 'normal');
+        doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+        doc.text(projectDesc, 24, currentY + 7);
+        
+        // Add period on the next line
+        currentY += 10;
+        doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+        doc.text(period, 24, currentY + 7);
+        
+        // If final invoice, add that note
+        if (finalNote) {
+          currentY += 10;
+          doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+          doc.text(finalNote, 24, currentY + 7);
+        }
+        
+        // Add hours, rate and amount only to the first row
+        doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
+        doc.text(`$${item.rate}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
+        doc.text(`$${parseFloat(String(invoice.amount)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, pageWidth - 20, startY + 17, { align: 'right' });
+      }
+    });
+  } else {
+    // If no line items, show placeholder
+    doc.setFont('helvetica', 'normal');
+    doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+    doc.text("No items", 24, currentY + 7);
+    currentY += 10;
   }
-
+  
+  // Add empty rows to make the table look fuller
+  const emptyRows = 3 - (invoice.lineItems?.length || 0);
+  for (let i = 0; i < emptyRows; i++) {
+    doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+    currentY += 10;
+  }
+  
+  // Add total row
+  doc.setFont('helvetica', 'bold');
+  doc.text("TOTAL", pageWidth - 65, currentY + 15);
+  doc.text(`$${parseFloat(String(invoice.amount)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, pageWidth - 20, currentY + 15, { align: 'right' });
+  
+  // Add payment instructions
+  currentY += 35;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Make all checks payable to ${opts.companyName}`, 14, currentY);
+  doc.text(`Total due in 30 days.`, 14, currentY + 5);
+  
   // Add footer
   doc.setFontSize(10);
-  doc.setTextColor(128, 128, 128);
-  doc.text(opts.footerText!, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-
-  // Add page number
-  doc.setFontSize(8);
-  doc.text(`Page 1 of 1`, pageWidth - 20, doc.internal.pageSize.getHeight() - 10, { align: 'right' });
+  doc.text(opts.footerText!, pageWidth / 2, doc.internal.pageSize.getHeight() - 20, { align: 'center' });
 
   return doc;
 }
@@ -389,7 +453,33 @@ export function downloadInvoice(invoice: InvoiceWithLineItems): void {
   }
 }
 
+// Add this new function to generate a Blob URL instead of a data URI
+export function generateInvoiceBlobUrl(invoice: InvoiceWithLineItems): string {
+  try {
+    // Generate the PDF document
+    const doc = generateInvoicePDF(invoice);
+    
+    // Get the raw PDF data as an array buffer
+    const pdfData = doc.output('arraybuffer');
+    
+    // Create a Blob from the PDF data
+    const blob = new Blob([pdfData], { type: 'application/pdf' });
+    
+    // Create and return a blob URL
+    return URL.createObjectURL(blob);
+  } catch (error) {
+    console.error('Error generating PDF blob URL:', error);
+    throw new Error(`Failed to generate invoice PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// Update the data URI function to use the blob approach for consistency
 export function generateInvoiceDataUrl(invoice: InvoiceWithLineItems): string {
-  const doc = generateInvoicePDF(invoice);
-  return doc.output('datauristring');
+  try {
+    // Use the blob URL approach which works better with Chrome security policies
+    return generateInvoiceBlobUrl(invoice);
+  } catch (error) {
+    console.error('Error generating PDF data URL:', error);
+    throw new Error(`Failed to generate invoice PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }

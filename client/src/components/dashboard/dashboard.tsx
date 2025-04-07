@@ -7,7 +7,7 @@ import MetricCard from './metric-card';
 import MonthlyRevenueChart from './monthly-revenue-chart';
 import QuickAddTimeForm from './quick-add-time-form';
 import RecentActivity from './recent-activity';
-import { formatCurrency } from '@/lib/format-utils';
+import { formatCurrency, formatHours } from '@/lib/format-utils';
 import { getCurrentYear } from '@/lib/date-utils';
 
 const Dashboard = () => {
@@ -70,7 +70,7 @@ const Dashboard = () => {
         />
         <MetricCard
           title="Hours This Month"
-          value={isLoadingStats ? "Loading..." : stats?.monthlyHours || 0}
+          value={isLoadingStats ? "Loading..." : formatHours(stats?.monthlyHours || 0)}
           subtitle="74.5 billable hours"
           loading={isLoadingStats}
         />
