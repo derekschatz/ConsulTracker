@@ -284,7 +284,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Convert hourlyRate to a number if it's a string
         hourlyRate: typeof req.body.hourlyRate === 'string' 
           ? Number(req.body.hourlyRate) 
-          : req.body.hourlyRate
+          : req.body.hourlyRate,
+        // Ensure status is a string
+        status: req.body.status?.toString() || 'active'
       };
       
       console.log("Processed data before validation:", processedData);
@@ -350,6 +352,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert hourlyRate if it's a string
       if (processedData.hourlyRate && typeof processedData.hourlyRate === 'string') {
         processedData.hourlyRate = Number(processedData.hourlyRate);
+      }
+      
+      // Ensure status is a string if present
+      if (processedData.status !== undefined) {
+        processedData.status = processedData.status.toString();
       }
       
       console.log("Processed data for update:", processedData);
