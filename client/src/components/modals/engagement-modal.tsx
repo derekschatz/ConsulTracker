@@ -21,6 +21,9 @@ const formSchema = insertEngagementSchema
       message: 'Hourly rate must be a positive number',
     }),
   })
+  .omit({ 
+    userId: true // We'll add this on the server
+  })
   .refine(data => {
     // Parse dates for comparison
     const startDate = new Date(data.startDate);
