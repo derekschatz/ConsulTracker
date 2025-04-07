@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, numeric, doublePrecision, boolean, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, numeric, doublePrecision, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -35,6 +35,7 @@ export type InvoiceStatus = z.infer<typeof invoiceStatusEnum>;
 // Client table
 export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   name: text("name").notNull(),
 });
 
@@ -43,12 +44,14 @@ export const clientsRelations = relations(clients, ({ many }) => ({
 }));
 
 export const insertClientSchema = createInsertSchema(clients).pick({
+  userId: true,
   name: true,
 });
 
 // Engagements table
 export const engagements = pgTable("engagements", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   clientName: text("client_name").notNull(),
   projectName: text("project_name").notNull(),
   startDate: timestamp("start_date").notNull(),
@@ -64,6 +67,7 @@ export const engagementsRelations = relations(engagements, ({ many }) => ({
 }));
 
 export const insertEngagementSchema = createInsertSchema(engagements).pick({
+  userId: true,
   clientName: true,
   projectName: true,
   startDate: true,
@@ -76,6 +80,7 @@ export const insertEngagementSchema = createInsertSchema(engagements).pick({
 // Time logs table
 export const timeLogs = pgTable("time_logs", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   engagementId: integer("engagement_id").notNull(),
   date: timestamp("date").notNull(),
   hours: doublePrecision("hours").notNull(),
@@ -91,6 +96,7 @@ export const timeLogsRelations = relations(timeLogs, ({ one }) => ({
 }));
 
 export const insertTimeLogSchema = createInsertSchema(timeLogs).pick({
+  userId: true,
   engagementId: true,
   date: true,
   hours: true,
@@ -100,6 +106,7 @@ export const insertTimeLogSchema = createInsertSchema(timeLogs).pick({
 // Invoices table
 export const invoices = pgTable("invoices", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   invoiceNumber: text("invoice_number").notNull(),
   clientName: text("client_name").notNull(),
   engagementId: integer("engagement_id").notNull(),
@@ -122,6 +129,7 @@ export const invoicesRelations = relations(invoices, ({ one, many }) => ({
 }));
 
 export const insertInvoiceSchema = createInsertSchema(invoices).pick({
+  userId: true,
   invoiceNumber: true,
   clientName: true,
   engagementId: true,

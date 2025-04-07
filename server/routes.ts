@@ -127,8 +127,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Engagement routes
   app.get("/api/engagements", async (req, res) => {
     try {
-      // Get all engagements first
-      let engagements = await storage.getEngagements();
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      // Get engagements filtered by userId if authenticated
+      let engagements = await storage.getEngagements(userId);
       
       // Update status for all engagements based on current date and their date ranges
       engagements = engagements.map(engagement => {
@@ -194,9 +197,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/engagements/active", async (_req, res) => {
+  app.get("/api/engagements/active", async (req, res) => {
     try {
-      let engagements = await storage.getActiveEngagements();
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      let engagements = await storage.getActiveEngagements(userId);
       
       // Update status for all engagements based on current date and their date ranges
       engagements = engagements.map(engagement => {
@@ -341,6 +347,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Time Log routes
   app.get("/api/time-logs", async (req, res) => {
     try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
       const engagementId = req.query.engagementId ? Number(req.query.engagementId) : undefined;
       const clientName = req.query.client as string | undefined;
       const dateRange = req.query.dateRange as string | undefined;
@@ -349,6 +358,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const search = req.query.search as string | undefined;
 
       console.log('Time log request params:', {
+        userId,
         engagementId,
         clientName,
         dateRange,
@@ -372,20 +382,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         endDate = range.endDate;
         console.log('Using date range:', dateRange, startDate, 'to', endDate);
       } else {
-        // Default to all time logs
-        timeLogs = await storage.getTimeLogs();
-        console.log('Getting all time logs');
+        // Default to all time logs for this user
+        timeLogs = await storage.getTimeLogs(userId);
+        console.log('Getting all time logs for user');
       }
 
       // Get logs filtered by date range if we have dates
       if (startDate && endDate) {
-        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate);
+        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate, userId);
       } else if (engagementId) {
         // Filter by specific engagement ID
-        timeLogs = await storage.getTimeLogsByEngagement(engagementId);
+        timeLogs = await storage.getTimeLogsByEngagement(engagementId, userId);
       } else if (!timeLogs) {
         // If we haven't loaded logs yet, get all of them
-        timeLogs = await storage.getTimeLogs();
+        timeLogs = await storage.getTimeLogs(userId);
       }
       
       // If client filter is applied, filter the results by client name
@@ -412,7 +422,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/time-logs/:id", async (req, res) => {
     try {
-      const timeLog = await storage.getTimeLog(Number(req.params.id));
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      const timeLog = await storage.getTimeLog(Number(req.params.id), userId);
       if (!timeLog) {
         return res.status(404).json({ message: "Time log not found" });
       }
@@ -424,12 +437,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/time-logs", async (req, res) => {
     try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to create time logs" });
+      }
+      
       const validationResult = insertTimeLogSchema.safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid time log data", errors: validationResult.error.errors });
       }
 
-      const timeLog = await storage.createTimeLog(validationResult.data);
+      // Add the user ID to the time log data
+      const timeLogData = {
+        ...validationResult.data,
+        userId: (req.user as any).id
+      };
+
+      const timeLog = await storage.createTimeLog(timeLogData);
       res.status(201).json(timeLog);
     } catch (error) {
       res.status(500).json({ message: "Failed to create time log" });
@@ -438,13 +462,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/time-logs/:id", async (req, res) => {
     try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to update time logs" });
+      }
+      
       const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
       const validationResult = insertTimeLogSchema.partial().safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid time log data", errors: validationResult.error.errors });
       }
 
-      const updatedTimeLog = await storage.updateTimeLog(id, validationResult.data);
+      const updatedTimeLog = await storage.updateTimeLog(id, validationResult.data, userId);
       if (!updatedTimeLog) {
         return res.status(404).json({ message: "Time log not found" });
       }
@@ -456,8 +487,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/time-logs/:id", async (req, res) => {
     try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to delete time logs" });
+      }
+      
       const id = Number(req.params.id);
-      const success = await storage.deleteTimeLog(id);
+      const userId = (req.user as any).id;
+      
+      const success = await storage.deleteTimeLog(id, userId);
       if (!success) {
         return res.status(404).json({ message: "Time log not found" });
       }
@@ -498,6 +536,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/invoices", async (req: Request, res: Response) => {
     try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
       // Check for overdue invoices before returning results
       await checkAndUpdateOverdueInvoices();
       
@@ -510,6 +551,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       `;
       const params: any[] = [];
 
+      // Add user filter if authenticated
+      if (userId !== undefined) {
+        query += ` AND i.user_id = $${params.length + 1}`;
+        params.push(userId);
+      }
+      
       // Apply status filter
       if (status && status !== 'all') {
         query += ` AND i.status = $${params.length + 1}`;
@@ -551,6 +598,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices/:id", async (req, res) => {
     try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
       const invoiceId = Number(req.params.id);
       
       if (isNaN(invoiceId) || invoiceId <= 0) {
@@ -559,7 +609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`Fetching invoice details for ID: ${invoiceId}`);
-      const invoice = await storage.getInvoice(invoiceId);
+      const invoice = await storage.getInvoice(invoiceId, userId);
       
       if (!invoice) {
         console.error(`Invoice not found with ID: ${invoiceId}`);
@@ -591,6 +641,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/invoices', async (req: Request, res: Response) => {
     try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to create invoices" });
+      }
+      
+      const userId = (req.user as any).id;
       const { engagementId, timeLogs = [] } = req.body;
 
       // Validate required fields
@@ -605,8 +661,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get engagement details
       const engagementResult = await pool.query(
-        'SELECT client_name, project_name, hourly_rate FROM engagements WHERE id = $1',
-        [engagementId]
+        'SELECT client_name, project_name, hourly_rate FROM engagements WHERE id = $1 AND user_id = $2',
+        [engagementId, userId]
       );
       
       if (engagementResult.rows.length === 0) {
@@ -622,7 +678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sum + (parseFloat(log.amount) || 0), 0);
       
       const invoiceResult = await pool.query(
-        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end, project_name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id',
+        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end, project_name, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id',
         [
           engagementId, 
           'submitted', 
@@ -633,7 +689,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalAmount,
           req.body.periodStart || today, 
           req.body.periodEnd || today,
-          projectName
+          projectName,
+          userId
         ]
       );
       
@@ -668,7 +725,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/invoices/:id/status", async (req, res) => {
     try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to update invoice status" });
+      }
+      
       const id = Number(req.params.id);
+      const userId = (req.user as any).id;
       const statusSchema = z.object({ status: z.string() });
       
       const validationResult = statusSchema.safeParse(req.body);
@@ -676,7 +739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid status data", errors: validationResult.error.errors });
       }
 
-      const updatedInvoice = await storage.updateInvoiceStatus(id, validationResult.data.status);
+      const updatedInvoice = await storage.updateInvoiceStatus(id, validationResult.data.status, userId);
       if (!updatedInvoice) {
         return res.status(404).json({ message: "Invoice not found" });
       }
@@ -688,8 +751,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/invoices/:id", async (req, res) => {
     try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to delete invoices" });
+      }
+      
       const id = Number(req.params.id);
-      const success = await storage.deleteInvoice(id);
+      const userId = (req.user as any).id;
+      
+      const success = await storage.deleteInvoice(id, userId);
       if (!success) {
         return res.status(404).json({ message: "Invoice not found" });
       }
@@ -702,9 +772,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard routes
   app.get("/api/dashboard/ytd-revenue", async (req, res) => {
     try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
       // Default to 2025 for current year if no year is provided
       const year = Number(req.query.year) || 2025;
-      const revenue = await storage.getYtdRevenue(year);
+      const revenue = await storage.getYtdRevenue(year, userId);
       res.json({ revenue });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch YTD revenue" });
@@ -713,9 +786,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/monthly-revenue", async (req, res) => {
     try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
       // Default to 2025 for current year if no year is provided
       const year = Number(req.query.year) || 2025;
-      const monthlyData = await storage.getMonthlyRevenueBillable(year);
+      const monthlyData = await storage.getMonthlyRevenueBillable(year, userId);
       res.json(monthlyData);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch monthly revenue" });
@@ -724,6 +800,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
       // Using 2025 as the reference year for current data
       const demoYear = 2025;
       const demoMonth = 3; // April (0-based index)
@@ -743,10 +822,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         monthlyHours,
         pendingInvoicesTotal
       ] = await Promise.all([
-        storage.getActiveEngagements(),
-        storage.getYtdRevenue(demoYear),
-        storage.getTotalHoursLogged(startOfMonth, endOfMonth),
-        storage.getPendingInvoicesTotal()
+        storage.getActiveEngagements(userId),
+        storage.getYtdRevenue(demoYear, userId),
+        storage.getTotalHoursLogged(startOfMonth, endOfMonth, userId),
+        storage.getPendingInvoicesTotal(userId)
       ]);
 
       res.json({
@@ -763,8 +842,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Email invoice endpoint
   app.post("/api/invoices/:id/email", async (req, res) => {
     try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to email invoices" });
+      }
+      
       const id = Number(req.params.id);
-      const invoice = await storage.getInvoice(id);
+      const userId = (req.user as any).id;
+      
+      const invoice = await storage.getInvoice(id, userId);
       
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
