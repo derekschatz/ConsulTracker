@@ -274,15 +274,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid request format" });
       }
 
-      const dataWithUserId = {
+      // Process data to match expected types in schema
+      const processedData = {
         ...req.body,
-        userId
+        userId,
+        // Convert string dates to Date objects
+        startDate: new Date(req.body.startDate),
+        endDate: new Date(req.body.endDate),
+        // Convert hourlyRate to a number if it's a string
+        hourlyRate: typeof req.body.hourlyRate === 'string' 
+          ? Number(req.body.hourlyRate) 
+          : req.body.hourlyRate
       };
       
-      console.log("Data with userId added:", dataWithUserId);
+      console.log("Processed data before validation:", processedData);
 
       // Parse and validate the engagement data
-      const result = insertEngagementSchema.safeParse(dataWithUserId);
+      const result = insertEngagementSchema.safeParse(processedData);
 
       if (!result.success) {
         console.log("Validation failed:", result.error);
@@ -328,7 +336,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the user ID from the session
       const userId = (req.user as any).id;
       
-      const validationResult = insertEngagementSchema.partial().safeParse(req.body);
+      // Process data to fix types before validation
+      const processedData: any = {...req.body};
+      
+      // Convert dates if present
+      if (processedData.startDate) {
+        processedData.startDate = new Date(processedData.startDate);
+      }
+      if (processedData.endDate) {
+        processedData.endDate = new Date(processedData.endDate);
+      }
+      
+      // Convert hourlyRate if it's a string
+      if (processedData.hourlyRate && typeof processedData.hourlyRate === 'string') {
+        processedData.hourlyRate = Number(processedData.hourlyRate);
+      }
+      
+      console.log("Processed data for update:", processedData);
+      
+      const validationResult = insertEngagementSchema.partial().safeParse(processedData);
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
       }
