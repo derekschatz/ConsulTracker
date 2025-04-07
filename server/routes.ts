@@ -7,6 +7,7 @@ import {
   insertInvoiceSchema,
   calculateEngagementStatus
 } from "@shared/schema";
+import { setupAuth } from "./auth";
 import { z } from "zod";
 import nodemailer from "nodemailer";
 import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
@@ -118,6 +119,9 @@ interface InvoiceItem {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Set up authentication
+  setupAuth(app);
+  
   // prefix all routes with /api
 
   // Engagement routes

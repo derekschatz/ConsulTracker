@@ -5,13 +5,22 @@ import {
   type Invoice, type InsertInvoice,
   type InvoiceLineItem, type InsertInvoiceLineItem,
   type TimeLogWithEngagement, type InvoiceWithLineItems,
-  engagements, timeLogs, invoices, invoiceLineItems
+  type User, type InsertUser,
+  engagements, timeLogs, invoices, invoiceLineItems, users
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
 
 // Modify the interface with any CRUD methods
 export interface IStorage {
+  // Authentication
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  
   // Engagements
   getEngagements(): Promise<Engagement[]>;
   getEngagement(id: number): Promise<Engagement | undefined>;
@@ -42,9 +51,39 @@ export interface IStorage {
   getMonthlyRevenueBillable(year: number): Promise<{month: number, revenue: number, billableHours: number}[]>;
   getTotalHoursLogged(startDate: Date, endDate: Date): Promise<number>;
   getPendingInvoicesTotal(): Promise<number>;
+  
+  // Session Store
+  sessionStore: any;
 }
 
 export class DatabaseStorage implements IStorage {
+  // Session store for authentication
+  sessionStore: session.Store;
+
+  constructor() {
+    const PostgresStore = connectPg(session);
+    this.sessionStore = new PostgresStore({
+      pool,
+      createTableIfMissing: true,
+    });
+  }
+
+  // User methods
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
+  }
+
   // Engagement methods
   async getEngagements(): Promise<Engagement[]> {
     return await db.select().from(engagements).orderBy(desc(engagements.startDate));

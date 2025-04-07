@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Menu,
   LayoutDashboard,
   Building2,
   Clock,
   FileText,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -18,6 +20,7 @@ interface MobileNavProps {
 const MobileNav = ({ className }: MobileNavProps) => {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const { user, logoutMutation } = useAuth();
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
@@ -126,14 +129,33 @@ const MobileNav = ({ className }: MobileNavProps) => {
           </nav>
           
           <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
-            <div className="flex items-center">
-              <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center">
-                <span className="text-sm font-medium text-slate-700">JD</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center">
+                  <span className="text-sm font-medium text-slate-700">
+                    {user?.name 
+                      ? `${user.name.split(' ')[0][0]}${user.name.split(' ')[1]?.[0] || ''}`
+                      : user?.username.substring(0, 2).toUpperCase() || 'U'}
+                  </span>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-slate-900">
+                    {user?.name || user?.username}
+                  </p>
+                  <p className="text-xs text-slate-500">Consultant</p>
+                </div>
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-slate-900">John Doe</p>
-                <p className="text-xs text-slate-500">Consultant</p>
-              </div>
+              
+              <button 
+                onClick={() => {
+                  logoutMutation.mutate();
+                  closeMenu();
+                }} 
+                className="flex items-center justify-center text-slate-500 hover:text-slate-700 p-2"
+                disabled={logoutMutation.isPending}
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>

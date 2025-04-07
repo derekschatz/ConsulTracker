@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import Sidebar from './sidebar';
 import MobileNav from './mobile-nav';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ShellProps {
   children: ReactNode;
@@ -27,7 +28,21 @@ const getPageTitle = (path: string): string => {
 const Shell = ({ children, className }: ShellProps) => {
   const [location] = useLocation();
   const pageTitle = getPageTitle(location);
+  const { user } = useAuth();
+  
+  // Check if current path is auth page
+  const isAuthPage = location === '/auth';
+  
+  // If on auth page, render only the children without navigation
+  if (isAuthPage || !user) {
+    return (
+      <div className="min-h-screen">
+        {children}
+      </div>
+    );
+  }
 
+  // Normal layout with navigation for authenticated users
   return (
     <div className="flex min-h-screen bg-slate-50">
       {/* Sidebar - Hidden on mobile */}

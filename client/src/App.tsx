@@ -8,14 +8,18 @@ import Dashboard from "@/components/dashboard/dashboard";
 import Engagements from "@/components/engagements/engagements";
 import TimeLogs from "@/components/time-logs/time-logs";
 import Invoices from "@/components/invoices/invoices";
+import AuthPage from "@/pages/auth-page";
+import { AuthProvider } from "@/hooks/use-auth";
+import { ProtectedRoute } from "@/lib/protected-route";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/engagements" component={Engagements} />
-      <Route path="/time-logs" component={TimeLogs} />
-      <Route path="/invoices" component={Invoices} />
+      <ProtectedRoute path="/" component={Dashboard} />
+      <ProtectedRoute path="/engagements" component={Engagements} />
+      <ProtectedRoute path="/time-logs" component={TimeLogs} />
+      <ProtectedRoute path="/invoices" component={Invoices} />
+      <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -24,10 +28,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Shell>
-        <Router />
-      </Shell>
-      <Toaster />
+      <AuthProvider>
+        <Shell>
+          <Router />
+        </Shell>
+        <Toaster />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
