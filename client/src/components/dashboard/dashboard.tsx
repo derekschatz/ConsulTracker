@@ -77,7 +77,7 @@ const Dashboard = () => {
         <MetricCard
           title="Pending Invoices"
           value={isLoadingStats ? "Loading..." : formatCurrency(stats?.pendingInvoicesTotal || 0)}
-          subtitle="3 invoices awaiting payment"
+          subtitle={stats?.pendingInvoicesTotal ? "Invoices awaiting payment" : "No pending invoices"}
           loading={isLoadingStats}
         />
       </div>

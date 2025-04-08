@@ -398,19 +398,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPendingInvoicesTotal(userId?: number): Promise<number> {
-    let conditions = sql`${invoices.status} = 'submitted' OR ${invoices.status} = 'overdue'`;
+    // Use the correct status enum values from the schema
+    let conditions = sql`(${invoices.status} = 'submitted' OR ${invoices.status} = 'overdue')`;
     
     if (userId) {
       conditions = and(conditions, eq(invoices.userId, userId));
     }
     
+    // Add debug logging
+    console.log(`Getting pending invoices total for userId: ${userId || 'all'}`);
+    
     const result = await db.select({
-      total: sql<number>`sum(${invoices.amount})`
+      total: sql<number>`COALESCE(sum(${invoices.amount}), 0)`
     })
     .from(invoices)
     .where(conditions);
 
-    return result[0]?.total || 0;
+    // The COALESCE ensures that NULL is converted to 0
+    // But we'll still add a fallback to handle any unexpected results
+    const total = result[0]?.total !== null && result[0]?.total !== undefined ? 
+      result[0].total : 0;
+      
+    console.log(`Pending invoices total: ${total}`);
+    return total;
   }
 
   // Helper methods
