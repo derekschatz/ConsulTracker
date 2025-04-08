@@ -463,11 +463,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let timeLogs;
       let startDate, endDate;
 
+      // Helper function to ensure we have valid dates
+      const createValidDate = (dateStr: string | undefined): Date | null => {
+        if (!dateStr) return null;
+        
+        try {
+          const date = new Date(dateStr);
+          // Check if date is valid
+          if (isNaN(date.getTime())) {
+            console.log(`Invalid date string: ${dateStr}`);
+            return null;
+          }
+          return date;
+        } catch (error) {
+          console.error(`Error parsing date: ${dateStr}`, error);
+          return null;
+        }
+      };
+      
       if (startDateParam && endDateParam) {
-        // Use explicit date parameters
-        startDate = new Date(startDateParam);
-        endDate = new Date(endDateParam);
-        console.log('Using explicit date range:', startDate, 'to', endDate);
+        // Use explicit date parameters, ensuring they're valid
+        startDate = createValidDate(startDateParam);
+        endDate = createValidDate(endDateParam);
+        
+        // Fall back to a predefined range if dates are invalid
+        if (!startDate || !endDate) {
+          console.log('Invalid date parameters, using month range instead');
+          const range = getDateRange('month');
+          startDate = range.startDate;
+          endDate = range.endDate;
+        } else {
+          console.log('Using explicit date range:', startDate, 'to', endDate);
+        }
       } else if (dateRange) {
         // Use predefined date range
         const range = getDateRange(dateRange);

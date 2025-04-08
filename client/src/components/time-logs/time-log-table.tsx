@@ -20,7 +20,16 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
     {
       accessor: 'date',
       header: 'Date',
-      cell: (timeLog) => formatDate(timeLog.date),
+      cell: (timeLog) => {
+        try {
+          // Try to format the date properly
+          return formatDate(timeLog.date);
+        } catch (e) {
+          console.error("Error formatting date:", e, timeLog.date);
+          // Fallback to direct string if there's an error
+          return typeof timeLog.date === 'string' ? timeLog.date : 'Invalid date';
+        }
+      },
     },
     {
       accessor: 'engagement',

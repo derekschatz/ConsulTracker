@@ -91,6 +91,26 @@ const TimeLogModal = ({
   console.log('TimeLog data:', timeLog);
   console.log('Engagement ID from getEngagementId():', getEngagementId());
   
+  // Format date safely to handle date strings or Date objects properly
+  const formatDateInput = (dateInput: any): string => {
+    try {
+      // If it's already a string in yyyy-MM-dd format, return it
+      if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+        return dateInput;
+      }
+      
+      // Otherwise, try to create a Date object and format it
+      const date = new Date(dateInput);
+      if (isNaN(date.getTime())) {
+        return new Date().toISOString().split('T')[0]; // Fallback to today if invalid
+      }
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      console.error("Error formatting date:", e);
+      return new Date().toISOString().split('T')[0]; // Fallback to today
+    }
+  };
+
   // Initialize form with default values or existing time log
   const {
     register,
@@ -104,7 +124,7 @@ const TimeLogModal = ({
     resolver: zodResolver(formSchema),
     defaultValues: timeLog
       ? {
-          date: new Date(timeLog.date).toISOString().split('T')[0],
+          date: formatDateInput(timeLog.date),
           hours: timeLog.hours ? Number(timeLog.hours) : 0,
           description: timeLog.description || '',
           engagementId: getEngagementId(),
@@ -122,7 +142,7 @@ const TimeLogModal = ({
     timeLog,
     defaultValues: timeLog
       ? {
-          date: new Date(timeLog.date).toISOString().split('T')[0],
+          date: formatDateInput(timeLog.date),
           hours: timeLog.hours ? Number(timeLog.hours) : 0,
           description: timeLog.description || '',
           engagementId: getEngagementId(),
@@ -142,9 +162,9 @@ const TimeLogModal = ({
   // Update form fields when modal opens with timeLog data
   useEffect(() => {
     if (open && timeLog) {
-      // Reset form with time log data
+      // Reset form with time log data using the safe formatter
       reset({
-        date: new Date(timeLog.date).toISOString().split('T')[0],
+        date: formatDateInput(timeLog.date),
         hours: timeLog.hours ? Number(timeLog.hours) : 0,
         description: timeLog.description || '',
         engagementId: getEngagementId(),
@@ -199,7 +219,9 @@ const TimeLogModal = ({
         hours: Number(data.hours),
       };
 
-      // Create time log
+      console.log('Submitting time log with data:', formattedData);
+
+      // Create/update time log
       const response = await apiRequest(
         isEditMode ? 'PUT' : 'POST',
         isEditMode ? `/api/time-logs/${timeLog.id}` : '/api/time-logs',
@@ -213,11 +235,32 @@ const TimeLogModal = ({
       }
 
       const savedTimeLog = await response.json();
+      console.log('Time log saved successfully:', savedTimeLog);
 
       // Success toast
       toast({
         title: `Time log ${isEditMode ? 'updated' : 'created'} successfully`,
         description: `${formattedData.hours} hours logged for ${formattedData.date}`,
+      });
+
+      // Always invalidate ALL time log queries regardless of path to ensure complete refresh
+      console.log('Invalidating all time log queries');
+      await queryClient.invalidateQueries({
+        queryKey: ['/api/time-logs'],
+        refetchType: 'all',
+      });
+      
+      // Invalidate dashboard data as well
+      await queryClient.invalidateQueries({
+        queryKey: ['/api/dashboard'],
+        refetchType: 'all',
+      });
+
+      // Explicitly force refetch any active queries
+      console.log('Force refetching active queries');
+      await queryClient.refetchQueries({
+        queryKey: ['/api/time-logs'],
+        type: 'active',
       });
 
       if (multipleEntries && !isEditMode) {
@@ -235,25 +278,11 @@ const TimeLogModal = ({
           hours: 0,
           description: ''
         });
-
-        // Properly invalidate queries to ensure data is refreshed
-        await queryClient.invalidateQueries({
-          queryKey: ['/api/time-logs']
-        });
-        await queryClient.invalidateQueries({
-          queryKey: ['/api/dashboard']
-        });
       } else {
         handleClose();
-        // Properly invalidate queries to ensure data is refreshed
-        await queryClient.invalidateQueries({
-          queryKey: ['/api/time-logs']
-        });
-        await queryClient.invalidateQueries({
-          queryKey: ['/api/dashboard']
-        });
       }
       
+      // Call the success callback
       onSuccess();
     } catch (error) {
       console.error('Error saving time log:', error);

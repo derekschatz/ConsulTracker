@@ -167,21 +167,31 @@ const TimeLogs = () => {
     // Force a fresh refetch to update the UI immediately
     console.log('Force refreshing time log data after operation');
     
-    // Invalidate all time log queries 
+    // Invalidate all time log queries with a more aggressive approach
     await queryClient.invalidateQueries({
-      queryKey: ['/api/time-logs']
+      queryKey: ['/api/time-logs'],
+      refetchType: 'all',
     });
     
     // Invalidate all dashboard queries
     await queryClient.invalidateQueries({
-      queryKey: ['/api/dashboard']
+      queryKey: ['/api/dashboard'],
+      refetchType: 'all',
     });
     
-    // Extra measure - explicitly refetch the current view
-    await queryClient.refetchQueries({ 
-      queryKey: ['/api/time-logs', queryParams.toString()],
-      exact: true
+    // Extra measure - explicitly refetch all queries
+    await queryClient.refetchQueries({
+      type: 'all'
     });
+    
+    // Wait a moment for the UI to update
+    setTimeout(() => {
+      // Additional explicit refetch for the specific query
+      queryClient.refetchQueries({ 
+        queryKey: ['/api/time-logs', queryParams.toString()],
+        exact: true
+      });
+    }, 100);
   };
 
   // Remove client-side filtering and use server-filtered data directly
