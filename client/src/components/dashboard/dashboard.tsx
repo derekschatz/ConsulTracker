@@ -57,27 +57,25 @@ const Dashboard = () => {
         <MetricCard
           title="YTD Revenue"
           value={isLoadingStats ? "Loading..." : formatCurrency(stats?.ytdRevenue || 0)}
-          subtitle="vs previous year"
-          trend={15.2}
-          trendLabel="vs last year"
+          subtitle="Year to date total"
           loading={isLoadingStats}
         />
         <MetricCard
           title="Active Engagements"
           value={isLoadingStats ? "Loading..." : stats?.activeEngagements || 0}
-          subtitle="2 ending this month"
+          subtitle="Current active projects"
           loading={isLoadingStats}
         />
         <MetricCard
           title="Hours This Month"
           value={isLoadingStats ? "Loading..." : formatHours(stats?.monthlyHours || 0)}
-          subtitle="74.5 billable hours"
+          subtitle="Time logged in current month"
           loading={isLoadingStats}
         />
         <MetricCard
           title="Pending Invoices"
           value={isLoadingStats ? "Loading..." : formatCurrency(stats?.pendingInvoicesTotal || 0)}
-          subtitle={stats?.pendingInvoicesTotal ? "Invoices awaiting payment" : "No pending invoices"}
+          subtitle={stats?.pendingInvoicesTotal > 0 ? "Invoices awaiting payment" : "No pending invoices"}
           loading={isLoadingStats}
         />
       </div>

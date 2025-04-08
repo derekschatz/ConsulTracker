@@ -955,11 +955,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get user ID from authenticated session if available
       const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
       
-      // Default to 2025 for current year if no year is provided
-      const year = Number(req.query.year) || 2025;
+      // Default to current year if no year is provided
+      const defaultYear = new Date().getFullYear();
+      const year = Number(req.query.year) || defaultYear;
+      
+      console.log(`Getting monthly revenue data for userId: ${userId || 'all'}, year: ${year}`);
+      
       const monthlyData = await storage.getMonthlyRevenueBillable(year, userId);
+      
+      console.log(`Retrieved ${monthlyData.length} months of revenue data`);
+      
       res.json(monthlyData);
     } catch (error) {
+      console.error('Error fetching monthly revenue:', error);
       res.status(500).json({ message: "Failed to fetch monthly revenue" });
     }
   });
@@ -969,17 +977,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get user ID from authenticated session if available
       const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
       
-      // Using 2025 as the reference year for current data
-      const demoYear = 2025;
-      const demoMonth = 3; // April (0-based index)
+      // Get current date info for proper calculations
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth();
       
-      // Calculate start and end of April 2025 (current month)
-      const startOfMonth = new Date(demoYear, demoMonth, 1);
-      const endOfMonth = new Date(demoYear, demoMonth + 1, 0, 23, 59, 59);
+      // Calculate start and end of current month
+      const startOfMonth = new Date(currentYear, currentMonth, 1);
+      const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
       
-      // Calculate start and end of year 2025
-      const startOfYear = new Date(demoYear, 0, 1);
-      const endOfYear = new Date(demoYear, 11, 31, 23, 59, 59);
+      console.log(`Getting dashboard stats for userId: ${userId || 'all'}`);
+      console.log(`Time period: ${startOfMonth.toISOString()} to ${endOfMonth.toISOString()}`);
 
       // Get stats in parallel
       const [
@@ -989,10 +997,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pendingInvoicesTotal
       ] = await Promise.all([
         storage.getActiveEngagements(userId),
-        storage.getYtdRevenue(demoYear, userId),
+        storage.getYtdRevenue(currentYear, userId),
         storage.getTotalHoursLogged(startOfMonth, endOfMonth, userId),
         storage.getPendingInvoicesTotal(userId)
       ]);
+
+      console.log(`Dashboard stats results:
+        - Active engagements: ${activeEngagements.length}
+        - YTD revenue: ${ytdRevenue}
+        - Monthly hours: ${monthlyHours}
+        - Pending invoices: ${pendingInvoicesTotal}
+      `);
 
       res.json({
         ytdRevenue,
