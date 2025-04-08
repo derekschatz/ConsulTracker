@@ -22,8 +22,20 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
       header: 'Date',
       cell: (timeLog) => {
         try {
-          // Try to format the date properly
-          return formatDate(timeLog.date);
+          // Issue: Dates are being converted to the day before due to timezone handling
+          // Solution: Handle timezone by forcing the date to be interpreted in local timezone
+          const dateObj = new Date(timeLog.date);
+          
+          // Create a new date with just the year, month, and day values
+          // This forces the date to be interpreted in the local timezone
+          const localDate = new Date(
+            dateObj.getFullYear(),
+            dateObj.getMonth(),
+            dateObj.getDate() + 1  // Add one day to compensate for timezone shift
+          );
+          
+          console.log('Original date:', timeLog.date, 'Corrected date:', localDate);
+          return formatDate(localDate);
         } catch (e) {
           console.error("Error formatting date:", e, timeLog.date);
           // Fallback to direct string if there's an error

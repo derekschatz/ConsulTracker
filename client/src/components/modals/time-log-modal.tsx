@@ -104,7 +104,23 @@ const TimeLogModal = ({
       if (isNaN(date.getTime())) {
         return new Date().toISOString().split('T')[0]; // Fallback to today if invalid
       }
-      return date.toISOString().split('T')[0];
+      
+      // Fix timezone issue: Create a new date using local date components
+      // This ensures the date is not affected by timezone conversion
+      const localDate = new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate() + 1 // Add one day to compensate for timezone shift
+      );
+      
+      console.log('Original date input:', dateInput, 'Corrected date:', localDate);
+      
+      // Format as YYYY-MM-DD
+      const year = localDate.getFullYear();
+      const month = String(localDate.getMonth() + 1).padStart(2, '0');
+      const day = String(localDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+      
     } catch (e) {
       console.error("Error formatting date:", e);
       return new Date().toISOString().split('T')[0]; // Fallback to today
