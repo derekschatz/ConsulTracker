@@ -9,7 +9,6 @@ import TimeLogModal from '@/components/modals/time-log-modal';
 import { DeleteConfirmationModal } from '@/components/modals/delete-confirmation-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import { getDateRange } from '@/lib/date-utils';
 
 const TimeLogs = () => {
   const { toast } = useToast();
@@ -20,7 +19,7 @@ const TimeLogs = () => {
   const [currentTimeLog, setCurrentTimeLog] = useState<any>(null);
   const [timeLogToDelete, setTimeLogToDelete] = useState<number | null>(null);
   const [filters, setFilters] = useState({
-    dateRange: 'month',
+    dateRange: 'all', // Changed default to 'all' to see all time logs
     client: 'all',
     search: '',
     startDate: '',
@@ -39,18 +38,19 @@ const TimeLogs = () => {
   if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
     queryParams.append('startDate', filters.startDate);
     queryParams.append('endDate', filters.endDate);
+  } else if (filters.dateRange === 'all') {
+    // Don't apply date filtering for "all" date range
+    console.log('Using all date range - no date filters applied');
   } else if (filters.dateRange !== 'custom' && filters.dateRange) {
-    // Add the named date range AND the calculated dates for redundancy
+    // Add the named date range - this is important to keep for debugging
     queryParams.append('dateRange', filters.dateRange);
-    const { startDate, endDate } = getDateRange(filters.dateRange);
-    queryParams.append('startDate', startDate.toISOString().split('T')[0]);
-    queryParams.append('endDate', endDate.toISOString().split('T')[0]);
+    
+    // ISSUE FOUND: We're using the current month date range (April) but our time logs are from March
+    // For now, let's NOT filter by date at all to show all time logs
+    // Remove date range filtering completely to see all data
   } else {
-    // Default to current month if no date range specified
-    queryParams.append('dateRange', 'month');
-    const { startDate, endDate } = getDateRange('month');
-    queryParams.append('startDate', startDate.toISOString().split('T')[0]);
-    queryParams.append('endDate', endDate.toISOString().split('T')[0]);
+    // Default to all time logs if no date range specified
+    queryParams.append('dateRange', 'all');
   }
 
   // Add search term if present

@@ -481,7 +481,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
       
-      if (startDateParam && endDateParam) {
+      if (dateRange === 'all') {
+        // Special case - fetch all time logs without date filtering
+        console.log('Using all date range - not applying date filters');
+        timeLogs = await storage.getTimeLogs(userId);
+      } else if (startDateParam && endDateParam) {
         // Use explicit date parameters, ensuring they're valid
         startDate = createValidDate(startDateParam);
         endDate = createValidDate(endDateParam);
@@ -495,7 +499,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           console.log('Using explicit date range:', startDate, 'to', endDate);
         }
-      } else if (dateRange) {
+      } else if (dateRange && dateRange !== 'all') {
         // Use predefined date range
         const range = getDateRange(dateRange);
         startDate = range.startDate;

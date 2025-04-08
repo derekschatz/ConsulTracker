@@ -1,0 +1,279 @@
+
+> rest-express@1.0.0 dev
+> tsx server/index.ts
+
+1:26:31 AM [express] serving on port 5000
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+1:27:33 AM [express] GET /api/user 304 in 223ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+1:27:33 AM [express] GET /api/user 304 in 229ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+1:27:33 AM [express] GET /api/engagements/active 304 in 311ms :: [{"id":1172,"userId":1,"clientName"…
+1:27:34 AM [express] GET /api/invoices 304 in 522ms :: []
+Getting all time logs for user
+1:27:34 AM [express] GET /api/dashboard/monthly-revenue 304 in 507ms :: [{"month":0,"revenue":0,"bil…
+1:27:34 AM [express] GET /api/dashboard/stats 304 in 554ms :: {"ytdRevenue":0,"activeEngagements":2,…
+1:27:34 AM [express] GET /api/time-logs 304 in 632ms :: [{"id":5817,"userId":1,"engagementId":1173,"…
+1:27:34 AM [express] GET /api/user 304 in 455ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+1:27:34 AM [express] GET /api/engagements/active 304 in 419ms :: [{"id":1172,"userId":1,"clientName"…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+1:27:34 AM [express] GET /api/dashboard/stats 304 in 299ms :: {"ytdRevenue":0,"activeEngagements":2,…
+1:27:34 AM [express] GET /api/invoices 304 in 393ms :: []
+Getting all time logs for user
+1:27:34 AM [express] GET /api/dashboard/monthly-revenue 304 in 434ms :: [{"month":0,"revenue":0,"bil…
+1:27:34 AM [express] GET /api/time-logs 304 in 444ms :: [{"id":5817,"userId":1,"engagementId":1173,"…
+1:27:34 AM [express] GET /api/engagements/active 304 in 367ms :: [{"id":1172,"userId":1,"clientName"…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+1:27:35 AM [express] GET /api/dashboard/stats 304 in 394ms :: {"ytdRevenue":0,"activeEngagements":2,…
+1:27:35 AM [express] GET /api/invoices 304 in 413ms :: []
+1:27:35 AM [express] GET /api/dashboard/monthly-revenue 304 in 443ms :: [{"month":0,"revenue":0,"bil…
+Getting all time logs for user
+1:27:35 AM [express] GET /api/time-logs 304 in 451ms :: [{"id":5817,"userId":1,"engagementId":1173,"…
+1:27:55 AM [express] GET /api/user 304 in 221ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+Getting all time logs for user
+1:27:56 AM [express] GET /api/dashboard/stats 304 in 502ms :: {"ytdRevenue":0,"activeEngagements":2,…
+1:27:56 AM [express] GET /api/engagements/active 304 in 502ms :: [{"id":1172,"userId":1,"clientName"…
+1:27:56 AM [express] GET /api/time-logs 200 in 683ms :: [{"id":5817,"userId":1,"engagementId":1173,"…
+1:27:56 AM [express] GET /api/invoices 304 in 622ms :: []
+1:27:56 AM [express] GET /api/dashboard/monthly-revenue 200 in 569ms :: [{"month":0,"revenue":0,"bil…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: 'month',
+  startDate: '2025-04-01',
+  endDate: '2025-05-01',
+  search: undefined
+}
+Using explicit date range: 2025-04-01T00:00:00.000Z to 2025-05-01T00:00:00.000Z
+1:28:00 AM [express] GET /api/engagements 304 in 303ms :: [{"id":1172,"userId":1,"clientName":"Inter…
+1:28:00 AM [express] GET /api/time-logs 304 in 310ms :: []
+Time log creation request body: { engagementId: 1173, date: '2025-03-24', hours: 8, description: '' }
+Processed data before validation: {
+  engagementId: 1173,
+  date: 2025-03-24T00:00:00.000Z,
+  hours: 8,
+  description: '',
+  userId: 1
+}
+Creating time log with validated data: {
+  userId: 1,
+  engagementId: 1173,
+  date: 2025-03-24T00:00:00.000Z,
+  hours: 8,
+  description: ''
+}
+Storage: Inserting time log into database: {
+  userId: 1,
+  engagementId: 1173,
+  date: 2025-03-24T00:00:00.000Z,
+  hours: 8,
+  description: ''
+}
+Storage: Time log created successfully: {
+  id: 5829,
+  userId: 1,
+  engagementId: 1173,
+  date: 2025-03-24T00:00:00.000Z,
+  hours: 8,
+  description: '',
+  createdAt: 2025-04-08T01:29:37.828Z
+}
+Time log created successfully: {
+  id: 5829,
+  userId: 1,
+  engagementId: 1173,
+  date: 2025-03-24T00:00:00.000Z,
+  hours: 8,
+  description: '',
+  createdAt: 2025-04-08T01:29:37.828Z
+}
+1:29:37 AM [express] POST /api/time-logs 201 in 3077ms :: {"id":5829,"userId":1,"engagementId":1173,…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: 'month',
+  startDate: '2025-04-01',
+  endDate: '2025-05-01',
+  search: undefined
+}
+Using explicit date range: 2025-04-01T00:00:00.000Z to 2025-05-01T00:00:00.000Z
+Getting all time logs for user
+1:29:40 AM [express] GET /api/time-logs 200 in 2655ms :: [{"id":5817,"userId":1,"engagementId":1173,…
+1:29:40 AM [express] GET /api/time-logs 304 in 2540ms :: []
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: 'month',
+  startDate: '2025-04-01',
+  endDate: '2025-05-01',
+  search: undefined
+}
+Using explicit date range: 2025-04-01T00:00:00.000Z to 2025-05-01T00:00:00.000Z
+1:29:41 AM [express] GET /api/time-logs 304 in 304ms :: []
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: 'month',
+  startDate: '2025-04-01',
+  endDate: '2025-05-01',
+  search: undefined
+}
+Using explicit date range: 2025-04-01T00:00:00.000Z to 2025-05-01T00:00:00.000Z
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+1:29:41 AM [express] GET /api/time-logs 304 in 300ms :: []
+Getting all time logs for user
+1:29:41 AM [express] GET /api/time-logs 304 in 458ms :: [{"id":5817,"userId":1,"engagementId":1173,"…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: 'month',
+  startDate: '2025-04-01',
+  endDate: '2025-05-01',
+  search: undefined
+}
+Using explicit date range: 2025-04-01T00:00:00.000Z to 2025-05-01T00:00:00.000Z
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+1:29:41 AM [express] GET /api/time-logs 304 in 300ms :: []
+1:29:41 AM [express] GET /api/dashboard/stats 304 in 327ms :: {"ytdRevenue":0,"activeEngagements":2,…
+1:29:42 AM [express] GET /api/user 304 in 224ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+Getting all time logs for user
+1:29:42 AM [express] GET /api/invoices 304 in 439ms :: []
+1:29:42 AM [express] GET /api/time-logs 304 in 456ms :: [{"id":5817,"userId":1,"engagementId":1173,"…
+1:29:42 AM [express] GET /api/dashboard/monthly-revenue 200 in 458ms :: [{"month":0,"revenue":0,"bil…
+1:29:42 AM [express] GET /api/engagements 304 in 325ms :: [{"id":1172,"userId":1,"clientName":"Inter…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: 'month',
+  startDate: '2025-04-01',
+  endDate: '2025-05-01',
+  search: undefined
+}
+Using explicit date range: 2025-04-01T00:00:00.000Z to 2025-05-01T00:00:00.000Z
+1:29:42 AM [express] GET /api/time-logs 304 in 296ms :: []
+1:29:55 AM [express] GET /api/user 304 in 218ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: 'month',
+  startDate: '2025-04-01',
+  endDate: '2025-05-01',
+  search: undefined
+}
+Using explicit date range: 2025-04-01T00:00:00.000Z to 2025-05-01T00:00:00.000Z
+1:29:56 AM [express] GET /api/time-logs 304 in 290ms :: []
+1:29:56 AM [express] GET /api/engagements 304 in 297ms :: [{"id":1172,"userId":1,"clientName":"Inter…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+1:30:37 AM [express] GET /api/user 304 in 481ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+1:30:37 AM [express] GET /api/engagements/active 304 in 532ms :: [{"id":1172,"userId":1,"clientName"…
+1:30:37 AM [express] GET /api/dashboard/monthly-revenue 200 in 767ms :: [{"month":0,"revenue":0,"bil…
+1:30:37 AM [express] GET /api/invoices 304 in 754ms :: []
+Getting all time logs for user
+1:30:37 AM [express] GET /api/dashboard/stats 304 in 790ms :: {"ytdRevenue":0,"activeEngagements":2,…
+1:30:37 AM [express] GET /api/user 304 in 387ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+1:30:37 AM [express] GET /api/time-logs 200 in 857ms :: [{"id":5817,"userId":1,"engagementId":1173,"…
+1:30:38 AM [express] GET /api/engagements/active 304 in 473ms :: [{"id":1172,"userId":1,"clientName"…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+1:30:38 AM [express] GET /api/user 304 in 222ms :: {"id":1,"username":"derekschatz","name":"Derek Sc…
+Getting all time logs for user
+1:30:38 AM [express] GET /api/invoices 304 in 432ms :: []
+1:30:38 AM [express] GET /api/dashboard/stats 304 in 389ms :: {"ytdRevenue":0,"activeEngagements":2,…
+1:30:38 AM [express] GET /api/dashboard/monthly-revenue 304 in 457ms :: [{"month":0,"revenue":0,"bil…
+1:30:38 AM [express] GET /api/time-logs 304 in 487ms :: [{"id":5817,"userId":1,"engagementId":1173,"…
+1:30:38 AM [express] GET /api/engagements/active 304 in 387ms :: [{"id":1172,"userId":1,"clientName"…
+Time log request params: {
+  userId: 1,
+  engagementId: undefined,
+  clientName: undefined,
+  dateRange: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  search: undefined
+}
+1:30:38 AM [express] GET /api/dashboard/stats 304 in 315ms :: {"ytdRevenue":0,"activeEngagements":2,…
+Getting all time logs for user
+1:30:38 AM [express] GET /api/invoices 304 in 412ms :: []
+1:30:38 AM [express] GET /api/dashboard/monthly-revenue 304 in 436ms :: [{"month":0,"revenue":0,"bil…
+1:30:38 AM [express] GET /api/time-logs 304 in 452ms :: [{"id":5817,"userId":1,"engagementId":1173,"…

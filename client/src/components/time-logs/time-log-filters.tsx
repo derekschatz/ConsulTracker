@@ -61,6 +61,7 @@ const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersPr
                 <SelectValue placeholder="Select date range" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
                 <SelectItem value="week">This Week</SelectItem>
                 <SelectItem value="month">This Month</SelectItem>
                 <SelectItem value="quarter">This Quarter</SelectItem>
