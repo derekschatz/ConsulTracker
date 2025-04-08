@@ -191,8 +191,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTimeLog(timeLog: InsertTimeLog): Promise<TimeLog> {
-    const [newTimeLog] = await db.insert(timeLogs).values(timeLog).returning();
-    return newTimeLog;
+    console.log('Storage: Inserting time log into database:', timeLog);
+    try {
+      const [newTimeLog] = await db.insert(timeLogs).values(timeLog).returning();
+      console.log('Storage: Time log created successfully:', newTimeLog);
+      return newTimeLog;
+    } catch (error) {
+      console.error('Storage: Error creating time log:', error);
+      throw error;
+    }
   }
 
   async updateTimeLog(id: number, timeLog: Partial<InsertTimeLog>, userId?: number): Promise<TimeLog | undefined> {

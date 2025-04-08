@@ -17,9 +17,6 @@ const formSchema = insertEngagementSchema
   .extend({
     startDate: z.string().min(1, 'Start date is required'),
     endDate: z.string().min(1, 'End date is required'),
-    hourlyRate: z.string().or(z.number()).refine(val => !isNaN(Number(val)) && Number(val) > 0, {
-      message: 'Hourly rate must be a positive number',
-    }),
   })
   .omit({ 
     userId: true // We'll add this on the server
@@ -77,14 +74,14 @@ const EngagementModal = ({
           ...engagement,
           startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
           endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
-          hourlyRate: String(engagement.hourlyRate),
+          hourlyRate: engagement.hourlyRate,
         }
       : {
           clientName: '',
           projectName: '',
-          startDate: getISODate(), // Uses default 2025 date
+          startDate: getISODate(),
           endDate: '',
-          hourlyRate: '',
+          hourlyRate: 0,
           description: '',
         },
   });
@@ -94,7 +91,6 @@ const EngagementModal = ({
     ...engagement,
     startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
     endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
-    hourlyRate: String(engagement.hourlyRate),
   } : 'using empty defaults');
 
   // Effect to update form when engagement data changes
@@ -105,7 +101,7 @@ const EngagementModal = ({
         ...engagement,
         startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
         endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
-        hourlyRate: String(engagement.hourlyRate),
+        hourlyRate: engagement.hourlyRate,
       });
     }
   }, [engagement, reset, open]);
@@ -131,7 +127,6 @@ const EngagementModal = ({
       
       const formattedData = {
         ...data,
-        hourlyRate: Number(data.hourlyRate),
         startDate,
         endDate,
         status,
@@ -258,15 +253,13 @@ const EngagementModal = ({
                 min="0"
                 step="0.01"
                 placeholder="0.00"
-                {...register('hourlyRate')}
+                {...register('hourlyRate', { valueAsNumber: true })}
                 className={errors.hourlyRate ? 'border-red-500' : ''}
               />
               {errors.hourlyRate && (
                 <span className="text-xs text-red-500">{errors.hourlyRate.message}</span>
               )}
             </div>
-            
-            {/* Status field removed - now automatically calculated based on dates */}
             
             <div className="grid grid-cols-1 gap-2">
               <Label htmlFor="description" className="text-sm font-medium text-slate-700">

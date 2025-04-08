@@ -68,7 +68,9 @@ const TimeLogs = () => {
       if (!response.ok) {
         throw new Error('Failed to fetch time logs');
       }
-      return response.json();
+      const data = await response.json();
+      console.log('Time logs data received:', data);
+      return data;
     },
     // Ensure we always get fresh data
     refetchOnWindowFocus: true,
@@ -128,19 +130,21 @@ const TimeLogs = () => {
 
       // Force a fresh refetch to update the UI immediately
       console.log('Force refreshing time log data after deletion');
-      await queryClient.refetchQueries({ 
-        queryKey: ['/api/time-logs', queryParams.toString()],
-        exact: true, 
-        type: 'active'
+      
+      // Invalidate all time log queries 
+      await queryClient.invalidateQueries({
+        queryKey: ['/api/time-logs']
       });
       
-      // Also invalidate other time log queries and dashboard stats
-      queryClient.invalidateQueries({
-        predicate: (query) => {
-          const queryKey = query.queryKey[0];
-          return typeof queryKey === 'string' && 
-            (queryKey.startsWith('/api/time-logs') || queryKey.startsWith('/api/dashboard'));
-        }
+      // Invalidate all dashboard queries
+      await queryClient.invalidateQueries({
+        queryKey: ['/api/dashboard']
+      });
+      
+      // Extra measure - explicitly refetch the current view
+      await queryClient.refetchQueries({ 
+        queryKey: ['/api/time-logs', queryParams.toString()],
+        exact: true
       });
     } catch (error) {
       console.error('Error deleting time log:', error);
@@ -162,19 +166,21 @@ const TimeLogs = () => {
   const handleSuccess = async () => {
     // Force a fresh refetch to update the UI immediately
     console.log('Force refreshing time log data after operation');
-    await queryClient.refetchQueries({ 
-      queryKey: ['/api/time-logs', queryParams.toString()],
-      exact: true, 
-      type: 'active'
+    
+    // Invalidate all time log queries 
+    await queryClient.invalidateQueries({
+      queryKey: ['/api/time-logs']
     });
     
-    // Also invalidate other time log queries and dashboard stats
-    queryClient.invalidateQueries({
-      predicate: (query) => {
-        const queryKey = query.queryKey[0];
-        return typeof queryKey === 'string' && 
-          (queryKey.startsWith('/api/time-logs') || queryKey.startsWith('/api/dashboard'));
-      }
+    // Invalidate all dashboard queries
+    await queryClient.invalidateQueries({
+      queryKey: ['/api/dashboard']
+    });
+    
+    // Extra measure - explicitly refetch the current view
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/time-logs', queryParams.toString()],
+      exact: true
     });
   };
 

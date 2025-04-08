@@ -27,14 +27,12 @@ interface Engagement {
 
 // Extend the time log schema with additional validation
 const formSchema = insertTimeLogSchema
+  .omit({
+    userId: true // We'll add this on the server
+  })
   .extend({
-    date: z.string().min(1, 'Date is required'),
-    hours: z.string().or(z.number()).refine(val => !isNaN(Number(val)) && Number(val) > 0, {
-      message: 'Hours must be a positive number',
-    })
-    .refine(val => Number(val) <= 8, {
-      message: 'Hours cannot exceed 8 per entry',
-    }),
+    engagementId: z.number().min(1, 'Please select an engagement'),
+    date: z.string(), // Change date to string type to match server expectations
   });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -45,6 +43,12 @@ interface TimeLogModalProps {
   timeLog?: any; // For editing existing time log
   onSuccess: () => void;
   preselectedEngagementId?: number;
+}
+
+interface TimeLogEntry {
+  date: string;
+  hours: number;
+  description: string;
 }
 
 const TimeLogModal = ({
@@ -58,6 +62,8 @@ const TimeLogModal = ({
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedEngagementRate, setSelectedEngagementRate] = useState<string | null>(null);
+  const [multipleEntries, setMultipleEntries] = useState(false);
+  const [createdLogs, setCreatedLogs] = useState<TimeLogEntry[]>([]);
 
   const isEditMode = !!timeLog;
 
@@ -98,15 +104,33 @@ const TimeLogModal = ({
     resolver: zodResolver(formSchema),
     defaultValues: timeLog
       ? {
-          date: timeLog.date ? getISODate(new Date(timeLog.date)) : getISODate(),
-          hours: String(timeLog.hours),
+          date: new Date(timeLog.date).toISOString().split('T')[0],
+          hours: timeLog.hours ? Number(timeLog.hours) : 0,
           description: timeLog.description || '',
           engagementId: getEngagementId(),
         }
       : {
-          engagementId: preselectedEngagementId || 0,
-          date: getISODate(), // Uses default 2025 date
-          hours: '',
+          engagementId: preselectedEngagementId || undefined,
+          date: new Date().toISOString().split('T')[0],
+          hours: 0,
+          description: '',
+        },
+  });
+  
+  // Debug log the form initialization
+  console.log('Form initialized with:', {
+    timeLog,
+    defaultValues: timeLog
+      ? {
+          date: new Date(timeLog.date).toISOString().split('T')[0],
+          hours: timeLog.hours ? Number(timeLog.hours) : 0,
+          description: timeLog.description || '',
+          engagementId: getEngagementId(),
+        }
+      : {
+          engagementId: preselectedEngagementId || undefined,
+          date: new Date().toISOString().split('T')[0],
+          hours: 0,
           description: '',
         },
   });
@@ -117,19 +141,16 @@ const TimeLogModal = ({
 
   // Update form fields when modal opens with timeLog data
   useEffect(() => {
-    if (open) {
-      // If editing, set the engagement ID explicitly
-      if (isEditMode && timeLog) {
-        const engagementId = getEngagementId();
-        console.log('Setting engagementId in useEffect:', engagementId);
-        setValue('engagementId', engagementId);
-      } 
-      // If creating a new timeLog with preselected engagement
-      else if (preselectedEngagementId && !isEditMode) {
-        setValue('engagementId', preselectedEngagementId);
-      }
+    if (open && timeLog) {
+      // Reset form with time log data
+      reset({
+        date: new Date(timeLog.date).toISOString().split('T')[0],
+        hours: timeLog.hours ? Number(timeLog.hours) : 0,
+        description: timeLog.description || '',
+        engagementId: getEngagementId(),
+      });
     }
-  }, [open, timeLog, isEditMode, preselectedEngagementId, setValue]);
+  }, [open, timeLog, reset]);
   
   // Find and set the rate when an engagement is selected
   useEffect(() => {
@@ -166,26 +187,19 @@ const TimeLogModal = ({
     }
   };
 
-  // Handle modal close and reset form
-  const handleClose = () => {
-    reset();
-    onOpenChange(false);
-  };
-
   // Submit form data
   const onSubmit = async (data: FormValues) => {
     try {
       setIsSubmitting(true);
 
-      // Convert values to appropriate types
+      // Format the data
       const formattedData = {
         ...data,
         engagementId: Number(data.engagementId),
         hours: Number(data.hours),
-        date: new Date(data.date),
       };
 
-      // Create or update time log
+      // Create time log
       const response = await apiRequest(
         isEditMode ? 'PUT' : 'POST',
         isEditMode ? `/api/time-logs/${timeLog.id}` : '/api/time-logs',
@@ -193,34 +207,53 @@ const TimeLogModal = ({
       );
 
       if (!response.ok) {
-        throw new Error('Failed to save time log');
+        const errorData = await response.json();
+        console.error('Server validation errors:', errorData);
+        throw new Error(errorData.message || 'Failed to save time log');
       }
+
+      const savedTimeLog = await response.json();
 
       // Success toast
       toast({
         title: `Time log ${isEditMode ? 'updated' : 'created'} successfully`,
-        description: `${formattedData.hours} hours logged for ${data.date}`,
+        description: `${formattedData.hours} hours logged for ${formattedData.date}`,
       });
 
-      // Close modal and reset form
-      handleClose();
+      if (multipleEntries && !isEditMode) {
+        // Add the created log to our list
+        setCreatedLogs(prev => [...prev, {
+          date: formattedData.date,
+          hours: formattedData.hours,
+          description: formattedData.description
+        }]);
+
+        // Reset form fields except engagement
+        reset({
+          engagementId: data.engagementId,
+          date: new Date().toISOString().split('T')[0],
+          hours: 0,
+          description: ''
+        });
+
+        // Properly invalidate queries to ensure data is refreshed
+        await queryClient.invalidateQueries({
+          queryKey: ['/api/time-logs']
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ['/api/dashboard']
+        });
+      } else {
+        handleClose();
+        // Properly invalidate queries to ensure data is refreshed
+        await queryClient.invalidateQueries({
+          queryKey: ['/api/time-logs']
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ['/api/dashboard']
+        });
+      }
       
-      // Force a refresh of all time log queries to ensure UI is updated
-      console.log('Force refreshing data after time log operation');
-      
-      // First force refresh all queries that might show this time log
-      await queryClient.refetchQueries({ 
-        predicate: (query) => {
-          const queryKey = query.queryKey[0];
-          return typeof queryKey === 'string' && (
-            queryKey.startsWith('/api/time-logs') || 
-            queryKey.startsWith('/api/dashboard')
-          );
-        },
-        type: 'active'
-      });
-      
-      // Trigger success callback
       onSuccess();
     } catch (error) {
       console.error('Error saving time log:', error);
@@ -232,6 +265,13 @@ const TimeLogModal = ({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleClose = () => {
+    setMultipleEntries(false);
+    setCreatedLogs([]);
+    reset();
+    onOpenChange(false);
   };
 
   return (
@@ -314,17 +354,7 @@ const TimeLogModal = ({
                   max="8"
                   step="0.25"
                   placeholder="0.00"
-                  {...register('hours', {
-                    onChange: (e) => {
-                      // Real-time validation as user types
-                      const value = e.target.value;
-                      if (value && Number(value) > 8) {
-                        e.target.setCustomValidity('Hours cannot exceed 8');
-                      } else {
-                        e.target.setCustomValidity('');
-                      }
-                    }
-                  })}
+                  {...register('hours', { valueAsNumber: true })}
                   className={errors.hours ? 'border-red-500' : ''}
                 />
                 {errors.hours && (
@@ -351,13 +381,32 @@ const TimeLogModal = ({
           </div>
           
           <DialogFooter className="gap-3">
+            {!isEditMode && (
+              <div className="flex items-center gap-2 mr-auto">
+                <input
+                  type="checkbox"
+                  id="multipleEntries"
+                  checked={multipleEntries}
+                  onChange={(e) => {
+                    setMultipleEntries(e.target.checked);
+                    if (!e.target.checked) {
+                      setCreatedLogs([]);
+                    }
+                  }}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="multipleEntries" className="text-sm">
+                  Add multiple entries
+                </Label>
+              </div>
+            )}
             <Button
               type="button"
               variant="outline"
               onClick={handleClose}
               disabled={isSubmitting}
             >
-              Cancel
+              {multipleEntries ? 'Done' : 'Cancel'}
             </Button>
             <Button
               type="submit"
@@ -365,12 +414,37 @@ const TimeLogModal = ({
             >
               {isSubmitting 
                 ? 'Saving...' 
-                : isEditMode 
-                  ? 'Save Changes' 
-                  : 'Save Time Log'}
+                : multipleEntries
+                  ? 'Add Entry'
+                  : isEditMode 
+                    ? 'Save Changes' 
+                    : 'Save'}
             </Button>
           </DialogFooter>
         </form>
+
+        {multipleEntries && createdLogs.length > 0 && (
+          <div className="mt-4 border-t pt-4">
+            <h4 className="text-sm font-medium mb-2">
+              Added Entries ({createdLogs.length}):
+            </h4>
+            <div className="max-h-40 overflow-y-auto space-y-2">
+              {createdLogs.map((log, index) => (
+                <div 
+                  key={`${log.date}-${log.hours}-${index}`}
+                  className="text-sm bg-slate-50 p-2 rounded-md"
+                >
+                  <span className="font-medium">{log.hours} hours</span>
+                  <span className="mx-1">on</span>
+                  <span className="font-medium">{log.date}</span>
+                  {log.description && (
+                    <span className="ml-2 text-gray-500">- {log.description}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

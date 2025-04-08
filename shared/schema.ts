@@ -66,15 +66,15 @@ export const engagementsRelations = relations(engagements, ({ many }) => ({
   invoices: many(invoices)
 }));
 
-export const insertEngagementSchema = createInsertSchema(engagements).pick({
-  userId: true,
-  clientName: true,
-  projectName: true,
-  startDate: true,
-  endDate: true, 
-  hourlyRate: true,
-  description: true,
-  status: true,
+export const insertEngagementSchema = z.object({
+  userId: z.number(),
+  clientName: z.string(),
+  projectName: z.string(),
+  startDate: z.date(),
+  endDate: z.date(),
+  hourlyRate: z.number().positive('Hourly rate must be positive'),
+  description: z.string().optional(),
+  status: z.string().default('active')
 });
 
 // Time logs table
@@ -95,12 +95,14 @@ export const timeLogsRelations = relations(timeLogs, ({ one }) => ({
   })
 }));
 
-export const insertTimeLogSchema = createInsertSchema(timeLogs).pick({
-  userId: true,
-  engagementId: true,
-  date: true,
-  hours: true,
-  description: true,
+export const insertTimeLogSchema = z.object({
+  userId: z.number(),
+  engagementId: z.number(),
+  date: z.date(),
+  hours: z.number()
+    .positive('Hours must be positive')
+    .max(8, 'Hours cannot exceed 8 per entry'),
+  description: z.string()
 });
 
 // Invoices table

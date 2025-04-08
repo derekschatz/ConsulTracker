@@ -535,20 +535,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "You must be logged in to create time logs" });
       }
       
-      const validationResult = insertTimeLogSchema.safeParse(req.body);
+      // Debug log the incoming request body
+      console.log('Time log creation request body:', req.body);
+
+      // Process the data before validation
+      const processedData = {
+        ...req.body,
+        userId: (req.user as any).id,
+        date: new Date(req.body.date),
+        hours: Number(req.body.hours),
+        engagementId: Number(req.body.engagementId)
+      };
+      
+      console.log('Processed data before validation:', processedData);
+      
+      const validationResult = insertTimeLogSchema.safeParse(processedData);
       if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid time log data", errors: validationResult.error.errors });
+        console.log('Time log validation failed:', validationResult.error.format());
+        return res.status(400).json({ 
+          message: "Invalid time log data", 
+          errors: validationResult.error.format() 
+        });
       }
 
-      // Add the user ID to the time log data
-      const timeLogData = {
-        ...validationResult.data,
-        userId: (req.user as any).id
-      };
-
-      const timeLog = await storage.createTimeLog(timeLogData);
+      console.log('Creating time log with validated data:', validationResult.data);
+      const timeLog = await storage.createTimeLog(validationResult.data);
+      console.log('Time log created successfully:', timeLog);
       res.status(201).json(timeLog);
     } catch (error) {
+      console.error("Failed to create time log:", error);
       res.status(500).json({ message: "Failed to create time log" });
     }
   });
@@ -562,10 +577,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const id = Number(req.params.id);
       const userId = (req.user as any).id;
+
+      // First get the existing time log
+      const existingTimeLog = await storage.getTimeLog(id, userId);
+      if (!existingTimeLog) {
+        return res.status(404).json({ message: "Time log not found" });
+      }
+
+      // Debug log the incoming request body
+      console.log('Time log update request body:', req.body);
       
-      const validationResult = insertTimeLogSchema.partial().safeParse(req.body);
+      // Process the data before validation, merging with existing data
+      const processedData = {
+        ...existingTimeLog,
+        ...req.body,
+        userId,
+        date: req.body.date ? new Date(req.body.date) : existingTimeLog.date,
+        hours: req.body.hours !== undefined ? Number(req.body.hours) : existingTimeLog.hours,
+        engagementId: req.body.engagementId !== undefined ? Number(req.body.engagementId) : existingTimeLog.engagementId,
+        description: req.body.description || existingTimeLog.description
+      };
+      
+      console.log('Processed data before validation:', processedData);
+      
+      const validationResult = insertTimeLogSchema.safeParse(processedData);
       if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid time log data", errors: validationResult.error.errors });
+        console.log('Time log validation failed:', validationResult.error.format());
+        return res.status(400).json({ 
+          message: "Invalid time log data", 
+          errors: validationResult.error.format() 
+        });
       }
 
       const updatedTimeLog = await storage.updateTimeLog(id, validationResult.data, userId);
@@ -574,6 +615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(updatedTimeLog);
     } catch (error) {
+      console.error("Failed to update time log:", error);
       res.status(500).json({ message: "Failed to update time log" });
     }
   });
