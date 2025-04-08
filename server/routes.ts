@@ -952,18 +952,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/monthly-revenue", async (req, res) => {
     try {
-      // Get user ID from authenticated session if available
-      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      // Ensure user is authenticated for security
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view monthly revenue data" });
+      }
+      
+      // Get user ID from authenticated session
+      const userId = (req.user as any).id;
       
       // Default to current year if no year is provided
       const defaultYear = new Date().getFullYear();
       const year = Number(req.query.year) || defaultYear;
       
-      console.log(`Getting monthly revenue data for userId: ${userId || 'all'}, year: ${year}`);
+      console.log(`Getting monthly revenue data for userId: ${userId}, year: ${year}`);
       
       const monthlyData = await storage.getMonthlyRevenueBillable(year, userId);
       
-      console.log(`Retrieved ${monthlyData.length} months of revenue data`);
+      console.log(`Retrieved ${monthlyData.length} months of revenue data for user ${userId}`);
       
       res.json(monthlyData);
     } catch (error) {
@@ -974,8 +979,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
-      // Get user ID from authenticated session if available
-      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      // Ensure user is authenticated for security
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view dashboard stats" });
+      }
+      
+      // Get user ID from authenticated session
+      const userId = (req.user as any).id;
       
       // Get current date info for proper calculations
       const currentDate = new Date();
@@ -986,7 +996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startOfMonth = new Date(currentYear, currentMonth, 1);
       const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
       
-      console.log(`Getting dashboard stats for userId: ${userId || 'all'}`);
+      console.log(`Getting dashboard stats for userId: ${userId}`);
       console.log(`Time period: ${startOfMonth.toISOString()} to ${endOfMonth.toISOString()}`);
 
       // Get stats in parallel
@@ -1002,7 +1012,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getPendingInvoicesTotal(userId)
       ]);
 
-      console.log(`Dashboard stats results:
+      console.log(`Dashboard stats results for user ${userId}:
         - Active engagements: ${activeEngagements.length}
         - YTD revenue: ${ytdRevenue}
         - Monthly hours: ${monthlyHours}

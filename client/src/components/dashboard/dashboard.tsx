@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '@/hooks/use-auth';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import MetricCard from './metric-card';
 import MonthlyRevenueChart from './monthly-revenue-chart';
 import QuickAddTimeForm from './quick-add-time-form';
@@ -10,22 +12,49 @@ import RecentActivity from './recent-activity';
 import { formatCurrency, formatHours } from '@/lib/format-utils';
 import { getCurrentYear } from '@/lib/date-utils';
 
+interface DashboardStats {
+  ytdRevenue: number;
+  activeEngagements: number;
+  monthlyHours: number;
+  pendingInvoicesTotal: number;
+}
+
+interface MonthlyRevenueData {
+  month: number;
+  revenue: number;
+  billableHours: number;
+}
+
 const Dashboard = () => {
+  const { user } = useAuth();
   const [selectedYear, setSelectedYear] = useState(getCurrentYear().toString());
   
   // Fetch dashboard stats
-  const { data: stats, isLoading: isLoadingStats } = useQuery({
+  const { 
+    data: stats = {} as DashboardStats, 
+    isLoading: isLoadingStats,
+    error: statsError 
+  } = useQuery<DashboardStats>({
     queryKey: ['/api/dashboard/stats'],
+    retry: false, // Don't retry if we get a 401
   });
 
   // Fetch monthly revenue data
-  const { data: monthlyData, isLoading: isLoadingMonthly } = useQuery({
+  const { 
+    data: monthlyData = [] as MonthlyRevenueData[], 
+    isLoading: isLoadingMonthly,
+    error: monthlyError 
+  } = useQuery<MonthlyRevenueData[]>({
     queryKey: ['/api/dashboard/monthly-revenue', { year: selectedYear }],
+    retry: false, // Don't retry if we get a 401
   });
 
   const handleYearChange = (year: string) => {
     setSelectedYear(year);
   };
+  
+  // Check if we have an authentication error
+  const hasAuthError = statsError || monthlyError;
 
   // Generate year options (current year and 5 years back)
   const currentYear = getCurrentYear();
@@ -51,6 +80,16 @@ const Dashboard = () => {
           </div>
         </div>
       </header>
+      
+      {hasAuthError && (
+        <Alert variant="warning" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Authentication Required</AlertTitle>
+          <AlertDescription>
+            You must be logged in to view dashboard statistics. The data shown may not be accurate.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
