@@ -165,24 +165,6 @@ const InvoiceModal = ({
     fetchTimeLogs();
   }, [watchEngagementId, watchPeriodStart, watchPeriodEnd]);
 
-  // Add helper function for consistent date handling
-  const formatLocalDate = (dateInput: string | Date) => {
-    try {
-      const dateObj = new Date(dateInput);
-      // Create a new date with just the year, month, and day values
-      // This forces the date to be interpreted in the local timezone
-      const localDate = new Date(
-        dateObj.getFullYear(),
-        dateObj.getMonth(),
-        dateObj.getDate() + 1  // Add one day to compensate for timezone shift
-      );
-      return localDate;
-    } catch (e) {
-      console.error("Error formatting date:", e, dateInput);
-      return new Date(dateInput);
-    }
-  };
-
   // Define close handler
   const handleClose = () => {
     reset();
@@ -210,7 +192,7 @@ const InvoiceModal = ({
       // Prepare line items
       const lineItems = timeLogs.map((log: any) => ({
         timeLogId: log.id,
-        description: `${log.description} (Date: ${formatLocalDate(log.date).toLocaleDateString()})`,
+        description: `${log.description} (Date: ${new Date(log.date).toLocaleDateString()})`,
         hours: log.hours,
         rate: log.engagement.hourlyRate,
         amount: log.billableAmount,
@@ -460,7 +442,7 @@ const InvoiceModal = ({
                         timeLogs.map((log: any) => (
                           <tr key={log.id} className="border-b border-slate-100 text-sm">
                             <td className="py-2 px-3 text-slate-700">
-                              {formatLocalDate(log.date).toLocaleDateString()}
+                              {new Date(log.date).toLocaleDateString()}
                             </td>
                             <td className="py-2 px-3 text-slate-700">{log.description}</td>
                             <td className="py-2 px-3 text-slate-700 text-right">{formatHours(log.hours)}</td>
