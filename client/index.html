@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    
+    <!-- Add jsPDF and jspdf-autotable libraries from CDN for fallback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/5.0.2/jspdf.plugin.autotable.min.js"></script>
+    
+    <script>
+      // Make sure jspdf-autotable is properly initialized
+      window.onload = function() {
+        // Check if jsPDF and autoTable are available and log to console
+        console.log('jsPDF loaded:', typeof window.jspdf !== 'undefined');
+        console.log('jsPDF autoTable plugin loaded:', typeof window.jspdf?.jsPDF?.prototype?.autoTable !== 'undefined');
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- This script injects a replit badge into the page, please feel free to remove this line -->
+    <script type="text/javascript" src="https://replit.com/public/js/replit-badge-v3.js"></script>
+  </body>
+</html>
