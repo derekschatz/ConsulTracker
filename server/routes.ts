@@ -480,6 +480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return null;
         }
       };
+<<<<<<< HEAD
 
       // First, get the date range if specified
       if (startDateParam && endDateParam) {
@@ -537,6 +538,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching time logs:', error);
       res.status(500).json({ error: 'Failed to fetch time logs' });
+=======
+      
+      if (dateRange === 'all') {
+        // Special case - fetch all time logs without date filtering
+        console.log('Using all date range - not applying date filters');
+        timeLogs = await storage.getTimeLogs(userId);
+      } else if (startDateParam && endDateParam) {
+        // Use explicit date parameters, ensuring they're valid
+        startDate = createValidDate(startDateParam);
+        endDate = createValidDate(endDateParam);
+        
+        // Fall back to a predefined range if dates are invalid
+        if (!startDate || !endDate) {
+          console.log('Invalid date parameters, using month range instead');
+          const range = getDateRange('month');
+          startDate = range.startDate;
+          endDate = range.endDate;
+        } else {
+          console.log('Using explicit date range:', startDate, 'to', endDate);
+        }
+      } else if (dateRange && dateRange !== 'all') {
+        // Use predefined date range
+        const range = getDateRange(dateRange);
+        startDate = range.startDate;
+        endDate = range.endDate;
+        console.log('Using date range:', dateRange, startDate, 'to', endDate);
+      } else {
+        // Default to all time logs for this user
+        timeLogs = await storage.getTimeLogs(userId);
+        console.log('Getting all time logs for user');
+      }
+
+      // Get logs filtered by date range if we have dates
+      if (startDate && endDate) {
+        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate, userId);
+      } else if (engagementId) {
+        // Filter by specific engagement ID
+        timeLogs = await storage.getTimeLogsByEngagement(engagementId, userId);
+      } else if (!timeLogs) {
+        // If we haven't loaded logs yet, get all of them
+        timeLogs = await storage.getTimeLogs(userId);
+      }
+      
+      // If client filter is applied, filter the results by client name
+      if (timeLogs && clientName && clientName !== 'all') {
+        timeLogs = timeLogs.filter(log => log.engagement.clientName === clientName);
+      }
+
+      // Apply search filter if present
+      if (timeLogs && search) {
+        const searchLower = search.toLowerCase();
+        timeLogs = timeLogs.filter(log => 
+          log.description.toLowerCase().includes(searchLower) ||
+          log.engagement.clientName.toLowerCase().includes(searchLower) ||
+          log.engagement.projectName.toLowerCase().includes(searchLower)
+        );
+      }
+
+      res.json(timeLogs || []);
+    } catch (error) {
+      console.error("Error fetching time logs:", error);
+      res.status(500).json({ message: "Failed to fetch time logs" });
+>>>>>>> 7151761b10cd61aa7cb07de3085ef5b7b44f7242
     }
   });
 
