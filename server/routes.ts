@@ -480,65 +480,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return null;
         }
       };
-<<<<<<< HEAD
-
-      // First, get the date range if specified
-      if (startDateParam && endDateParam) {
-        startDate = createValidDate(startDateParam);
-        endDate = createValidDate(endDateParam);
-      } else if (dateRange && dateRange !== 'all') {
-        const range = getDateRange(dateRange);
-        startDate = range.startDate;
-        endDate = range.endDate;
-      }
-
-      // If we have an engagement ID, that's our primary filter
-      if (engagementId) {
-        // Get time logs for the specific engagement
-        timeLogs = await storage.getTimeLogsByEngagement(engagementId, userId);
-        
-        // If we also have a date range, filter the results
-        if (startDate && endDate) {
-          timeLogs = timeLogs.filter(log => {
-            const logDate = new Date(log.date);
-            return logDate >= startDate && logDate <= endDate;
-          });
-        }
-      } else {
-        // If no engagement ID, use date range if available
-        if (startDate && endDate) {
-          timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate, userId);
-        } else {
-          // Fall back to all time logs
-          timeLogs = await storage.getTimeLogs(userId);
-        }
-        
-        // Apply client filter if specified
-        if (clientName && clientName !== 'all') {
-          timeLogs = timeLogs.filter(log => log.engagement.clientName === clientName);
-        }
-      }
-
-      // Apply search filter if present
-      if (search) {
-        timeLogs = timeLogs.filter(log => 
-          log.description.toLowerCase().includes(search.toLowerCase())
-        );
-      }
-
-      // Sort time logs by date in descending order
-      timeLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      // Ensure we only return time logs for the specified engagement
-      if (engagementId) {
-        timeLogs = timeLogs.filter(log => log.engagementId === engagementId);
-      }
-
-      res.json(timeLogs);
-    } catch (error) {
-      console.error('Error fetching time logs:', error);
-      res.status(500).json({ error: 'Failed to fetch time logs' });
-=======
       
       if (dateRange === 'all') {
         // Special case - fetch all time logs without date filtering
@@ -596,11 +537,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      // Ensure we only return time logs for the specified engagement
+      if (engagementId) {
+        timeLogs = timeLogs.filter(log => log.engagementId === engagementId);
+      }
+
+      // Sort time logs by date in descending order
+      if (timeLogs) {
+        timeLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      }
+
       res.json(timeLogs || []);
     } catch (error) {
       console.error("Error fetching time logs:", error);
       res.status(500).json({ message: "Failed to fetch time logs" });
->>>>>>> 7151761b10cd61aa7cb07de3085ef5b7b44f7242
     }
   });
 

@@ -165,7 +165,6 @@ const InvoiceModal = ({
     fetchTimeLogs();
   }, [watchEngagementId, watchPeriodStart, watchPeriodEnd]);
 
-<<<<<<< HEAD
   // Add helper function for consistent date handling
   const formatLocalDate = (dateInput: string | Date) => {
     try {
@@ -184,8 +183,6 @@ const InvoiceModal = ({
     }
   };
 
-=======
->>>>>>> 7151761b10cd61aa7cb07de3085ef5b7b44f7242
   // Define close handler
   const handleClose = () => {
     reset();
@@ -213,11 +210,7 @@ const InvoiceModal = ({
       // Prepare line items
       const lineItems = timeLogs.map((log: any) => ({
         timeLogId: log.id,
-<<<<<<< HEAD
         description: `${log.description} (Date: ${formatLocalDate(log.date).toLocaleDateString()})`,
-=======
-        description: `${log.description} (Date: ${new Date(log.date).toLocaleDateString()})`,
->>>>>>> 7151761b10cd61aa7cb07de3085ef5b7b44f7242
         hours: log.hours,
         rate: log.engagement.hourlyRate,
         amount: log.billableAmount,
@@ -467,11 +460,7 @@ const InvoiceModal = ({
                         timeLogs.map((log: any) => (
                           <tr key={log.id} className="border-b border-slate-100 text-sm">
                             <td className="py-2 px-3 text-slate-700">
-<<<<<<< HEAD
                               {formatLocalDate(log.date).toLocaleDateString()}
-=======
-                              {new Date(log.date).toLocaleDateString()}
->>>>>>> 7151761b10cd61aa7cb07de3085ef5b7b44f7242
                             </td>
                             <td className="py-2 px-3 text-slate-700">{log.description}</td>
                             <td className="py-2 px-3 text-slate-700 text-right">{formatHours(log.hours)}</td>
