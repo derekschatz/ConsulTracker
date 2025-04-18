@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { getISODate } from '@/lib/date-utils';
+import { insertTimeLogSchema } from '@shared/schema';
 
 // Interface for Engagement
 interface Engagement {
@@ -24,18 +25,15 @@ interface Engagement {
   status: string;
 }
 
-const formSchema = z.object({
-  engagementId: z.string().min(1, 'Please select an engagement'),
-  date: z.string().min(1, 'Date is required'),
-  hours: z.string().min(1, 'Hours are required')
-    .refine(val => !isNaN(Number(val)) && Number(val) > 0, {
-      message: 'Hours must be a positive number',
-    })
-    .refine(val => Number(val) <= 8, {
-      message: 'Hours cannot exceed 8 per entry',
-    }),
-  description: z.string().min(1, 'Description is required'),
-});
+// Extend the time log schema with additional validation
+const formSchema = insertTimeLogSchema
+  .omit({
+    userId: true // We'll add this on the server
+  })
+  .extend({
+    engagementId: z.number().min(1, 'Please select an engagement'),
+    date: z.string(), // Change date to string type to match form input
+  });
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -53,35 +51,51 @@ const QuickAddTimeForm = () => {
     register,
     handleSubmit,
     reset,
+    control,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      engagementId: '',
+      engagementId: undefined,
       date: getISODate(), // Uses default 2025 date
-      hours: '',
+      hours: undefined,
       description: '',
     },
   });
 
+  // Debug: Watch all form values
+  const formValues = watch();
+  console.log('Current form values:', formValues);
+  console.log('Form errors:', errors);
+
   const onSubmit = async (data: FormValues) => {
     try {
+      console.log('Form submitted with data:', data);
       setIsSubmitting(true);
 
-      // Convert values to appropriate types
-      const formattedData = {
-        engagementId: Number(data.engagementId),
-        date: new Date(data.date),
+      // Process the data before validation
+      const processedData = {
+        ...data,
+        date: new Date(data.date + 'T00:00:00Z'), // Ensure proper date parsing
         hours: Number(data.hours),
-        description: data.description,
+        engagementId: Number(data.engagementId)
       };
 
+      console.log('Sending processed data to server:', processedData);
+
       // Submit time log
-      const response = await apiRequest('POST', '/api/time-logs', formattedData);
+      const response = await apiRequest('POST', '/api/time-logs', processedData);
+      console.log('Server response:', response);
 
       if (!response.ok) {
-        throw new Error('Failed to add time log');
+        const errorData = await response.json();
+        console.error('Server error:', errorData);
+        throw new Error(errorData.message || 'Failed to add time log');
       }
+
+      const responseData = await response.json();
+      console.log('Time log created successfully:', responseData);
 
       // Success toast
       toast({
@@ -89,22 +103,36 @@ const QuickAddTimeForm = () => {
         description: `${data.hours} hours logged for ${new Date(data.date).toLocaleDateString()}`,
       });
 
-      // Reset form
-      reset({
-        engagementId: '',
-        date: getISODate(), // Uses default 2025 date
-        hours: '',
-        description: '',
+      // Refresh relevant queries
+      await queryClient.invalidateQueries({
+        queryKey: ['/api/time-logs'],
+        refetchType: 'all'
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ['/api/dashboard'],
+        refetchType: 'all'
+      });
+      await queryClient.refetchQueries({
+        type: 'active'
       });
 
-      // Refresh relevant queries
-      queryClient.invalidateQueries({ queryKey: ['/api/time-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      // Force refresh workaround
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+
+      // Reset form
+      reset({
+        engagementId: undefined,
+        date: getISODate(), // Uses default 2025 date
+        hours: undefined,
+        description: '',
+      });
     } catch (error) {
       console.error('Error adding time log:', error);
       toast({
         title: 'Error',
-        description: 'Failed to add time log',
+        description: error instanceof Error ? error.message : 'Failed to add time log',
         variant: 'destructive',
       });
     } finally {
@@ -118,35 +146,33 @@ const QuickAddTimeForm = () => {
         <Label htmlFor="engagementSelect" className="block text-sm font-medium text-slate-700 mb-1">
           Engagement
         </Label>
-        <div>
-          <Input
-            type="hidden"
-            {...register('engagementId')}
-            id="engagement-id-input"
-          />
-          <Select 
-            onValueChange={(value) => {
-              const input = document.getElementById('engagement-id-input') as HTMLInputElement;
-              if (input) {
-                input.value = value;
-                // Trigger a change event to notify react-hook-form
-                const event = new Event('input', { bubbles: true });
-                input.dispatchEvent(event);
-              }
-            }}
-          >
-            <SelectTrigger className={errors.engagementId ? 'border-red-500' : ''}>
-              <SelectValue placeholder="Select an engagement" />
-            </SelectTrigger>
-            <SelectContent>
-              {engagements.map((engagement: Engagement) => (
-                <SelectItem key={engagement.id} value={engagement.id.toString()}>
-                  {engagement.clientName} - {engagement.projectName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Controller
+          name="engagementId"
+          control={control}
+          render={({ field }) => {
+            console.log('Engagement field value:', field.value);
+            return (
+              <Select
+                value={field.value?.toString()}
+                onValueChange={(value) => {
+                  console.log('Engagement selected:', value);
+                  field.onChange(Number(value));
+                }}
+              >
+                <SelectTrigger className={errors.engagementId ? 'border-red-500' : ''}>
+                  <SelectValue placeholder="Select an engagement" />
+                </SelectTrigger>
+                <SelectContent>
+                  {engagements.map((engagement: Engagement) => (
+                    <SelectItem key={engagement.id} value={engagement.id.toString()}>
+                      {engagement.clientName} - {engagement.projectName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          }}
+        />
         {errors.engagementId && (
           <span className="text-xs text-red-500">{errors.engagementId.message}</span>
         )}
@@ -179,6 +205,7 @@ const QuickAddTimeForm = () => {
             max="8"
             placeholder="0.00"
             {...register('hours', {
+              valueAsNumber: true,
               onChange: (e) => {
                 // Real-time validation as user types
                 const value = e.target.value;

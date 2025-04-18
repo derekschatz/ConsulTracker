@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      target: production
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Add production-specific environment variables here
+    volumes:
+      - /app/node_modules  # Only persist node_modules
+    command: npm run start  # Use production start command
+    deploy:
+      replicas: 2  # Run multiple instances
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  db:
+    ports:
+      - "5432"  # Only expose internally
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  postgres_prod_data:
+    driver: local 

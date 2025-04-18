@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      target: development
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:3000
+      # Add any other development-specific environment variables here
+    volumes:
+      - .:/app
+      - /app/node_modules
+      # Add any other development-specific volumes here
+    command: sh -c "npm run db:push && npm run dev"
+
+  db:
+    ports:
+      - "5432:5432"  # Expose DB port for local development tools
+    environment:
+      - POSTGRES_USER=dev_user
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_DB=dev_db
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data  # Separate volume for dev data
+
+volumes:
+  postgres_dev_data:
+    driver: local 

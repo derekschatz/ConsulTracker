@@ -372,7 +372,7 @@ const InvoiceModal = ({
                   id="periodStart"
                   type="date"
                   {...register('periodStart')}
-                  className={`h-10 ${errors.periodStart ? 'border-red-500' : ''}`}
+                  className={errors.periodStart ? 'border-red-500' : ''}
                 />
                 {errors.periodStart && (
                   <span className="text-xs text-red-500">{errors.periodStart.message}</span>
@@ -387,7 +387,7 @@ const InvoiceModal = ({
                   id="periodEnd"
                   type="date"
                   {...register('periodEnd')}
-                  className={`h-10 ${errors.periodEnd ? 'border-red-500' : ''}`}
+                  className={errors.periodEnd ? 'border-red-500' : ''}
                 />
                 {errors.periodEnd && (
                   <span className="text-xs text-red-500">{errors.periodEnd.message}</span>
@@ -395,37 +395,15 @@ const InvoiceModal = ({
               </div>
               
               <div className="grid grid-cols-1 gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Label htmlFor="netTerms" className="text-sm font-medium text-slate-700">
-                    Net Terms
-                  </Label>
-                  <div 
-                    className="group relative inline-block"
-                  >
-                    <div className="h-3.5 w-3.5 rounded-full flex items-center justify-center text-xs bg-slate-200 text-slate-700 cursor-help">i</div>
-                    <div className="absolute z-10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity bottom-0 left-1/2 -translate-x-1/2 -translate-y-4 px-2 py-1 w-56 text-xs bg-slate-800 text-white rounded">
-                      Due date will be calculated from the billing end date. Invoices will be marked as "overdue" after this date.
-                    </div>
-                  </div>
-                </div>
-                <Controller
-                  name="netTerms"
-                  control={control}
-                  render={({ field }) => (
-                    <Select
-                      value={field.value}
-                      onValueChange={field.onChange}
-                    >
-                      <SelectTrigger className={`h-10 ${errors.netTerms ? 'border-red-500' : ''}`}>
-                        <SelectValue placeholder="Select net terms" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="30">Net 30</SelectItem>
-                        <SelectItem value="60">Net 60</SelectItem>
-                        <SelectItem value="90">Net 90</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
+                <Label htmlFor="netTerms" className="text-sm font-medium text-slate-700">
+                  Net Terms (Days)
+                </Label>
+                <Input
+                  id="netTerms"
+                  type="number"
+                  min="0"
+                  {...register('netTerms')}
+                  className={errors.netTerms ? 'border-red-500' : ''}
                 />
                 {errors.netTerms && (
                   <span className="text-xs text-red-500">{errors.netTerms.message}</span>

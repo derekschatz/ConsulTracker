@@ -32,7 +32,9 @@ const formSchema = insertTimeLogSchema
   })
   .extend({
     engagementId: z.number().min(1, 'Please select an engagement'),
-    date: z.string(), // Change date to string type to match server expectations
+    date: z.string().min(1, 'Date is required'), // Validate date string is not empty
+    hours: z.number().min(0.25, 'Hours must be at least 0.25').max(8, 'Hours cannot exceed 8'),
+    description: z.string().min(1, 'Description is required'),
   });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -228,11 +230,12 @@ const TimeLogModal = ({
     try {
       setIsSubmitting(true);
 
-      // Format the data
+      // Format the data - ensure all fields are properly formatted
       const formattedData = {
-        ...data,
         engagementId: Number(data.engagementId),
+        date: new Date(data.date), // Create Date object from the input date string
         hours: Number(data.hours),
+        description: data.description.trim()
       };
 
       console.log('Submitting time log with data:', formattedData);
@@ -256,7 +259,7 @@ const TimeLogModal = ({
       // Success toast
       toast({
         title: `Time log ${isEditMode ? 'updated' : 'created'} successfully`,
-        description: `${formattedData.hours} hours logged for ${formattedData.date}`,
+        description: `${formattedData.hours} hours logged for ${data.date}`,
       });
 
       // Always invalidate ALL time log queries regardless of path to ensure complete refresh
@@ -280,9 +283,9 @@ const TimeLogModal = ({
       });
 
       if (multipleEntries && !isEditMode) {
-        // Add the created log to our list
+        // Add the created log to our list - use the string date for display
         setCreatedLogs(prev => [...prev, {
-          date: formattedData.date,
+          date: data.date,
           hours: formattedData.hours,
           description: formattedData.description
         }]);
