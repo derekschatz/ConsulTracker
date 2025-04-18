@@ -875,14 +875,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Only create invoice items if there are time logs
       if (timeLogs.length > 0) {
         // Create invoice items from time logs
-        const invoiceItems = timeLogs.map((log: any) => ({
-          description: log.description,
-          hours: log.hours,
-          amount: log.amount ? log.amount.toString() : '0',
-          timeLogId: log.timeLogId || log.id, // Support both formats
-          rate: log.rate ? log.rate.toString() : engagement.hourly_rate.toString(),
-          invoiceId
-        }));
+        const invoiceItems = timeLogs.map((log: any) => {
+          // Convert numeric values to ensure proper calculation
+          const hours = Number(log.hours);
+          const rate = Number(log.rate || engagement.hourly_rate);
+          const amount = hours * rate;
+
+          return {
+            description: log.description,
+            hours: hours,
+            amount: amount.toString(), // Store as string for database
+            timeLogId: log.timeLogId || log.id, // Support both formats
+            rate: rate.toString(), // Store as string for database
+            invoiceId
+          };
+        });
 
         // Insert invoice items
         await pool.query(

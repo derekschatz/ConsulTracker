@@ -9,10 +9,11 @@ import {
   engagements, timeLogs, invoices, invoiceLineItems, users
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql, SQL } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
+import { type PgColumn } from "drizzle-orm/pg-core";
 
 // Modify the interface with any CRUD methods
 export interface IStorage {
@@ -426,8 +427,12 @@ export class DatabaseStorage implements IStorage {
   // Helper methods
   private async enrichTimeLog(timeLog: TimeLog): Promise<TimeLogWithEngagement> {
     // Get the engagement for this time log
-    let engagement: Engagement | undefined;
-    const engagementResults = await db.select().from(engagements).where(eq(engagements.id, timeLog.engagementId));
+    const engagementResults = await db
+      .select()
+      .from(engagements)
+      .where(eq(engagements.id, timeLog.engagementId));
+    
+    let engagement: Engagement;
     
     if (engagementResults.length > 0) {
       engagement = engagementResults[0];
@@ -435,17 +440,21 @@ export class DatabaseStorage implements IStorage {
       // Fallback if engagement doesn't exist
       engagement = {
         id: timeLog.engagementId,
+        userId: timeLog.userId,
         clientName: "Unknown Client",
         projectName: "Unknown Project",
-        hourlyRate: "0",
+        hourlyRate: "0", // Keep as string since that's what Drizzle expects for numeric type
         startDate: new Date(),
         endDate: new Date(),
         description: "",
         status: "unknown"
-      } as Engagement;
+      };
     }
 
-    const billableAmount = Number(timeLog.hours) * Number(engagement.hourlyRate);
+    // Convert both hourlyRate and hours to numbers for calculation
+    const hourlyRate = Number(engagement.hourlyRate);
+    const hours = Number(timeLog.hours);
+    const billableAmount = hours * hourlyRate;
     
     return {
       ...timeLog,

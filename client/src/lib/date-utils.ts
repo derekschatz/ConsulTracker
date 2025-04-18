@@ -1,4 +1,4 @@
-import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter, differenceInDays } from 'date-fns';
+import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter, differenceInDays, parseISO, addDays as dateFnsAddDays } from 'date-fns';
 
 export interface DateRange {
   startDate: Date;
@@ -6,12 +6,9 @@ export interface DateRange {
 }
 
 // Format a date to a string with specified format
-export function formatDate(date: Date | string, formatStr = 'MMM d, yyyy'): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  if (!isValid(dateObj)) {
-    return 'Invalid date';
-  }
-  return format(dateObj, formatStr);
+export function formatDate(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  return format(dateObj, 'MM/dd/yyyy');
 }
 
 // Parse a string to a Date object
@@ -155,16 +152,22 @@ export function isDateToday(date: Date | string): boolean {
 }
 
 // Get ISO formatted date string (YYYY-MM-DD)
-export function getISODate(date: Date = new Date(2025, 3, 3)): string {
-  return format(date, 'yyyy-MM-dd');
+export function getISODate(date?: Date | string): string {
+  // If no date provided, use the demo today date (April 3, 2025)
+  if (!date) {
+    return format(new Date(2025, 3, 3), 'yyyy-MM-dd');
+  }
+  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  return format(dateObj, 'yyyy-MM-dd');
 }
 
 export function parseISODate(dateString: string): Date {
   return parse(dateString, 'yyyy-MM-dd', new Date());
 }
 
-export function formatDateForDisplay(date: Date): string {
-  return format(date, 'MMM d, yyyy');
+export function formatDateForDisplay(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  return format(dateObj, 'MMMM d, yyyy');
 }
 
 export function formatDateTimeForDisplay(date: Date): string {
@@ -200,4 +203,35 @@ export function adjustDateForTimezone(date: Date | string): Date {
     dateObj.getMonth(),
     dateObj.getDate() + 1  // Add one day to compensate for timezone shift
   );
+}
+
+// Convert a date to local timezone without adding extra days
+export function toLocalDate(date: Date | string): Date {
+  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  return new Date(
+    dateObj.getFullYear(),
+    dateObj.getMonth(),
+    dateObj.getDate()
+  );
+}
+
+// Format a date for database storage
+export function toStorageDate(date: Date | string): Date {
+  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  return new Date(Date.UTC(
+    dateObj.getFullYear(),
+    dateObj.getMonth(),
+    dateObj.getDate()
+  ));
+}
+
+/**
+ * Add specified number of days to a date
+ * @param date The date to add days to
+ * @param days Number of days to add
+ * @returns New Date object with days added
+ */
+export function addDays(date: Date | string, days: number): Date {
+  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  return dateFnsAddDays(dateObj, days);
 }
