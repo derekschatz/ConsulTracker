@@ -1,11 +1,6 @@
 # Base stage for shared settings
 FROM node:20-alpine AS base
 
-# Install PostgreSQL client and wait-for-it script
-RUN apk add --no-cache postgresql-client bash
-ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /usr/local/bin/wait-for-it
-RUN chmod +x /usr/local/bin/wait-for-it
-
 WORKDIR /app
 
 # Development stage
@@ -16,9 +11,18 @@ COPY . .
 ENV NODE_ENV=development
 ENV PORT=3000
 EXPOSE 3000
-RUN echo '#!/bin/sh\nwait-for-it db:5432 -t 60 -- npm run db:push && npm run dev' > /usr/local/bin/start.sh
-RUN chmod +x /usr/local/bin/start.sh
-CMD ["/usr/local/bin/start.sh"]
+# Install tsx globally for development
+RUN npm install -g tsx
+# Create a startup script
+COPY <<-"EOF" /docker-entrypoint.sh
+#!/bin/sh
+echo "Running database migrations..."
+npm run db:push
+echo "Starting development server..."
+npm run dev
+EOF
+RUN chmod +x /docker-entrypoint.sh
+CMD ["/docker-entrypoint.sh"]
 
 # Build stage
 FROM base AS builder
@@ -30,11 +34,11 @@ RUN npm run build
 # Production stage
 FROM base AS production
 COPY package*.json ./
-RUN npm install --production
+# Install both production and development dependencies for build tools
+RUN npm install
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
 ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
-RUN echo '#!/bin/sh\nwait-for-it db:5432 -t 60 -- node dist/index.js' > /usr/local/bin/start.sh
-RUN chmod +x /usr/local/bin/start.sh
-CMD ["/usr/local/bin/start.sh"] 
+CMD ["node", "dist/index.js"] 
