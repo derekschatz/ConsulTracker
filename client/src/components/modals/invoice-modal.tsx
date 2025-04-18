@@ -7,18 +7,29 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import * as z from 'zod';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { insertInvoiceSchema } from '@shared/schema';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatCurrency, formatHours } from '@/lib/format-utils';
+import { formatCurrency, formatHours, generateInvoiceNumber } from '@/lib/format-utils';
 import { formatDate, toLocalDate, toStorageDate, addDays } from '@/lib/date-utils';
-import { generateInvoiceNumber } from '@/lib/format-utils';
 import { formatDateForDisplay } from '@/lib/date-utils';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
+import { Card, CardContent } from '@/components/ui/card';
+
+interface Engagement {
+  id: number;
+  clientName: string;
+  projectName: string;
+  hourlyRate: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  userId: number;
+}
 
 // Extend the invoice schema with additional validation
 const formSchema = z.object({
@@ -36,21 +47,32 @@ type FormValues = z.infer<typeof formSchema>;
 
 interface InvoiceModalProps {
   open: boolean;
-  onClose: () => void;
-  periodStart: Date | null;
-  periodEnd: Date | null;
-  engagementId: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+  engagementId?: string | null;
 }
 
 interface TimeLog {
-  id: string;
-  description: string;
-  hours: number;
+  id: number;
+  userId: number;
+  engagementId: number;
   date: string;
-  billableAmount: number;
+  hours: number;
+  description: string;
+  createdAt: string;
   engagement: {
+    id: number;
+    clientName: string;
+    projectName: string;
     hourlyRate: string;
+    startDate: string;
+    endDate: string;
+    status: string;
+    userId: number;
   };
+  billableAmount: number;
 }
 
 interface LineItem {
@@ -69,7 +91,8 @@ interface Summary {
 
 const InvoiceModal = ({
   open,
-  onClose,
+  onOpenChange,
+  onSuccess,
   periodStart,
   periodEnd,
   engagementId,
@@ -77,20 +100,19 @@ const InvoiceModal = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // State to track form fields and submission
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
   const [selectedClientName, setSelectedClientName] = useState<string>('');
   
   // Fetch all active engagements
-  const { data: allEngagements = [], isLoading: isLoadingEngagements } = useQuery<any[], any[], any[]>({
+  const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery<Engagement[]>({
     queryKey: ['/api/engagements/active'],
     enabled: open,
   });
   
   // Get unique clients from active engagements
-  const uniqueClients = allEngagements.reduce((clients: string[], engagement: any) => {
+  const uniqueClients = engagements.reduce((clients: string[], engagement: Engagement) => {
     if (!clients.includes(engagement.clientName)) {
       clients.push(engagement.clientName);
     }
@@ -98,7 +120,7 @@ const InvoiceModal = ({
   }, []).sort();
   
   // Filter active engagements by selected client
-  const filteredEngagements = allEngagements.filter((engagement: any) => 
+  const filteredEngagements = engagements.filter((engagement: Engagement) => 
     engagement.clientName === selectedClientName && engagement.status === 'active'
   );
 
@@ -109,28 +131,29 @@ const InvoiceModal = ({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      clientName: selectedClientName || '',
+      clientName: '',
       engagementId: engagementId || '',
-      periodStart: periodStart ? new Date(periodStart).toISOString().split('T')[0] : '',
-      periodEnd: periodEnd ? new Date(periodEnd).toISOString().split('T')[0] : '',
-      netTerms: '30', // Default to Net-30
-      notes: '',
-    },
+      periodStart: periodStart ? toStorageDate(periodStart) : '',
+      periodEnd: periodEnd ? toStorageDate(periodEnd) : '',
+      netTerms: '30',
+      notes: ''
+    }
   });
 
-  const { handleSubmit, watch, setValue } = form;
+  const { handleSubmit, watch, control, formState: { errors } } = form;
   
-  // Set initial selectedClientName based on preselectedClientName if available
-  useEffect(() => {
-    if (open && selectedClientName) {
-      setSelectedClientName(selectedClientName);
-    }
-  }, [open, selectedClientName]);
-
   // Watch for changes to form values
+  const watchClientName = watch('clientName');
   const watchEngagementId = watch('engagementId');
   const watchPeriodStart = watch('periodStart');
   const watchPeriodEnd = watch('periodEnd');
+
+  // Update selectedClientName when client changes in form
+  useEffect(() => {
+    if (watchClientName) {
+      setSelectedClientName(watchClientName);
+    }
+  }, [watchClientName]);
 
   // Reset engagement if client changes
   useEffect(() => {
@@ -143,10 +166,10 @@ const InvoiceModal = ({
       
       if (!validEngagement) {
         // Reset engagement if it doesn't belong to the selected client
-        setValue('engagementId', '');
+        form.setValue('engagementId', '');
       }
     }
-  }, [selectedClientName, watchEngagementId, filteredEngagements, setValue]);
+  }, [selectedClientName, watchEngagementId, filteredEngagements, form]);
 
   // Calculate total from time logs
   const calculateTotal = (logs: TimeLog[]): number => {
@@ -170,11 +193,6 @@ const InvoiceModal = ({
           setTotalHours(logs.reduce((sum: number, log: TimeLog) => sum + log.hours, 0));
         } catch (error) {
           console.error('Error fetching time logs:', error);
-          toast({
-            title: 'Error',
-            description: 'Failed to fetch time logs',
-            variant: 'destructive'
-          });
           setTimeLogs([]);
           setInvoiceTotal(0);
           setTotalHours(0);
@@ -185,18 +203,24 @@ const InvoiceModal = ({
   }, [watchEngagementId, watchPeriodStart, watchPeriodEnd, open]);
 
   // Add formatLocalDate helper function
-  const formatLocalDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString();
+  const formatLocalDate = (date: Date): string => {
+    // Add timezone offset to prevent date shift
+    const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+    const localDate = new Date(date.getTime() + userTimezoneOffset);
+    return localDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   const formatHours = (hours: number) => {
     return hours.toFixed(1);
   };
 
-  const formatCurrency = (amount: number) => {
-    return `$${amount.toFixed(2)}`;
-  };
+  function formatAmount(amount: number): string {
+    return formatCurrency(amount);
+  }
 
   // Define close handler
   const handleClose = () => {
@@ -205,21 +229,18 @@ const InvoiceModal = ({
     setTimeLogs([]);
     setInvoiceTotal(0);
     setTotalHours(0);
-    onClose();
+    onOpenChange(false);
   };
 
   // Convert time logs to line items
-  const lineItems = timeLogs.map((log) => {
-    const hourlyRate = parseFloat(log.engagement.hourlyRate);
-    return {
-      id: log.id,
-      date: log.date,
-      description: log.description,
-      hours: log.hours,
-      hourlyRate,
-      billableAmount: log.billableAmount
-    };
-  }) satisfies LineItem[];
+  const lineItems: LineItem[] = timeLogs.map((log) => ({
+    id: log.id.toString(),
+    date: log.date,
+    description: log.description,
+    hours: log.hours,
+    hourlyRate: parseFloat(log.engagement.hourlyRate),
+    billableAmount: log.billableAmount
+  }));
 
   // Format dates for API request
   const formattedStartDate = watchPeriodStart ? new Date(watchPeriodStart).toISOString() : null;
@@ -237,47 +258,101 @@ const InvoiceModal = ({
   const onSubmit = async (data: FormValues) => {
     try {
       setIsSubmitting(true);
-      
-      // Calculate due date based on net terms
-      const today = new Date();
-      const dueDate = addDays(today, parseInt(data.netTerms));
 
-      const invoiceData = {
-        ...data,
-        invoiceNumber: nextInvoiceNumber,
-        issueDate: toStorageDate(today).toISOString().split('T')[0],
-        dueDate: toStorageDate(dueDate).toISOString().split('T')[0],
-        amount: invoiceTotal.toString(), // Convert to string for storage
-        status: 'submitted' as const,
-        timeLogs: timeLogs.map(log => ({
-          id: log.id,
-          description: log.description,
-          hours: log.hours,
-          hourlyRate: parseFloat(log.engagement.hourlyRate),
-          billableAmount: log.billableAmount,
-          date: toStorageDate(new Date(log.date)).toISOString().split('T')[0]
-        }))
-      };
-
-      const response = await apiRequest('POST', '/api/invoices', invoiceData);
-
-      if (!response.ok) {
-        throw new Error('Failed to create invoice');
+      if (!selectedClientName || !watchEngagementId) {
+        toast({
+          title: "Error",
+          description: "Please select a client and engagement",
+          variant: "destructive"
+        });
+        return;
       }
 
-      toast({
-        title: 'Success',
-        description: 'Invoice created successfully',
+      const selectedEngagement = filteredEngagements.find(e => e.id.toString() === watchEngagementId);
+      if (!selectedEngagement) {
+        toast({
+          title: "Error",
+          description: "Selected engagement is not valid",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const lineItems = timeLogs.map(log => ({
+        description: log.description,
+        hours: log.hours,
+        rate: parseFloat(selectedEngagement.hourlyRate),
+        amount: log.hours * parseFloat(selectedEngagement.hourlyRate)
+      }));
+
+      const total = lineItems.reduce((sum, item) => sum + item.amount, 0);
+      const issueDate = new Date();
+      const dueDate = addDays(issueDate, parseInt(data.netTerms));
+
+      const submission = {
+        engagementId: selectedEngagement.id,
+        userId: selectedEngagement.userId,
+        clientName: selectedEngagement.clientName,
+        projectName: selectedEngagement.projectName,
+        invoiceNumber: nextInvoiceNumber,
+        issueDate: toStorageDate(issueDate),
+        dueDate: toStorageDate(dueDate),
+        amount: total,
+        status: 'submitted' as const,
+        periodStart: data.periodStart,
+        periodEnd: data.periodEnd,
+        notes: data.notes || undefined
+      };
+
+      console.log('Submitting invoice:', submission);
+
+      const response = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...submission,
+          lineItems: timeLogs.map(log => ({
+            description: log.description,
+            hours: log.hours,
+            rate: parseFloat(log.engagement.hourlyRate),
+            amount: log.billableAmount,
+            timeLogId: log.id
+          }))
+        }),
       });
 
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-      handleClose();
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create invoice');
+      }
+
+      // Invalidate and refetch relevant queries
+      await queryClient.refetchQueries({ 
+        predicate: (query) => {
+          const queryKey = query.queryKey[0];
+          return typeof queryKey === 'string' && (
+            queryKey.startsWith('/api/invoices') || 
+            queryKey.startsWith('/api/dashboard')
+          );
+        },
+        type: 'active'
+      });
+
+      toast({
+        title: "Success",
+        description: "Invoice created successfully"
+      });
+
+      onOpenChange(false);
+      if (onSuccess) onSuccess();
     } catch (error) {
       console.error('Error creating invoice:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to create invoice',
-        variant: 'destructive',
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to create invoice',
+        variant: "destructive"
       });
     } finally {
       setIsSubmitting(false);
@@ -285,12 +360,12 @@ const InvoiceModal = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Generate Invoice</DialogTitle>
+          <DialogTitle>Create New Invoice</DialogTitle>
           <DialogDescription>
-            Create an invoice for the selected time period and engagement.
+            Generate an invoice for billable hours
           </DialogDescription>
         </DialogHeader>
 
@@ -341,7 +416,7 @@ const InvoiceModal = ({
                             <SelectValue placeholder="Select an engagement" />
                           </SelectTrigger>
                           <SelectContent>
-                            {filteredEngagements.map((engagement: any) => (
+                            {filteredEngagements.map((engagement: Engagement) => (
                               <SelectItem key={engagement.id} value={engagement.id.toString()}>
                                 {engagement.projectName}
                               </SelectItem>
@@ -418,10 +493,10 @@ const InvoiceModal = ({
                       <tbody>
                         {timeLogs.map((log) => (
                           <tr key={log.id} className="border-t">
-                            <td className="px-4 py-2">{formatLocalDate(log.date)}</td>
+                            <td className="px-4 py-2">{formatLocalDate(new Date(log.date))}</td>
                             <td className="px-4 py-2">{log.description}</td>
                             <td className="px-4 py-2 text-right">{formatHours(log.hours)}</td>
-                            <td className="px-4 py-2 text-right">{formatCurrency(parseFloat(log.engagement.hourlyRate))}</td>
+                            <td className="px-4 py-2 text-right">{formatCurrency(Number(log.engagement.hourlyRate))}</td>
                             <td className="px-4 py-2 text-right">{formatCurrency(log.billableAmount)}</td>
                           </tr>
                         ))}

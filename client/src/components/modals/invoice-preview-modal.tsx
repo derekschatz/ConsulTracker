@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { InvoiceWithLineItems } from "@shared/schema";
 import { generateInvoicePDF } from "@/lib/pdf-generator";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatCurrency, formatHours } from "@/lib/format-utils";
 import { Download, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -222,7 +222,7 @@ const InvoicePreviewModal = ({
                           </span>
                         </td>
                         <td className="py-4 px-4 border-t text-right">
-                          {previewData.totalHours.toFixed(2)}
+                          {formatHours(previewData.totalHours)}
                         </td>
                         <td className="py-4 px-4 border-t text-right">
                           {previewData.amount}

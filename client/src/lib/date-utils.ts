@@ -215,23 +215,23 @@ export function toLocalDate(date: Date | string): Date {
   );
 }
 
-// Format a date for database storage
-export function toStorageDate(date: Date | string): Date {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date;
-  return new Date(Date.UTC(
-    dateObj.getFullYear(),
-    dateObj.getMonth(),
-    dateObj.getDate()
-  ));
+/**
+ * Converts a date to a storage-friendly format (YYYY-MM-DD)
+ * @param date The date to convert
+ * @returns Date string in YYYY-MM-DD format
+ */
+export function toStorageDate(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return format(dateObj, 'yyyy-MM-dd');
 }
 
 /**
- * Add specified number of days to a date
+ * Adds days to a date
  * @param date The date to add days to
  * @param days Number of days to add
- * @returns New Date object with days added
+ * @returns New Date object
  */
 export function addDays(date: Date | string, days: number): Date {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
   return dateFnsAddDays(dateObj, days);
 }

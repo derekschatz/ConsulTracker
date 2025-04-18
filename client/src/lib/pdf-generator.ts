@@ -151,8 +151,8 @@ export function generateInvoicePDF(
         
         // Add hours, rate and amount only to the first row
         doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
-        doc.text(`$${item.rate}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
-        doc.text(`$${parseFloat(String(invoice.amount)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, pageWidth - 20, startY + 17, { align: 'right' });
+        doc.text(`${formatCurrency(Number(item.rate))}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
+        doc.text(formatCurrency(Number(invoice.amount)), pageWidth - 20, startY + 17, { align: 'right' });
       }
     });
   } else {
@@ -173,7 +173,7 @@ export function generateInvoicePDF(
   // Add total row
   doc.setFont('helvetica', 'bold');
   doc.text("TOTAL", pageWidth - 65, currentY + 15);
-  doc.text(`$${parseFloat(String(invoice.amount)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, pageWidth - 20, currentY + 15, { align: 'right' });
+  doc.text(formatCurrency(Number(invoice.amount)), pageWidth - 20, currentY + 15, { align: 'right' });
   
   // Add payment instructions
   currentY += 35;
@@ -335,8 +335,8 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
         
         // Add hours, rate and amount only to the first row
         doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
-        doc.text(`$${item.rate}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
-        doc.text(`$${parseFloat(String(invoice.amount)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, pageWidth - 20, startY + 17, { align: 'right' });
+        doc.text(`${formatCurrency(Number(item.rate))}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
+        doc.text(formatCurrency(Number(invoice.amount)), pageWidth - 20, startY + 17, { align: 'right' });
       }
     });
   } else {
@@ -357,7 +357,7 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   // Add total row
   doc.setFont('helvetica', 'bold');
   doc.text("TOTAL", pageWidth - 65, currentY + 15);
-  doc.text(`$${parseFloat(String(invoice.amount)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, pageWidth - 20, currentY + 15, { align: 'right' });
+  doc.text(formatCurrency(Number(invoice.amount)), pageWidth - 20, currentY + 15, { align: 'right' });
   
   // Add payment instructions
   currentY += 35;
