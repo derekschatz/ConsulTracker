@@ -1,4 +1,4 @@
-import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
+import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter, differenceInDays } from 'date-fns';
 
 export interface DateRange {
   startDate: Date;
@@ -186,4 +186,18 @@ export function getEndOfDay(date: Date): Date {
   const newDate = new Date(date);
   newDate.setHours(23, 59, 59, 999);
   return newDate;
+}
+
+/**
+ * Adjusts a date for timezone differences by adding one day
+ * @param date The date to adjust
+ * @returns Adjusted Date object
+ */
+export function adjustDateForTimezone(date: Date | string): Date {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return new Date(
+    dateObj.getFullYear(),
+    dateObj.getMonth(),
+    dateObj.getDate() + 1  // Add one day to compensate for timezone shift
+  );
 }

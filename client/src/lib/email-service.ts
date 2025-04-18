@@ -1,5 +1,7 @@
 import { type InvoiceWithLineItems } from '@shared/schema';
 import { apiRequest } from './queryClient';
+import { formatDateForDisplay, adjustDateForTimezone } from './date-utils';
+import { formatCurrency } from './format-utils';
 
 /**
  * Service for handling invoice emails
@@ -90,7 +92,7 @@ export const emailService = {
    * @returns A formatted subject line
    */
   generateDefaultSubject(invoice: InvoiceWithLineItems): string {
-    return `Invoice #${invoice.invoiceNumber} from Your Consulting Service`;
+    return `Invoice #${invoice.invoiceNumber} from [Your Company Name]`;
   },
 
   /**
@@ -100,24 +102,20 @@ export const emailService = {
    * @returns A formatted message
    */
   generateDefaultMessage(invoice: InvoiceWithLineItems): string {
-    const issueDate = new Date(invoice.issueDate).toLocaleDateString();
-    const dueDate = new Date(invoice.dueDate).toLocaleDateString();
-    
     return `Dear ${invoice.clientName},
 
-Please find attached invoice #${invoice.invoiceNumber} in the amount of $${invoice.amount}.
+Please find attached invoice #${invoice.invoiceNumber} for services rendered.
 
 Invoice Details:
-- Invoice Number: ${invoice.invoiceNumber}
-- Issue Date: ${issueDate}
-- Due Date: ${dueDate}
-- Amount Due: $${invoice.amount}
+- Issue Date: ${formatDateForDisplay(invoice.issueDate)}
+- Due Date: ${formatDateForDisplay(invoice.dueDate)}
+- Total Amount: ${formatCurrency(Number(invoice.amount))}
 
-If you have any questions about this invoice, please don't hesitate to contact me.
+Please let us know if you have any questions.
 
-Thank you for your business!
+Thank you for your business.
 
 Best regards,
-Your Consulting Service`;
+[Your Company Name]`;
   }
 };

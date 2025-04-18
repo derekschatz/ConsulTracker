@@ -7,6 +7,16 @@ import { type InvoiceWithLineItems } from '@shared/schema';
 // No need for declaration as we're properly importing autoTable
 // And will use it differently
 
+// Function to handle date timezone adjustment
+function adjustDateForTimezone(date: Date | string): Date {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return new Date(
+    dateObj.getFullYear(),
+    dateObj.getMonth(),
+    dateObj.getDate() + 1  // Add one day to compensate for timezone shift
+  );
+}
+
 interface InvoiceGeneratorOptions {
   companyName?: string;
   companyAddress?: string;
