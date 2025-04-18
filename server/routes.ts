@@ -5,13 +5,23 @@ import {
   insertEngagementSchema, 
   insertTimeLogSchema, 
   insertInvoiceSchema,
-  calculateEngagementStatus
+  calculateEngagementStatus,
+  type InsertInvoice,
+  type InsertInvoiceLineItem
 } from "@shared/schema";
 import { setupAuth } from "./auth";
 import { z } from "zod";
 import nodemailer from "nodemailer";
 import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
-import { pool } from './db';
+import { pool, db } from './db';
+import { Session } from 'express-session';
+import { eq, and, between, desc, sql, gte, lte } from "drizzle-orm";
+import { addDays, parseISO } from "date-fns";
+import { generateInvoicePDF } from '@/lib/pdf-generator';
+import { formatDate } from '@/lib/date-utils';
+import { Pool } from 'pg';
+import { DatabaseStorage } from './storage';
+import { Invoice, TimeLog } from '../types';
 
 // Helper function to get date range based on predefined ranges
 function getDateRange(range: string, referenceDate: Date = new Date()): { startDate: Date; endDate: Date } {
@@ -841,78 +851,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const userId = (req.user as any).id;
-      const { engagementId, timeLogs = [] } = req.body;
+
+      console.log('Creating invoice with data:', req.body);
+
+      const {
+        engagementId,
+        status = 'submitted',
+        issueDate,
+        dueDate,
+        invoiceNumber,
+        clientName,
+        amount,
+        periodStart,
+        periodEnd,
+        projectName,
+        notes,
+        timeLogs = []
+      } = req.body;
 
       // Validate required fields
-      if (!engagementId) {
-        return res.status(400).json({ error: 'Engagement ID is required' });
-      }
-
-      // Create invoice
-      const today = new Date();
-      const dueDate = new Date();
-      dueDate.setDate(today.getDate() + 30); // Due date 30 days from now
-      
-      // Get engagement details
-      const engagementResult = await pool.query(
-        'SELECT client_name, project_name, hourly_rate FROM engagements WHERE id = $1 AND user_id = $2',
-        [engagementId, userId]
-      );
-      
-      if (engagementResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Engagement not found' });
-      }
-      
-      const engagement = engagementResult.rows[0];
-      const clientName = engagement.client_name;
-      const projectName = engagement.project_name;
-      
-      // Calculate total invoice amount from time logs
-      const totalAmount = timeLogs.reduce((sum: number, log: any) => {
-        return sum + (log.billableAmount || 0);
-      }, 0);
-
-      // Store amount as numeric in database (PostgreSQL numeric type)
-      const finalAmount = Number(totalAmount.toFixed(2));
-      
-      const invoiceResult = await pool.query(
-        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end, project_name, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id',
-        [
-          engagementId, 
-          'submitted', 
-          today, 
-          dueDate, 
-          `INV-${Date.now().toString().slice(-6)}`, // Generate simple invoice number
+      if (!engagementId || !issueDate || !dueDate || !invoiceNumber || !clientName || amount === undefined || !periodStart || !periodEnd) {
+        console.error('Missing required fields:', {
+          engagementId,
+          issueDate,
+          dueDate,
+          invoiceNumber,
           clientName,
-          finalAmount,  // Now storing as number
-          req.body.periodStart || today, 
-          req.body.periodEnd || today,
-          projectName,
-          userId
-        ]
-      );
-      
-      const invoiceId = invoiceResult.rows[0].id;
+          amount,
+          periodStart,
+          periodEnd
+        });
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
 
-      // Insert line items
-      const lineItems = timeLogs.map((log: any) => ({
-        invoice_id: invoiceId,
+      // Prepare invoice data
+      const invoiceData: InsertInvoice = {
+        engagementId: Number(engagementId),
+        userId,
+        status,
+        issueDate: new Date(issueDate),
+        dueDate: new Date(dueDate),
+        invoiceNumber,
+        clientName,
+        amount: amount.toString(), // Convert to string for Drizzle numeric type
+        periodStart: new Date(periodStart),
+        periodEnd: new Date(periodEnd),
+        projectName: projectName || '',
+        notes: notes || ''
+      };
+
+      // Prepare line items
+      const lineItems: InsertInvoiceLineItem[] = timeLogs.map((log: any) => ({
+        timeLogId: log.id,
         description: log.description,
-        date: log.date,
-        hours: log.hours,
-        amount: log.billableAmount || 0
+        hours: Number(log.hours),
+        rate: log.engagement.hourlyRate.toString(), // Convert to string for Drizzle numeric type
+        amount: log.billableAmount.toString() // Convert to string for Drizzle numeric type
       }));
 
-      await pool.query(
-        'INSERT INTO invoice_line_items (description, date, hours, amount, invoice_id) VALUES ' +
-        lineItems.map((_: any, i: number) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4}, $${i * 4 + 5})`).join(', '),
-        lineItems.flatMap((item: any) => [item.description, item.date, item.hours, item.amount, item.invoice_id])
-      );
-
-      res.json({ id: invoiceId });
+      // Create invoice using storage class
+      const newInvoice = await storage.createInvoice(invoiceData, lineItems);
+      console.log('Created invoice:', newInvoice);
+      
+      res.json(newInvoice);
     } catch (error) {
       console.error('Error creating invoice:', error);
-      res.status(500).json({ error: 'Failed to create invoice' });
+      res.status(500).json({ 
+        error: 'Failed to create invoice',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 

@@ -166,8 +166,16 @@ export function parseISODate(dateString: string): Date {
 }
 
 export function formatDateForDisplay(date: Date | string): string {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date;
-  return format(dateObj, 'MMMM d, yyyy');
+  try {
+    const dateObj = typeof date === 'string' ? parseISO(date) : date;
+    if (!isValid(dateObj)) {
+      throw new Error('Invalid date');
+    }
+    return format(dateObj, 'MMMM d, yyyy');
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid date';
+  }
 }
 
 export function formatDateTimeForDisplay(date: Date): string {

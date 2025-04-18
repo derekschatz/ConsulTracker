@@ -10,26 +10,23 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { insertInvoiceSchema } from '@shared/schema';
-
+import { 
+  type Engagement, 
+  type TimeLog,
+  type TimeLogWithEngagement, 
+  type Invoice, 
+  type InvoiceLineItem, 
+  type InsertInvoice,
+  insertInvoiceSchema 
+} from '@shared/schema';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency, formatHours, generateInvoiceNumber } from '@/lib/format-utils';
-import { formatDate, toLocalDate, toStorageDate, addDays } from '@/lib/date-utils';
-import { formatDateForDisplay } from '@/lib/date-utils';
+import { formatDate, toLocalDate, toStorageDate, addDays, formatDateForDisplay } from '@/lib/date-utils';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
 import { Card, CardContent } from '@/components/ui/card';
-
-interface Engagement {
-  id: number;
-  clientName: string;
-  projectName: string;
-  hourlyRate: string;
-  startDate: string;
-  endDate: string;
-  status: string;
-  userId: number;
-}
+import { parseISO } from 'date-fns';
+import { generateInvoicePDF } from "@/lib/pdf-generator";
 
 // Extend the invoice schema with additional validation
 const formSchema = z.object({
@@ -54,39 +51,9 @@ interface InvoiceModalProps {
   engagementId?: string | null;
 }
 
-interface TimeLog {
-  id: number;
-  userId: number;
-  engagementId: number;
-  date: string;
-  hours: number;
-  description: string;
-  createdAt: string;
-  engagement: {
-    id: number;
-    clientName: string;
-    projectName: string;
-    hourlyRate: string;
-    startDate: string;
-    endDate: string;
-    status: string;
-    userId: number;
-  };
-  billableAmount: number;
-}
-
-interface LineItem {
-  id: string;
-  date: string;
-  description: string;
-  hours: number;
-  hourlyRate: number;
-  billableAmount: number;
-}
-
 interface Summary {
   hours: number;
-  amount: number;
+  amount: string;
 }
 
 const InvoiceModal = ({
@@ -100,7 +67,7 @@ const InvoiceModal = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
+  const [timeLogs, setTimeLogs] = useState<TimeLogWithEngagement[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
   const [selectedClientName, setSelectedClientName] = useState<string>('');
@@ -172,8 +139,10 @@ const InvoiceModal = ({
   }, [selectedClientName, watchEngagementId, filteredEngagements, form]);
 
   // Calculate total from time logs
-  const calculateTotal = (logs: TimeLog[]): number => {
-    return logs.reduce((sum: number, log: TimeLog) => sum + log.billableAmount, 0);
+  const calculateTotal = (logs: TimeLogWithEngagement[]): number => {
+    return logs.reduce((sum: number, log: TimeLogWithEngagement) => {
+      return sum + log.billableAmount;
+    }, 0);
   };
 
   useEffect(() => {
@@ -188,9 +157,12 @@ const InvoiceModal = ({
           if (!response.ok) throw new Error('Failed to fetch time logs');
           
           const logs: TimeLog[] = await response.json();
-          setTimeLogs(logs);
-          setInvoiceTotal(calculateTotal(logs));
-          setTotalHours(logs.reduce((sum: number, log: TimeLog) => sum + log.hours, 0));
+          const total = calculateTotal(logs as TimeLogWithEngagement[]);
+          const hours = logs.reduce((sum: number, log: TimeLog) => sum + Number(log.hours), 0);
+          
+          setTimeLogs(logs as TimeLogWithEngagement[]);
+          setInvoiceTotal(total);
+          setTotalHours(hours);
         } catch (error) {
           console.error('Error fetching time logs:', error);
           setTimeLogs([]);
@@ -232,127 +204,107 @@ const InvoiceModal = ({
     onOpenChange(false);
   };
 
-  // Convert time logs to line items
-  const lineItems: LineItem[] = timeLogs.map((log) => ({
-    id: log.id.toString(),
-    date: log.date,
-    description: log.description,
-    hours: log.hours,
-    hourlyRate: parseFloat(log.engagement.hourlyRate),
-    billableAmount: log.billableAmount
+  // Prepare line items
+  const lineItems = timeLogs.map((log: TimeLogWithEngagement) => ({
+    timeLogId: log.id,
+    description: `${formatDateForDisplay(new Date(log.date))} - ${log.description}`,
+    hours: Number(log.hours),
+    rate: log.engagement.hourlyRate.toString(),
+    amount: log.billableAmount.toString()
   }));
 
   // Format dates for API request
   const formattedStartDate = watchPeriodStart ? new Date(watchPeriodStart).toISOString() : null;
   const formattedEndDate = watchPeriodEnd ? new Date(watchPeriodEnd).toISOString() : null;
 
-  // Calculate invoice summary
+  // Calculate invoice summary using the time logs directly
   const summary = useMemo(() => {
-    return lineItems.reduce((sum: Summary, item) => ({
-      hours: sum.hours + item.hours,
-      amount: sum.amount + item.billableAmount
-    }), { hours: 0, amount: 0 });
-  }, [lineItems]);
+    return timeLogs.reduce((sum, log: TimeLogWithEngagement) => ({
+      hours: sum.hours + log.hours,
+      amount: (Number(sum.amount) + log.billableAmount).toString()
+    }), { hours: 0, amount: '0' });
+  }, [timeLogs]);
 
   // Submit form data
   const onSubmit = async (data: FormValues) => {
+    if (timeLogs.length === 0) {
+      toast({
+        title: 'No time logs to invoice',
+        description: 'There are no time logs for the selected period.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
-      if (!selectedClientName || !watchEngagementId) {
-        toast({
-          title: "Error",
-          description: "Please select a client and engagement",
-          variant: "destructive"
-        });
-        return;
-      }
+      // Calculate due date based on billing end date and net terms
+      const periodEndDate = new Date(data.periodEnd);
+      const dueDate = new Date(periodEndDate);
+      dueDate.setDate(periodEndDate.getDate() + Number(data.netTerms));
 
-      const selectedEngagement = filteredEngagements.find(e => e.id.toString() === watchEngagementId);
-      if (!selectedEngagement) {
-        toast({
-          title: "Error",
-          description: "Selected engagement is not valid",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const lineItems = timeLogs.map(log => ({
-        description: log.description,
-        hours: log.hours,
-        rate: parseFloat(selectedEngagement.hourlyRate),
-        amount: log.hours * parseFloat(selectedEngagement.hourlyRate)
-      }));
-
-      const total = lineItems.reduce((sum, item) => sum + item.amount, 0);
-      const issueDate = new Date();
-      const dueDate = addDays(issueDate, parseInt(data.netTerms));
-
-      const submission = {
-        engagementId: selectedEngagement.id,
-        userId: selectedEngagement.userId,
-        clientName: selectedEngagement.clientName,
-        projectName: selectedEngagement.projectName,
+      // Convert values to appropriate types
+      const formattedData = {
         invoiceNumber: nextInvoiceNumber,
-        issueDate: toStorageDate(issueDate),
-        dueDate: toStorageDate(dueDate),
-        amount: total,
-        status: 'submitted' as const,
-        periodStart: data.periodStart,
-        periodEnd: data.periodEnd,
-        notes: data.notes || undefined
+        clientName: data.clientName,
+        engagementId: Number(data.engagementId),
+        issueDate: new Date().toISOString(),
+        dueDate: dueDate.toISOString(),
+        amount: invoiceTotal.toString(),
+        status: 'submitted',
+        notes: data.notes || '',
+        periodStart: new Date(data.periodStart).toISOString(),
+        periodEnd: new Date(data.periodEnd).toISOString(),
+        projectName: filteredEngagements.find(e => e.id.toString() === data.engagementId)?.projectName || '',
+        timeLogs: timeLogs.map(log => ({
+          ...log,
+          billableAmount: log.billableAmount.toString(),
+          engagement: {
+            ...log.engagement,
+            hourlyRate: log.engagement.hourlyRate.toString()
+          }
+        }))
       };
 
-      console.log('Submitting invoice:', submission);
+      console.log('Submitting invoice with data:', formattedData);
 
-      const response = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...submission,
-          lineItems: timeLogs.map(log => ({
-            description: log.description,
-            hours: log.hours,
-            rate: parseFloat(log.engagement.hourlyRate),
-            amount: log.billableAmount,
-            timeLogId: log.id
-          }))
-        }),
-      });
+      // Create invoice
+      const response = await apiRequest(
+        'POST',
+        '/api/invoices',
+        formattedData
+      );
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create invoice');
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || 'Failed to create invoice');
       }
 
-      // Invalidate and refetch relevant queries
-      await queryClient.refetchQueries({ 
-        predicate: (query) => {
-          const queryKey = query.queryKey[0];
-          return typeof queryKey === 'string' && (
-            queryKey.startsWith('/api/invoices') || 
-            queryKey.startsWith('/api/dashboard')
-          );
-        },
-        type: 'active'
-      });
+      // Wait for the invoice data
+      const newInvoice = await response.json();
 
+      // Invalidate and refetch queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+        queryClient.invalidateQueries({ queryKey: ['timeLogs'] })
+      ]);
+
+      // Success toast
       toast({
-        title: "Success",
-        description: "Invoice created successfully"
+        title: 'Invoice created successfully',
+        description: `Invoice #${newInvoice.invoiceNumber} for ${formatCurrency(newInvoice.amount)}`,
       });
 
-      onOpenChange(false);
-      if (onSuccess) onSuccess();
+      // Close modal and reset form
+      handleClose();
+      
     } catch (error) {
       console.error('Error creating invoice:', error);
       toast({
-        title: "Error",
+        title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to create invoice',
-        variant: "destructive"
+        variant: 'destructive',
       });
     } finally {
       setIsSubmitting(false);

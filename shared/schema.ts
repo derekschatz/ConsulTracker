@@ -72,7 +72,7 @@ export const insertEngagementSchema = z.object({
   projectName: z.string(),
   startDate: z.date(),
   endDate: z.date(),
-  hourlyRate: z.number().positive('Hourly rate must be positive'),
+  hourlyRate: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Hourly rate must be a valid decimal number'),
   description: z.string().optional(),
   status: z.string().default('active')
 });
@@ -143,6 +143,8 @@ export const insertInvoiceSchema = createInsertSchema(invoices).pick({
   periodStart: true,
   periodEnd: true,
   projectName: true,
+}).extend({
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a valid decimal number')
 });
 
 // Invoice line items table
@@ -174,6 +176,9 @@ export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).
   hours: true,
   rate: true,
   amount: true,
+}).extend({
+  rate: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Rate must be a valid decimal number'),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a valid decimal number')
 });
 
 // Users table for authentication
