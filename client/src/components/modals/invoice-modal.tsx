@@ -19,6 +19,7 @@ import { formatDateForDisplay } from '@/lib/date-utils';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
 import { Card, CardContent } from '@/components/ui/card';
+import { useRouter } from 'next/navigation';
 
 interface Engagement {
   id: number;
@@ -104,6 +105,8 @@ const InvoiceModal = ({
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
   const [selectedClientName, setSelectedClientName] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
   
   // Fetch all active engagements
   const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery<Engagement[]>({
@@ -257,7 +260,9 @@ const InvoiceModal = ({
   // Submit form data
   const onSubmit = async (data: FormValues) => {
     try {
+      console.log('Starting invoice submission...', data);
       setIsSubmitting(true);
+      setError(null);
 
       if (!selectedClientName || !watchEngagementId) {
         toast({
@@ -304,56 +309,68 @@ const InvoiceModal = ({
         notes: data.notes || undefined
       };
 
-      console.log('Submitting invoice:', submission);
+      console.log('Prepared invoice data:', submission);
 
-      const response = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...submission,
-          lineItems: timeLogs.map(log => ({
-            description: log.description,
-            hours: log.hours,
-            rate: parseFloat(log.engagement.hourlyRate),
-            amount: log.billableAmount,
-            timeLogId: log.id
-          }))
-        }),
-      });
+      // Make the API call
+      try {
+        console.log('Making API call to create invoice...');
+        const response = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...submission,
+            lineItems: timeLogs.map(log => ({
+              description: log.description,
+              hours: log.hours,
+              rate: parseFloat(log.engagement.hourlyRate),
+              amount: log.billableAmount,
+              timeLogId: log.id
+            }))
+          }),
+        });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create invoice');
+        console.log('Received API response:', {
+          status: response.status,
+          statusText: response.statusText
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('API error details:', errorData);
+          throw new Error(errorData.error || 'Failed to create invoice');
+        }
+
+        const result = await response.json();
+        console.log('Successfully created invoice:', result);
+
+        // Invalidate and refetch relevant queries
+        await queryClient.refetchQueries({ 
+          predicate: (query) => {
+            const queryKey = query.queryKey[0];
+            return typeof queryKey === 'string' && (
+              queryKey.startsWith('/api/invoices') || 
+              queryKey.startsWith('/api/dashboard')
+            );
+          },
+          type: 'active'
+        });
+
+        toast({
+          title: "Success",
+          description: "Invoice created successfully"
+        });
+
+        onOpenChange(false);
+        if (onSuccess) onSuccess();
+      } catch (apiError) {
+        console.error('API call failed:', apiError);
+        setError(apiError instanceof Error ? apiError.message : 'Failed to create invoice');
       }
-
-      // Invalidate and refetch relevant queries
-      await queryClient.refetchQueries({ 
-        predicate: (query) => {
-          const queryKey = query.queryKey[0];
-          return typeof queryKey === 'string' && (
-            queryKey.startsWith('/api/invoices') || 
-            queryKey.startsWith('/api/dashboard')
-          );
-        },
-        type: 'active'
-      });
-
-      toast({
-        title: "Success",
-        description: "Invoice created successfully"
-      });
-
-      onOpenChange(false);
-      if (onSuccess) onSuccess();
     } catch (error) {
-      console.error('Error creating invoice:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : 'Failed to create invoice',
-        variant: "destructive"
-      });
+      console.error('Error in form submission:', error);
+      setError(error instanceof Error ? error.message : 'An unexpected error occurred');
     } finally {
       setIsSubmitting(false);
     }

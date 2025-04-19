@@ -12,6 +12,7 @@ import { z } from "zod";
 import nodemailer from "nodemailer";
 import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
 import { pool } from './db';
+import rateLimit from 'express-rate-limit';
 
 // Helper function to get date range based on predefined ranges
 function getDateRange(range: string, referenceDate: Date = new Date()): { startDate: Date; endDate: Date } {
@@ -117,6 +118,22 @@ interface InvoiceItem {
   rate: string;
   invoiceId: number;
 }
+
+interface LineItem {
+  invoice_id: number;
+  description: string;
+  date: string;
+  hours: number;
+  rate: number;
+  amount: number;
+  time_log_id: number;
+}
+
+const invoiceRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: 'Too many invoice requests, please try again later'
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication
@@ -833,7 +850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/invoices', async (req: Request, res: Response) => {
+  app.post('/api/invoices', invoiceRateLimiter, async (req: Request, res: Response) => {
     try {
       // Ensure user is authenticated
       if (!req.isAuthenticated()) {
@@ -841,78 +858,199 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const userId = (req.user as any).id;
-      const { engagementId, timeLogs = [] } = req.body;
+      const { 
+        engagementId, 
+        timeLogs = [], 
+        lineItems = [],
+        amount: providedAmount,
+        clientName: providedClientName,
+        projectName: providedProjectName,
+        periodStart,
+        periodEnd,
+        status = 'submitted'
+      } = req.body;
+
+      // Add detailed request logging
+      console.log('=== Invoice Creation Request Start ===');
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      console.log('User ID:', userId);
+      console.log('=== Invoice Creation Request End ===');
 
       // Validate required fields
       if (!engagementId) {
+        console.error('Missing engagement ID');
         return res.status(400).json({ error: 'Engagement ID is required' });
       }
 
-      // Create invoice
-      const today = new Date();
-      const dueDate = new Date();
-      dueDate.setDate(today.getDate() + 30); // Due date 30 days from now
-      
       // Get engagement details
-      const engagementResult = await pool.query(
-        'SELECT client_name, project_name, hourly_rate FROM engagements WHERE id = $1 AND user_id = $2',
-        [engagementId, userId]
-      );
-      
-      if (engagementResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Engagement not found' });
+      try {
+        const engagementResult = await pool.query(
+          'SELECT client_name, project_name, hourly_rate FROM engagements WHERE id = $1 AND user_id = $2',
+          [engagementId, userId]
+        );
+        
+        if (engagementResult.rows.length === 0) {
+          console.error(`Engagement not found: ${engagementId} for user ${userId}`);
+          return res.status(404).json({ error: 'Engagement not found' });
+        }
+        
+        const engagement = engagementResult.rows[0];
+        console.log('Found engagement:', engagement);
+
+        const clientName = providedClientName || engagement.client_name;
+        const projectName = providedProjectName || engagement.project_name;
+        
+        interface LineItem {
+          invoice_id: number;
+          description: string;
+          date: string;
+          hours: number;
+          rate: number;
+          amount: number;
+          time_log_id?: number;
+        }
+
+        let finalAmount: number;
+        let itemsToInsert: LineItem[];
+
+        console.log('Processing line items...');
+        // Handle both old and new formats
+        if (lineItems.length > 0) {
+          console.log('Using new format with pre-calculated line items');
+          // New format with pre-calculated line items
+          itemsToInsert = lineItems.map((item: any) => ({
+            invoice_id: 0, // Will be set after invoice creation
+            description: item.description || '',
+            date: item.date || new Date().toISOString(),
+            hours: Number(item.hours),
+            rate: Number(item.rate),
+            amount: Number(item.amount),
+            time_log_id: item.timeLogId
+          }));
+          finalAmount = providedAmount || Number(lineItems.reduce((sum: number, item: any) => sum + Number(item.amount), 0).toFixed(2));
+          console.log('Processed line items:', itemsToInsert);
+          console.log('Final amount:', finalAmount);
+        } else if (timeLogs.length > 0) {
+          console.log('Using old format with time logs');
+          // Old format with time logs
+          try {
+            const calculatedAmount = timeLogs.reduce((sum: number, log: any) => {
+              const hours = Number(log.hours);
+              const rate = Number(log.engagement.hourlyRate);
+              const lineAmount = hours * rate;
+              console.log(`Calculating line amount: ${hours} hours * $${rate}/hr = $${lineAmount}`);
+              return sum + lineAmount;
+            }, 0);
+            
+            finalAmount = Number(calculatedAmount.toFixed(2));
+            
+            itemsToInsert = timeLogs.map((log: any) => {
+              const hours = Number(log.hours);
+              const rate = Number(log.engagement.hourlyRate);
+              return {
+                invoice_id: 0, // Will be set after invoice creation
+                description: log.description,
+                date: log.date,
+                hours: hours,
+                rate: rate,
+                amount: Number((hours * rate).toFixed(2)),
+                time_log_id: log.id
+              };
+            });
+            console.log('Processed time logs:', itemsToInsert);
+            console.log('Final amount:', finalAmount);
+          } catch (error) {
+            console.error('Error calculating total amount:', error);
+            return res.status(400).json({ error: 'Invalid time log data for calculation' });
+          }
+        } else {
+          console.error('No line items or time logs provided');
+          return res.status(400).json({ error: 'No line items or time logs provided' });
+        }
+
+        console.log('Creating invoice record...');
+        const today = new Date();
+        const dueDate = new Date();
+        dueDate.setDate(today.getDate() + 30);
+
+        try {
+          // Start a transaction
+          await pool.query('BEGIN');
+
+          const invoiceResult = await pool.query(
+            'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end, project_name, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id',
+            [
+              engagementId, 
+              status, 
+              today, 
+              dueDate, 
+              req.body.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`,
+              clientName,
+              finalAmount,
+              periodStart || today, 
+              periodEnd || today,
+              projectName,
+              userId
+            ]
+          );
+          
+          const invoiceId = invoiceResult.rows[0].id;
+          console.log(`Created invoice with ID: ${invoiceId}`);
+
+          // Update invoice_id for all line items
+          itemsToInsert = itemsToInsert.map(item => ({
+            ...item,
+            invoice_id: invoiceId
+          }));
+
+          console.log('Inserting line items...');
+
+          // Insert line items with all required fields
+          if (itemsToInsert.length > 0) {
+            const values = itemsToInsert.map((item, i) => {
+              const baseIndex = i * 7 + 1;
+              return `($${baseIndex}, $${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6})`;
+            }).join(', ');
+
+            const flatParams = itemsToInsert.flatMap(item => [
+              item.description,
+              item.date,
+              item.hours,
+              item.rate,
+              item.amount,
+              item.invoice_id,
+              item.time_log_id || null
+            ]);
+
+            await pool.query(
+              `INSERT INTO invoice_line_items (description, date, hours, rate, amount, invoice_id, time_log_id) VALUES ${values}`,
+              flatParams
+            );
+          }
+
+          // Commit the transaction
+          await pool.query('COMMIT');
+
+          console.log('Successfully created invoice and line items');
+          res.json({ id: invoiceId });
+        } catch (error) {
+          // Rollback in case of error
+          await pool.query('ROLLBACK');
+          console.error('Database error creating invoice:', error);
+          throw error;
+        }
+      } catch (error) {
+        console.error('Error in engagement lookup or processing:', error);
+        throw error;
       }
-      
-      const engagement = engagementResult.rows[0];
-      const clientName = engagement.client_name;
-      const projectName = engagement.project_name;
-      
-      // Calculate total invoice amount from time logs
-      const totalAmount = timeLogs.reduce((sum: number, log: any) => {
-        return sum + (log.billableAmount || 0);
-      }, 0);
-
-      // Store amount as numeric in database (PostgreSQL numeric type)
-      const finalAmount = Number(totalAmount.toFixed(2));
-      
-      const invoiceResult = await pool.query(
-        'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end, project_name, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id',
-        [
-          engagementId, 
-          'submitted', 
-          today, 
-          dueDate, 
-          `INV-${Date.now().toString().slice(-6)}`, // Generate simple invoice number
-          clientName,
-          finalAmount,  // Now storing as number
-          req.body.periodStart || today, 
-          req.body.periodEnd || today,
-          projectName,
-          userId
-        ]
-      );
-      
-      const invoiceId = invoiceResult.rows[0].id;
-
-      // Insert line items
-      const lineItems = timeLogs.map((log: any) => ({
-        invoice_id: invoiceId,
-        description: log.description,
-        date: log.date,
-        hours: log.hours,
-        amount: log.billableAmount || 0
-      }));
-
-      await pool.query(
-        'INSERT INTO invoice_line_items (description, date, hours, amount, invoice_id) VALUES ' +
-        lineItems.map((_: any, i: number) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4}, $${i * 4 + 5})`).join(', '),
-        lineItems.flatMap((item: any) => [item.description, item.date, item.hours, item.amount, item.invoice_id])
-      );
-
-      res.json({ id: invoiceId });
     } catch (error) {
       console.error('Error creating invoice:', error);
-      res.status(500).json({ error: 'Failed to create invoice' });
+      // Send more detailed error information
+      res.status(500).json({ 
+        error: 'Failed to create invoice', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
