@@ -7,14 +7,29 @@ import { type InvoiceWithLineItems } from '@shared/schema';
 // No need for declaration as we're properly importing autoTable
 // And will use it differently
 
-// Function to handle date timezone adjustment
-function adjustDateForTimezone(date: Date | string): Date {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return new Date(
-    dateObj.getFullYear(),
-    dateObj.getMonth(),
-    dateObj.getDate() + 1  // Add one day to compensate for timezone shift
-  );
+// Format dates - directly extract from the date strings without timezone conversion
+function formatDatePart(dateStr: string | Date): string {
+  if (!dateStr) return '';
+  console.log('Date received by formatDatePart:', dateStr);
+  
+  const str = typeof dateStr === 'string' ? dateStr : dateStr.toISOString();
+  console.log('Date string after conversion:', str);
+  
+  const datePart = str.substring(0, 10); // Get YYYY-MM-DD part
+  console.log('Date part extracted (YYYY-MM-DD):', datePart);
+  
+  const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
+  console.log('Year:', year, 'Month:', month, 'Day:', day);
+  
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  
+  const result = `${months[month-1]} ${day}, ${year}`;
+  console.log('Final formatted date:', result);
+  
+  return result;
 }
 
 interface InvoiceGeneratorOptions {
@@ -32,10 +47,10 @@ export function generateInvoicePDF(
 ): jsPDF {
   // Default options
   const defaultOptions: InvoiceGeneratorOptions = {
-    companyName: 'Derek Schatz',
-    companyAddress: '100 Danby Court\nChurchville, PA 18966',
-    companyEmail: 'bobschatz@agileinfusion.com',
-    companyPhone: '(215) 435-3240',
+    companyName: '',
+    companyAddress: '',
+    companyEmail: '',
+    companyPhone: '',
     footerText: 'Thank you for your business!',
   };
 
@@ -52,23 +67,23 @@ export function generateInvoicePDF(
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text(opts.companyName!, 14, 20);
+  doc.text("INVOICE", 14, 20);
   
-  // Tagline in blue
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'italic');
-  doc.setTextColor(0, 0, 255); // Blue color
-  doc.text("Learning Through Experience", 14, 26);
+  // Tagline in blue - commented out for now, will be configurable
+  // doc.setFontSize(12);
+  // doc.setFont('helvetica', 'italic');
+  // doc.setTextColor(0, 0, 255); // Blue color
+  // doc.text("Learning Through Experience", 14, 26);
   
-  // Company details
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text("Agile Infusion, LLC", 14, 34);
-  doc.text(opts.companyAddress!.split('\n'), 14, 39);
-  doc.text(`Phone ${opts.companyPhone}`, 14, 49);
-  doc.text(opts.companyEmail!, 14, 54);
-  doc.text(`Federal Tax ID: 20-5199056`, 14, 59);
+  // Company details - commented out for now, will be configurable
+  // doc.setFont('helvetica', 'normal');
+  // doc.setFontSize(10);
+  // doc.setTextColor(0, 0, 0);
+  // doc.text("Agile Infusion, LLC", 14, 34);
+  // doc.text(opts.companyAddress!.split('\n'), 14, 39);
+  // doc.text(`Phone ${opts.companyPhone}`, 14, 49);
+  // doc.text(opts.companyEmail!, 14, 54);
+  // doc.text(`Federal Tax ID: 20-5199056`, 14, 59);
 
   // INVOICE on right side
   doc.setFontSize(24);
@@ -80,7 +95,7 @@ export function generateInvoicePDF(
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`INVOICE #${invoice.invoiceNumber}`, pageWidth - 14, 30, { align: 'right' });
-  doc.text(`DATE: ${formatDate(invoice.issueDate).toUpperCase()}`, pageWidth - 14, 35, { align: 'right' });
+  doc.text(`DATE: ${formatDatePart(invoice.issueDate).toUpperCase()}`, pageWidth - 14, 35, { align: 'right' });
 
   // Bill to section
   doc.setFontSize(10);
@@ -128,7 +143,9 @@ export function generateInvoicePDF(
       
       // For the example format, we'll create a period/date range description
       const projectDesc = `Consultant ${invoice.projectName || "Services"} Activities`;
-      const period = `Period: ${formatDate(invoice.periodStart)}-${formatDate(invoice.periodEnd)}`;
+      
+      // Format period dates - directly extract from the date strings without timezone conversion
+      const period = `Period: ${formatDatePart(invoice.periodStart)} - ${formatDatePart(invoice.periodEnd)}`;
       const finalNote = invoice.status === 'final' ? '****Final Invoice****' : '';
       
       if (index === 0) {
@@ -152,14 +169,28 @@ export function generateInvoicePDF(
         // Add hours, rate and amount only to the first row
         doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
         doc.text(`${formatCurrency(Number(item.rate))}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
-        doc.text(formatCurrency(Number(invoice.amount)), pageWidth - 20, startY + 17, { align: 'right' });
+        doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
       }
     });
   } else {
-    // If no line items, show placeholder
+    // If no line items, show consistent description with preview
+    const projectDesc = `Consultant ${invoice.projectName || "Services"} Activities`;
+    const period = `Period: ${formatDatePart(invoice.periodStart)} - ${formatDatePart(invoice.periodEnd)}`;
+
+    // Draw first row with description
     doc.setFont('helvetica', 'normal');
     doc.rect(14, currentY, pageWidth - 28, 10, 'S');
-    doc.text("No items", 24, currentY + 7);
+    doc.text(projectDesc, 24, currentY + 7);
+    
+    // Add period on the next line
+    currentY += 10;
+    doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+    doc.text(period, 24, currentY + 7);
+    
+    // Add hours, rate and amount
+    doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
+    doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
+    
     currentY += 10;
   }
   
@@ -173,13 +204,14 @@ export function generateInvoicePDF(
   // Add total row
   doc.setFont('helvetica', 'bold');
   doc.text("TOTAL", pageWidth - 65, currentY + 15);
-  doc.text(formatCurrency(Number(invoice.amount)), pageWidth - 20, currentY + 15, { align: 'right' });
+  doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, currentY + 15, { align: 'right' });
   
   // Add payment instructions
   currentY += 35;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Make all checks payable to ${opts.companyName}`, 14, currentY);
+  // Use generic payment instructions without hardcoded name
+  doc.text("Make all checks payable to the company name.", 14, currentY);
   doc.text(`Total due in 30 days.`, 14, currentY + 5);
   
   // Add footer
@@ -216,10 +248,10 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   
   // Default options 
   const defaultOptions: InvoiceGeneratorOptions = {
-    companyName: 'Derek Schatz',
-    companyAddress: '100 Danby Court\nChurchville, PA 18966',
-    companyEmail: 'bobschatz@agileinfusion.com',
-    companyPhone: '(215) 435-3240',
+    companyName: '',
+    companyAddress: '',
+    companyEmail: '',
+    companyPhone: '',
     footerText: 'Thank you for your business!',
   };
 
@@ -236,23 +268,23 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text(opts.companyName!, 14, 20);
+  doc.text("INVOICE", 14, 20);
   
-  // Tagline in blue
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'italic');
-  doc.setTextColor(0, 0, 255); // Blue color
-  doc.text("Learning Through Experience", 14, 26);
+  // Tagline in blue - commented out for now, will be configurable
+  // doc.setFontSize(12);
+  // doc.setFont('helvetica', 'italic');
+  // doc.setTextColor(0, 0, 255); // Blue color
+  // doc.text("Learning Through Experience", 14, 26);
   
-  // Company details
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text("Agile Infusion, LLC", 14, 34);
-  doc.text(opts.companyAddress!.split('\n'), 14, 39);
-  doc.text(`Phone ${opts.companyPhone}`, 14, 49);
-  doc.text(opts.companyEmail!, 14, 54);
-  doc.text(`Federal Tax ID: 20-5199056`, 14, 59);
+  // Company details - commented out for now, will be configurable
+  // doc.setFont('helvetica', 'normal');
+  // doc.setFontSize(10);
+  // doc.setTextColor(0, 0, 0);
+  // doc.text("Agile Infusion, LLC", 14, 34);
+  // doc.text(opts.companyAddress!.split('\n'), 14, 39);
+  // doc.text(`Phone ${opts.companyPhone}`, 14, 49);
+  // doc.text(opts.companyEmail!, 14, 54);
+  // doc.text(`Federal Tax ID: 20-5199056`, 14, 59);
 
   // INVOICE on right side
   doc.setFontSize(24);
@@ -264,7 +296,7 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`INVOICE #${invoice.invoiceNumber}`, pageWidth - 14, 30, { align: 'right' });
-  doc.text(`DATE: ${formatDate(invoice.issueDate).toUpperCase()}`, pageWidth - 14, 35, { align: 'right' });
+  doc.text(`DATE: ${formatDatePart(invoice.issueDate).toUpperCase()}`, pageWidth - 14, 35, { align: 'right' });
 
   // Bill to section
   doc.setFontSize(10);
@@ -312,7 +344,9 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
       
       // For the example format, we'll create a period/date range description
       const projectDesc = `Consultant ${invoice.projectName || "Services"} Activities`;
-      const period = `Period: ${formatDate(invoice.periodStart)}-${formatDate(invoice.periodEnd)}`;
+      
+      // Format period dates - directly extract from the date strings without timezone conversion
+      const period = `Period: ${formatDatePart(invoice.periodStart)} - ${formatDatePart(invoice.periodEnd)}`;
       const finalNote = invoice.status === 'final' ? '****Final Invoice****' : '';
       
       if (index === 0) {
@@ -336,14 +370,28 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
         // Add hours, rate and amount only to the first row
         doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
         doc.text(`${formatCurrency(Number(item.rate))}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
-        doc.text(formatCurrency(Number(invoice.amount)), pageWidth - 20, startY + 17, { align: 'right' });
+        doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
       }
     });
   } else {
-    // If no line items, show placeholder
+    // If no line items, show consistent description with preview
+    const projectDesc = `Consultant ${invoice.projectName || "Services"} Activities`;
+    const period = `Period: ${formatDatePart(invoice.periodStart)} - ${formatDatePart(invoice.periodEnd)}`;
+
+    // Draw first row with description
     doc.setFont('helvetica', 'normal');
     doc.rect(14, currentY, pageWidth - 28, 10, 'S');
-    doc.text("No items", 24, currentY + 7);
+    doc.text(projectDesc, 24, currentY + 7);
+    
+    // Add period on the next line
+    currentY += 10;
+    doc.rect(14, currentY, pageWidth - 28, 10, 'S');
+    doc.text(period, 24, currentY + 7);
+    
+    // Add hours, rate and amount
+    doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
+    doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
+    
     currentY += 10;
   }
   
@@ -357,13 +405,14 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   // Add total row
   doc.setFont('helvetica', 'bold');
   doc.text("TOTAL", pageWidth - 65, currentY + 15);
-  doc.text(formatCurrency(Number(invoice.amount)), pageWidth - 20, currentY + 15, { align: 'right' });
+  doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, currentY + 15, { align: 'right' });
   
   // Add payment instructions
   currentY += 35;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Make all checks payable to ${opts.companyName}`, 14, currentY);
+  // Use generic payment instructions without hardcoded name
+  doc.text("Make all checks payable to the company name.", 14, currentY);
   doc.text(`Total due in 30 days.`, 14, currentY + 5);
   
   // Add footer
@@ -390,50 +439,61 @@ export function downloadInvoice(invoice: InvoiceWithLineItems): void {
     
     if (!Array.isArray(invoice.lineItems)) {
       console.error('Line items is not an array', invoice);
-      throw new Error('Invoice has invalid line items');
+      // Initialize as empty array instead of throwing
+      invoice.lineItems = [];
+      console.log('Initialized empty line items array');
     }
     
+    // Log if line items are empty but don't throw an error
     if (invoice.lineItems.length === 0) {
-      console.error('Invoice line items are empty', invoice);
-      throw new Error('Invoice has no line items');
+      console.log('Invoice has no line items, will generate PDF with available data', invoice);
     }
     
-    // Check at least the first line item for valid data
-    const firstItem = invoice.lineItems[0];
-    if (!firstItem || typeof firstItem !== 'object') {
-      console.error('First line item is invalid', firstItem);
-      throw new Error('Invoice contains invalid line item data');
-    }
-    
-    // Ensure each line item has proper hours and amount
-    for (let i = 0; i < invoice.lineItems.length; i++) {
-      const item = invoice.lineItems[i];
-      if (item.hours === undefined || item.hours === null || isNaN(Number(item.hours))) {
-        console.error(`Line item ${i} has invalid hours:`, item);
-        item.hours = 0 as any; // Fix the value rather than failing
-      }
-      
-      if (item.amount === undefined || item.amount === null || isNaN(Number(item.amount))) {
-        console.error(`Line item ${i} has invalid amount:`, item);
-        item.amount = '0'; // Fix the value rather than failing
-      }
-      
-      if (item.rate === undefined || item.rate === null || isNaN(Number(item.rate))) {
-        console.error(`Line item ${i} has invalid rate:`, item);
-        item.rate = '0'; // Fix the value rather than failing
+    // Only validate line items if they exist
+    if (invoice.lineItems.length > 0) {
+      // Check at least the first line item for valid data
+      const firstItem = invoice.lineItems[0];
+      if (!firstItem || typeof firstItem !== 'object') {
+        console.error('First line item is invalid', firstItem);
+        // Clear line items instead of throwing
+        invoice.lineItems = [];
+        console.log('Cleared invalid line items');
+      } else {
+        // Ensure each line item has proper hours and amount
+        for (let i = 0; i < invoice.lineItems.length; i++) {
+          const item = invoice.lineItems[i];
+          if (item.hours === undefined || item.hours === null || isNaN(Number(item.hours))) {
+            console.error(`Line item ${i} has invalid hours:`, item);
+            item.hours = 0 as any; // Fix the value rather than failing
+          }
+          
+          if (item.amount === undefined || item.amount === null || isNaN(Number(item.amount))) {
+            console.error(`Line item ${i} has invalid amount:`, item);
+            item.amount = '0'; // Fix the value rather than failing
+          }
+          
+          if (item.rate === undefined || item.rate === null || isNaN(Number(item.rate))) {
+            console.error(`Line item ${i} has invalid rate:`, item);
+            item.rate = '0'; // Fix the value rather than failing
+          }
+        }
       }
     }
     
     if (typeof invoice.totalHours !== 'number' || isNaN(invoice.totalHours)) {
       console.log('Total hours is missing or not a number - calculating from line items');
-      // Set default if missing
-      invoice.totalHours = invoice.lineItems.reduce((sum, item) => sum + Number(item.hours || 0), 0);
+      // Set default if missing or calculate from line items
+      invoice.totalHours = invoice.lineItems.length > 0 
+        ? invoice.lineItems.reduce((sum, item) => sum + Number(item.hours || 0), 0)
+        : 0;
     }
     
-    if (typeof invoice.amount !== 'number' && typeof invoice.amount !== 'string') {
+    if (typeof invoice.totalAmount !== 'number' && typeof invoice.totalAmount !== 'string') {
       console.error('Invoice amount is missing or invalid', invoice);
-      // Calculate from line items as fallback
-      invoice.amount = invoice.lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0).toString();
+      // Calculate from line items or use 0 as fallback
+      invoice.totalAmount = invoice.lineItems.length > 0
+        ? invoice.lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0).toString()
+        : "0";
     }
     
     console.log('Validated invoice data, generating PDF...');

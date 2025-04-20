@@ -105,7 +105,7 @@ export const insertTimeLogSchema = z.object({
   description: z.string()
 });
 
-// Invoices table
+// Invoices table - updated with totalHours and renamed amount to totalAmount for clarity
 export const invoices = pgTable("invoices", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -114,7 +114,8 @@ export const invoices = pgTable("invoices", {
   engagementId: integer("engagement_id").notNull(),
   issueDate: timestamp("issue_date").notNull(),
   dueDate: timestamp("due_date").notNull(),
-  amount: numeric("amount").notNull(),
+  totalAmount: numeric("total_amount").notNull(),
+  totalHours: doublePrecision("total_hours").notNull(),
   status: text("status").notNull().default('submitted'),
   notes: text("notes"),
   periodStart: timestamp("period_start").notNull(),
@@ -122,12 +123,11 @@ export const invoices = pgTable("invoices", {
   projectName: text("project_name"),
 });
 
-export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+export const invoicesRelations = relations(invoices, ({ one }) => ({
   engagement: one(engagements, {
     fields: [invoices.engagementId],
     references: [engagements.id]
-  }),
-  lineItems: many(invoiceLineItems)
+  })
 }));
 
 export const insertInvoiceSchema = createInsertSchema(invoices).pick({
@@ -137,43 +137,13 @@ export const insertInvoiceSchema = createInsertSchema(invoices).pick({
   engagementId: true,
   issueDate: true,
   dueDate: true,
-  amount: true,
+  totalAmount: true,
+  totalHours: true,
   status: true,
   notes: true,
   periodStart: true,
   periodEnd: true,
   projectName: true,
-});
-
-// Invoice line items table
-export const invoiceLineItems = pgTable("invoice_line_items", {
-  id: serial("id").primaryKey(),
-  invoiceId: integer("invoice_id").notNull(),
-  timeLogId: integer("time_log_id"), // Making this optional to support manual line items
-  description: text("description").notNull(),
-  hours: doublePrecision("hours").notNull(),
-  rate: numeric("rate").notNull(),
-  amount: numeric("amount").notNull(),
-});
-
-export const invoiceLineItemsRelations = relations(invoiceLineItems, ({ one }) => ({
-  invoice: one(invoices, {
-    fields: [invoiceLineItems.invoiceId],
-    references: [invoices.id]
-  }),
-  timeLog: one(timeLogs, {
-    fields: [invoiceLineItems.timeLogId],
-    references: [timeLogs.id]
-  })
-}));
-
-export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).pick({
-  invoiceId: true,
-  timeLogId: true,
-  description: true,
-  hours: true,
-  rate: true,
-  amount: true,
 });
 
 // Users table for authentication
@@ -206,9 +176,6 @@ export type InsertTimeLog = z.infer<typeof insertTimeLogSchema>;
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 
-export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
-export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
-
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
@@ -218,7 +185,19 @@ export type TimeLogWithEngagement = TimeLog & {
   billableAmount: number;
 };
 
-export type InvoiceWithLineItems = Invoice & {
+// Add interface for line items
+export interface InvoiceLineItem {
+  id?: number;
+  invoiceId: number;
+  timeLogId?: number;
+  description: string;
+  hours: number;
+  rate: number | string;
+  amount: number | string;
+}
+
+// Extended invoice type with line items for client code
+export interface InvoiceWithLineItems extends Invoice {
   lineItems: InvoiceLineItem[];
-  totalHours: number;
-};
+  line_items?: InvoiceLineItem[]; // For backward compatibility
+}

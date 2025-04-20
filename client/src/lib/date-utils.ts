@@ -1,5 +1,8 @@
 import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter, differenceInDays, parseISO, addDays as dateFnsAddDays } from 'date-fns';
 
+// Re-export parseISO from date-fns for easier imports
+export { parseISO };
+
 export interface DateRange {
   startDate: Date;
   endDate: Date;
@@ -7,6 +10,7 @@ export interface DateRange {
 
 // Format a date to a string with specified format
 export function formatDate(date: Date | string): string {
+  if (!date) return '';
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
   return format(dateObj, 'MM/dd/yyyy');
 }

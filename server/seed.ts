@@ -1,5 +1,5 @@
 import { db } from './db';
-import { engagements, timeLogs, invoices, invoiceLineItems } from '@shared/schema';
+import { engagements, timeLogs, invoices } from '@shared/schema';
 import { addMonths, subMonths, addDays, subDays, startOfYear } from 'date-fns';
 
 // Helper to generate dates across multiple years
@@ -25,6 +25,7 @@ async function seed() {
 
       // Create sample engagements for each year
       const [acmeEngagement] = await db.insert(engagements).values({
+        userId: 1,
         clientName: "Acme Corp",
         projectName: `Website Redesign ${year}`,
         startDate: subMonths(baseDate, 2),
@@ -35,6 +36,7 @@ async function seed() {
       }).returning();
 
       const [techStartEngagement] = await db.insert(engagements).values({
+        userId: 1,
         clientName: "TechStart",
         projectName: `Strategy Consulting ${year}`,
         startDate: subMonths(baseDate, 3),
@@ -45,6 +47,7 @@ async function seed() {
       }).returning();
 
       const [globalFirmEngagement] = await db.insert(engagements).values({
+        userId: 1,
         clientName: "GlobalFirm",
         projectName: `UX Research ${year}`,
         startDate: addMonths(baseDate, 1),
@@ -66,6 +69,7 @@ async function seed() {
       for (const date of timeLogDates) {
         // Time logs for Acme
         await db.insert(timeLogs).values({
+          userId: 1,
           engagementId: acmeEngagement.id,
           date,
           hours: 4 + Math.random() * 4, // 4-8 hours
@@ -74,6 +78,7 @@ async function seed() {
 
         // Time logs for TechStart
         await db.insert(timeLogs).values({
+          userId: 1,
           engagementId: techStartEngagement.id,
           date,
           hours: 2 + Math.random() * 4, // 2-6 hours
@@ -82,6 +87,7 @@ async function seed() {
 
         // Time logs for GlobalFirm
         await db.insert(timeLogs).values({
+          userId: 1,
           engagementId: globalFirmEngagement.id,
           date,
           hours: 3 + Math.random() * 3, // 3-6 hours
@@ -92,71 +98,52 @@ async function seed() {
       // Create invoices for each engagement
       const invoiceDate = subDays(baseDate, 15);
       const [acmeInvoice] = await db.insert(invoices).values({
+        userId: 1,
         invoiceNumber: `INV-${year}-001`,
         clientName: "Acme Corp",
         engagementId: acmeEngagement.id,
         issueDate: invoiceDate,
         dueDate: addDays(invoiceDate, 15),
-        amount: "7850",
+        totalAmount: "7850",
+        totalHours: 40,
         status: year === today.getFullYear() ? "pending" : "paid",
         notes: `Services for ${year}`,
         periodStart: subMonths(invoiceDate, 1),
-        periodEnd: invoiceDate
+        periodEnd: invoiceDate,
+        projectName: `Website Redesign ${year}`
       }).returning();
 
       const [techstartInvoice] = await db.insert(invoices).values({
+        userId: 1,
         invoiceNumber: `INV-${year}-002`,
         clientName: "TechStart",
         engagementId: techStartEngagement.id,
         issueDate: subDays(invoiceDate, 15),
         dueDate: addDays(invoiceDate, 0),
-        amount: "12250",
+        totalAmount: "12250",
+        totalHours: 35,
         status: year === today.getFullYear() ? "pending" : "paid",
         notes: `Services for ${year}`,
         periodStart: subMonths(invoiceDate, 1),
-        periodEnd: invoiceDate
+        periodEnd: invoiceDate,
+        projectName: `Strategy Consulting ${year}`
       }).returning();
 
       const [globalfirmInvoice] = await db.insert(invoices).values({
+        userId: 1,
         invoiceNumber: `INV-${year}-003`,
         clientName: "GlobalFirm",
         engagementId: globalFirmEngagement.id,
         issueDate: subDays(invoiceDate, 30),
         dueDate: subDays(invoiceDate, 15),
-        amount: "8700",
+        totalAmount: "8700",
+        totalHours: 30,
         status: year === today.getFullYear() ? "overdue" : "paid",
         notes: `Services for ${year}`,
         periodStart: subMonths(invoiceDate, 1),
-        periodEnd: invoiceDate
+        periodEnd: invoiceDate,
+        projectName: `UX Research ${year}`
       }).returning();
-
-      // Add invoice line items
-      await db.insert(invoiceLineItems).values({
-        invoiceId: acmeInvoice.id,
-        timeLogId: 1, // We'll use dummy timeLogIds since we don't track them
-        description: `Development services for ${year}`,
-        hours: 40,
-        rate: 125,
-        amount: "5000"
-      });
-
-      await db.insert(invoiceLineItems).values({
-        invoiceId: techstartInvoice.id,
-        timeLogId: 2,
-        description: `Strategy consulting for ${year}`,
-        hours: 35,
-        rate: 150,
-        amount: "5250"
-      });
-
-      await db.insert(invoiceLineItems).values({
-        invoiceId: globalfirmInvoice.id,
-        timeLogId: 3,
-        description: `UX research for ${year}`,
-        hours: 30,
-        rate: 145,
-        amount: "4350"
-      });
     }
 
     console.log('Database seeding completed successfully');

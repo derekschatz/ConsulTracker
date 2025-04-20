@@ -3,10 +3,9 @@ import {
   type Engagement, type InsertEngagement,
   type TimeLog, type InsertTimeLog,
   type Invoice, type InsertInvoice,
-  type InvoiceLineItem, type InsertInvoiceLineItem,
-  type TimeLogWithEngagement, type InvoiceWithLineItems,
+  type TimeLogWithEngagement,
   type User, type InsertUser,
-  engagements, timeLogs, invoices, invoiceLineItems, users
+  engagements, timeLogs, invoices, users
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, sql, SQL } from "drizzle-orm";
@@ -40,10 +39,10 @@ export interface IStorage {
   deleteTimeLog(id: number, userId?: number): Promise<boolean>;
 
   // Invoices
-  getInvoices(userId?: number): Promise<InvoiceWithLineItems[]>;
-  getInvoice(id: number, userId?: number): Promise<InvoiceWithLineItems | undefined>;
-  getInvoicesByStatus(status: string, userId?: number): Promise<InvoiceWithLineItems[]>;
-  createInvoice(invoice: InsertInvoice, lineItems: InsertInvoiceLineItem[]): Promise<InvoiceWithLineItems>;
+  getInvoices(userId?: number): Promise<Invoice[]>;
+  getInvoice(id: number, userId?: number): Promise<Invoice | undefined>;
+  getInvoicesByStatus(status: string, userId?: number): Promise<Invoice[]>;
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
   updateInvoiceStatus(id: number, status: string, userId?: number): Promise<Invoice | undefined>;
   deleteInvoice(id: number, userId?: number): Promise<boolean>;
 
@@ -227,48 +226,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Invoice methods
-  async getInvoices(userId?: number): Promise<InvoiceWithLineItems[]> {
+  async getInvoices(userId?: number): Promise<Invoice[]> {
     let query = db.select().from(invoices);
     if (userId) {
       query = query.where(eq(invoices.userId, userId));
     }
-    const allInvoices = await query.orderBy(desc(invoices.issueDate));
-    return Promise.all(allInvoices.map(invoice => this.enrichInvoice(invoice)));
+    return await query.orderBy(desc(invoices.issueDate));
   }
 
-  async getInvoice(id: number, userId?: number): Promise<InvoiceWithLineItems | undefined> {
+  async getInvoice(id: number, userId?: number): Promise<Invoice | undefined> {
     let query = db.select().from(invoices).where(eq(invoices.id, id));
     if (userId) {
       query = query.where(eq(invoices.userId, userId));
     }
     const results = await query;
-    if (results.length === 0) return undefined;
-    return this.enrichInvoice(results[0]);
+    return results.length > 0 ? results[0] : undefined;
   }
 
-  async getInvoicesByStatus(status: string, userId?: number): Promise<InvoiceWithLineItems[]> {
+  async getInvoicesByStatus(status: string, userId?: number): Promise<Invoice[]> {
     let query = db.select().from(invoices).where(eq(invoices.status, status));
     if (userId) {
       query = query.where(eq(invoices.userId, userId));
     }
-    const statusInvoices = await query.orderBy(desc(invoices.issueDate));
-    return Promise.all(statusInvoices.map(invoice => this.enrichInvoice(invoice)));
+    return await query.orderBy(desc(invoices.issueDate));
   }
 
-  async createInvoice(invoice: InsertInvoice, lineItems: InsertInvoiceLineItem[]): Promise<InvoiceWithLineItems> {
-    // Insert invoice
+  async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
     const [newInvoice] = await db.insert(invoices).values(invoice).returning();
-    
-    // Insert line items with the invoice ID
-    if (lineItems.length > 0) {
-      const lineItemsWithInvoiceId = lineItems.map(item => ({
-        ...item,
-        invoiceId: newInvoice.id
-      }));
-      await db.insert(invoiceLineItems).values(lineItemsWithInvoiceId);
-    }
-    
-    return this.enrichInvoice(newInvoice);
+    return newInvoice;
   }
 
   async updateInvoiceStatus(id: number, status: string, userId?: number): Promise<Invoice | undefined> {
@@ -285,17 +270,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteInvoice(id: number, userId?: number): Promise<boolean> {
-    let condition = eq(invoiceLineItems.invoiceId, id);
-    
-    // For invoice condition, add user ID check if provided
     let invoiceCondition = eq(invoices.id, id);
     if (userId) {
       invoiceCondition = and(invoiceCondition, eq(invoices.userId, userId));
     }
     
-    // Delete related line items first
-    await db.delete(invoiceLineItems).where(condition);
-    // Then delete the invoice
+    // Delete the invoice
     await db.delete(invoices).where(invoiceCondition);
     return true; // Assuming success if no error thrown
   }
@@ -316,7 +296,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await db.select({
-      total: sql<number>`sum(${invoices.amount})`
+      total: sql<number>`sum(${invoices.totalAmount})`
     })
     .from(invoices)
     .where(conditions);
@@ -331,52 +311,71 @@ export class DatabaseStorage implements IStorage {
       result.push({ month, revenue: 0, billableHours: 0 });
     }
 
-    // Get revenue from paid invoices
-    let invoiceConditions = and(
-      eq(invoices.status, 'paid'),
-      sql`extract(year from ${invoices.issueDate}) = ${year}`
-    );
-    
-    if (userId) {
-      invoiceConditions = and(invoiceConditions, eq(invoices.userId, userId));
-    }
-    
-    const paidInvoices = await db.select({
-      month: sql<number>`extract(month from ${invoices.issueDate}) - 1`,
-      amount: invoices.amount
-    })
-    .from(invoices)
-    .where(invoiceConditions);
-
-    for (const invoice of paidInvoices) {
-      const month = invoice.month;
-      if (month >= 0 && month < 12) {
-        result[month].revenue += Number(invoice.amount);
+    try {
+      console.log(`Getting revenue from paid invoices for year: ${year}, userId: ${userId || 'all'}`);
+      
+      // Get revenue from paid invoices
+      let invoiceConditions = and(
+        eq(invoices.status, 'paid'),
+        sql`extract(year from ${invoices.issueDate}) = ${year}`
+      );
+      
+      if (userId) {
+        invoiceConditions = and(invoiceConditions, eq(invoices.userId, userId));
       }
-    }
+      
+      const paidInvoices = await db.select({
+        month: sql<number>`extract(month from ${invoices.issueDate}) - 1`,
+        amount: invoices.totalAmount
+      })
+      .from(invoices)
+      .where(invoiceConditions);
 
-    // Get billable hours from time logs
-    let logConditions = sql`extract(year from ${timeLogs.date}) = ${year}`;
-    
-    if (userId) {
-      logConditions = and(logConditions, eq(timeLogs.userId, userId));
-    }
-    
-    const yearLogs = await db.select({
-      month: sql<number>`extract(month from ${timeLogs.date}) - 1`,
-      hours: timeLogs.hours
-    })
-    .from(timeLogs)
-    .where(logConditions);
+      console.log(`Found ${paidInvoices.length} paid invoices`);
 
-    for (const log of yearLogs) {
-      const month = log.month;
-      if (month >= 0 && month < 12) {
-        result[month].billableHours += Number(log.hours);
+      for (const invoice of paidInvoices) {
+        if (invoice && invoice.month !== null && invoice.month !== undefined) {
+          const month = invoice.month;
+          if (month >= 0 && month < 12) {
+            // Ensure we're using a number for the calculation
+            result[month].revenue += Number(invoice.amount) || 0;
+          }
+        }
       }
-    }
 
-    return result;
+      // Get billable hours from time logs
+      console.log(`Getting billable hours for year: ${year}, userId: ${userId || 'all'}`);
+      
+      let logConditions = sql`extract(year from ${timeLogs.date}) = ${year}`;
+      
+      if (userId) {
+        logConditions = and(logConditions, eq(timeLogs.userId, userId));
+      }
+      
+      const yearLogs = await db.select({
+        month: sql<number>`extract(month from ${timeLogs.date}) - 1`,
+        hours: timeLogs.hours
+      })
+      .from(timeLogs)
+      .where(logConditions);
+
+      console.log(`Found ${yearLogs.length} time logs for the year`);
+
+      for (const log of yearLogs) {
+        if (log && log.month !== null && log.month !== undefined) {
+          const month = log.month;
+          if (month >= 0 && month < 12) {
+            result[month].billableHours += Number(log.hours) || 0;
+          }
+        }
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error in getMonthlyRevenueBillable:', error);
+      // Return empty data on error, to avoid breaking the UI
+      return result; 
+    }
   }
 
   async getTotalHoursLogged(startDate: Date, endDate: Date, userId?: number): Promise<number> {
@@ -410,7 +409,7 @@ export class DatabaseStorage implements IStorage {
     console.log(`Getting pending invoices total for userId: ${userId || 'all'}`);
     
     const result = await db.select({
-      total: sql<number>`COALESCE(sum(${invoices.amount}), 0)`
+      total: sql<number>`COALESCE(sum(${invoices.totalAmount}), 0)`
     })
     .from(invoices)
     .where(conditions);
@@ -461,45 +460,6 @@ export class DatabaseStorage implements IStorage {
       engagement,
       billableAmount
     };
-  }
-
-  private async enrichInvoice(invoice: Invoice): Promise<InvoiceWithLineItems> {
-    try {
-      if (!invoice || !invoice.id) {
-        console.error('Invalid invoice passed to enrichInvoice:', invoice);
-        throw new Error('Invalid invoice data');
-      }
-      
-      // Get the line items for this invoice
-      const lineItems = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
-      
-      console.log(`Retrieved ${lineItems.length} line items for invoice ${invoice.id} (${invoice.invoiceNumber})`);
-      
-      // Convert numeric types to ensure consistency
-      const processedLineItems = lineItems.map(item => ({
-        ...item,
-        // Ensure numeric values are properly converted
-        hours: Number(item.hours),
-        rate: item.rate.toString(),
-        amount: item.amount.toString()
-      }));
-      
-      const totalHours = processedLineItems.reduce((total, item) => total + Number(item.hours), 0);
-      
-      return {
-        ...invoice,
-        lineItems: processedLineItems,
-        totalHours
-      };
-    } catch (error) {
-      console.error(`Error enriching invoice ${invoice?.id}:`, error);
-      // Return basic data without line items rather than failing completely
-      return {
-        ...invoice,
-        lineItems: [],
-        totalHours: 0
-      };
-    }
   }
 }
 

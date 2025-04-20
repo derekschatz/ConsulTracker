@@ -122,11 +122,10 @@ interface InvoiceItem {
 interface LineItem {
   invoice_id: number;
   description: string;
-  date: string;
   hours: number;
   rate: number;
   amount: number;
-  time_log_id: number;
+  time_log_id?: number;
 }
 
 const invoiceRateLimiter = rateLimit({
@@ -738,15 +737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, client, dateRange, startDate, endDate } = req.query;
       let query = `
         SELECT 
-          i.*,
-          COALESCE(
-            (SELECT SUM(hours) FROM invoice_line_items WHERE invoice_id = i.id),
-            0
-          ) as total_hours,
-          COALESCE(
-            (SELECT SUM(CAST(amount AS numeric)) FROM invoice_line_items WHERE invoice_id = i.id),
-            0
-          ) as total_amount
+          i.*
         FROM invoices i
         JOIN engagements e ON i.engagement_id = e.id
         WHERE 1=1
@@ -792,10 +783,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = await pool.query(query, params);
       
-      // Convert amount and total_amount to numbers
+      // Convert totalAmount and totalHours to numbers
       const invoices = result.rows.map(row => ({
         ...row,
-        amount: Number(row.amount),
         total_amount: Number(row.total_amount),
         total_hours: Number(row.total_hours)
       }));
@@ -833,14 +823,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Invoice data is incomplete" });
       }
       
-      // Verify line items
-      if (!Array.isArray(invoice.lineItems) || invoice.lineItems.length === 0) {
-        console.warn(`Invoice ${invoiceId} (${invoice.invoiceNumber}) has no line items`);
-        // Continue anyway, client will handle this case
-      }
+      // Add empty lineItems array to satisfy client expectations
+      const invoiceWithLineItems = {
+        ...invoice,
+        lineItems: []
+      };
       
-      console.log(`Successfully retrieved invoice ${invoiceId} (${invoice.invoiceNumber}) with ${invoice.lineItems.length} line items`);
-      res.json(invoice);
+      console.log(`Successfully retrieved invoice ${invoiceId} (${invoice.invoiceNumber})`);
+      res.json(invoiceWithLineItems);
     } catch (error) {
       console.error(`Error fetching invoice ${req.params.id}:`, error);
       res.status(500).json({ 
@@ -862,7 +852,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         engagementId, 
         timeLogs = [], 
         lineItems = [],
-        amount: providedAmount,
+        totalAmount: providedTotalAmount,
+        totalHours: providedTotalHours,
         clientName: providedClientName,
         projectName: providedProjectName,
         periodStart,
@@ -900,72 +891,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clientName = providedClientName || engagement.client_name;
         const projectName = providedProjectName || engagement.project_name;
         
-        interface LineItem {
-          invoice_id: number;
-          description: string;
-          date: string;
-          hours: number;
-          rate: number;
-          amount: number;
-          time_log_id?: number;
+        let finalTotalAmount: number;
+        let finalTotalHours: number;
+
+        console.log('Processing time logs for invoice totals...');
+        // Calculate total amount and hours from time logs or use provided values
+        if (providedTotalAmount && providedTotalHours) {
+          // Use provided values
+          finalTotalAmount = Number(providedTotalAmount);
+          finalTotalHours = Number(providedTotalHours);
+          console.log('Using provided totals:', { finalTotalAmount, finalTotalHours });
+        } else if (lineItems && lineItems.length > 0) {
+          // Calculate from line items
+          finalTotalHours = Number(lineItems.reduce((sum: number, item: { hours: number | string }) => 
+            sum + Number(item.hours), 0).toFixed(2));
+          finalTotalAmount = Number(lineItems.reduce((sum: number, item: { amount: number | string }) => 
+            sum + Number(item.amount), 0).toFixed(2));
+          console.log('Calculated totals from line items:', { finalTotalAmount, finalTotalHours });
+        } else if (timeLogs && timeLogs.length > 0) {
+          // Calculate from time logs
+          finalTotalHours = Number(timeLogs.reduce((sum: number, log: any) => 
+            sum + Number(log.hours), 0).toFixed(2));
+          
+          finalTotalAmount = Number(timeLogs.reduce((sum: number, log: any) => {
+            const hours = Number(log.hours);
+            const rate = Number(log.engagement.hourlyRate);
+            return sum + (hours * rate);
+          }, 0).toFixed(2));
+          
+          console.log('Calculated totals from time logs:', { finalTotalAmount, finalTotalHours });
+        } else {
+          console.error('No data provided to calculate invoice totals');
+          return res.status(400).json({ error: 'No data provided to calculate invoice totals' });
         }
 
-        let finalAmount: number;
-        let itemsToInsert: LineItem[];
+        // Validate calculated values
+        if (isNaN(finalTotalAmount) || finalTotalAmount <= 0) {
+          console.error('Invalid total amount:', finalTotalAmount);
+          return res.status(400).json({ error: 'Invalid total amount' });
+        }
 
-        console.log('Processing line items...');
-        // Handle both old and new formats
-        if (lineItems.length > 0) {
-          console.log('Using new format with pre-calculated line items');
-          // New format with pre-calculated line items
-          itemsToInsert = lineItems.map((item: any) => ({
-            invoice_id: 0, // Will be set after invoice creation
-            description: item.description || '',
-            date: item.date || new Date().toISOString(),
-            hours: Number(item.hours),
-            rate: Number(item.rate),
-            amount: Number(item.amount),
-            time_log_id: item.timeLogId
-          }));
-          finalAmount = providedAmount || Number(lineItems.reduce((sum: number, item: any) => sum + Number(item.amount), 0).toFixed(2));
-          console.log('Processed line items:', itemsToInsert);
-          console.log('Final amount:', finalAmount);
-        } else if (timeLogs.length > 0) {
-          console.log('Using old format with time logs');
-          // Old format with time logs
-          try {
-            const calculatedAmount = timeLogs.reduce((sum: number, log: any) => {
-              const hours = Number(log.hours);
-              const rate = Number(log.engagement.hourlyRate);
-              const lineAmount = hours * rate;
-              console.log(`Calculating line amount: ${hours} hours * $${rate}/hr = $${lineAmount}`);
-              return sum + lineAmount;
-            }, 0);
-            
-            finalAmount = Number(calculatedAmount.toFixed(2));
-            
-            itemsToInsert = timeLogs.map((log: any) => {
-              const hours = Number(log.hours);
-              const rate = Number(log.engagement.hourlyRate);
-              return {
-                invoice_id: 0, // Will be set after invoice creation
-                description: log.description,
-                date: log.date,
-                hours: hours,
-                rate: rate,
-                amount: Number((hours * rate).toFixed(2)),
-                time_log_id: log.id
-              };
-            });
-            console.log('Processed time logs:', itemsToInsert);
-            console.log('Final amount:', finalAmount);
-          } catch (error) {
-            console.error('Error calculating total amount:', error);
-            return res.status(400).json({ error: 'Invalid time log data for calculation' });
-          }
-        } else {
-          console.error('No line items or time logs provided');
-          return res.status(400).json({ error: 'No line items or time logs provided' });
+        if (isNaN(finalTotalHours) || finalTotalHours <= 0) {
+          console.error('Invalid total hours:', finalTotalHours);
+          return res.status(400).json({ error: 'Invalid total hours' });
         }
 
         console.log('Creating invoice record...');
@@ -974,11 +942,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate.setDate(today.getDate() + 30);
 
         try {
-          // Start a transaction
-          await pool.query('BEGIN');
-
+          // Create invoice with total amount and hours
           const invoiceResult = await pool.query(
-            'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, amount, period_start, period_end, project_name, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id',
+            'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, total_amount, total_hours, period_start, period_end, project_name, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id',
             [
               engagementId, 
               status, 
@@ -986,7 +952,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               dueDate, 
               req.body.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`,
               clientName,
-              finalAmount,
+              finalTotalAmount,
+              finalTotalHours,
               periodStart || today, 
               periodEnd || today,
               projectName,
@@ -997,45 +964,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const invoiceId = invoiceResult.rows[0].id;
           console.log(`Created invoice with ID: ${invoiceId}`);
 
-          // Update invoice_id for all line items
-          itemsToInsert = itemsToInsert.map(item => ({
-            ...item,
-            invoice_id: invoiceId
-          }));
-
-          console.log('Inserting line items...');
-
-          // Insert line items with all required fields
-          if (itemsToInsert.length > 0) {
-            const values = itemsToInsert.map((item, i) => {
-              const baseIndex = i * 7 + 1;
-              return `($${baseIndex}, $${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6})`;
-            }).join(', ');
-
-            const flatParams = itemsToInsert.flatMap(item => [
-              item.description,
-              item.date,
-              item.hours,
-              item.rate,
-              item.amount,
-              item.invoice_id,
-              item.time_log_id || null
-            ]);
-
-            await pool.query(
-              `INSERT INTO invoice_line_items (description, date, hours, rate, amount, invoice_id, time_log_id) VALUES ${values}`,
-              flatParams
-            );
-          }
-
-          // Commit the transaction
-          await pool.query('COMMIT');
-
-          console.log('Successfully created invoice and line items');
+          console.log('Successfully created invoice');
           res.json({ id: invoiceId });
         } catch (error) {
-          // Rollback in case of error
-          await pool.query('ROLLBACK');
           console.error('Database error creating invoice:', error);
           throw error;
         }
@@ -1223,7 +1154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       pdf.setFontSize(12);
       pdf.text(`Client: ${invoice.clientName}`, 20, 40);
-      pdf.text(`Amount: $${invoice.amount}`, 20, 50);
+      pdf.text(`Amount: $${invoice.totalAmount}`, 20, 50);
       pdf.text(`Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}`, 20, 60);
       pdf.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`, 20, 70);
       
@@ -1253,19 +1184,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Total
       yPos += 10;
-      pdf.text(`Total Amount: $${invoice.amount}`, 120, yPos);
+      pdf.text(`Total Amount: $${invoice.totalAmount}`, 120, yPos);
       
       // Convert PDF to base64
       const pdfBase64 = pdf.output('datauristring');
       
       // Return the PDF data and email details
       const emailSubject = `Invoice #${invoice.invoiceNumber} from Your Consulting Service`;
-      const emailBody = `Please find attached invoice #${invoice.invoiceNumber} for ${invoice.clientName} in the amount of $${invoice.amount}.
+      const emailBody = `Please find attached invoice #${invoice.invoiceNumber} for ${invoice.clientName} in the amount of $${invoice.totalAmount}.
       
 Invoice Details:
 - Invoice Number: ${invoice.invoiceNumber}
 - Client: ${invoice.clientName}
-- Amount: $${invoice.amount}
+- Amount: $${invoice.totalAmount}
 - Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}
 - Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`;
       

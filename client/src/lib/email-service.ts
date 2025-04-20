@@ -109,7 +109,7 @@ Please find attached invoice #${invoice.invoiceNumber} for services rendered.
 Invoice Details:
 - Issue Date: ${formatDateForDisplay(invoice.issueDate)}
 - Due Date: ${formatDateForDisplay(invoice.dueDate)}
-- Total Amount: ${formatCurrency(Number(invoice.amount))}
+- Total Amount: ${formatCurrency(Number(invoice.totalAmount))}
 
 Please let us know if you have any questions.
 

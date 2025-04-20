@@ -62,6 +62,8 @@ const Invoices = () => {
       }
       const data = await response.json();
       
+      console.log('Raw invoice data from API:', data);
+      
       // Map snake_case properties to camelCase for consistency
       return data.map((invoice: any) => ({
         id: invoice.id,
@@ -70,10 +72,13 @@ const Invoices = () => {
         projectName: invoice.project_name,
         issueDate: invoice.issue_date,
         dueDate: invoice.due_date,
-        amount: invoice.amount,
+        amount: Number(invoice.total_amount),
+        totalAmount: Number(invoice.total_amount),
+        totalHours: Number(invoice.total_hours),
         status: invoice.status,
         engagementId: invoice.engagement_id,
-        lineItems: invoice.line_items || []
+        lineItems: invoice.line_items || [],
+        userId: invoice.user_id
       }));
     },
     // Ensure the query is always fresh
@@ -166,36 +171,13 @@ const Invoices = () => {
         throw new Error('Invalid invoice data received from server');
       }
       
-      // Check if line items exist
+      // Ensure lineItems exists (even if empty)
       if (!completeInvoice.lineItems && !completeInvoice.line_items) {
-        console.error('Invoice has no line items:', completeInvoice);
-        throw new Error('This invoice has no line items and cannot be previewed');
+        console.warn('Invoice has no line items. Using empty line items array.');
+        completeInvoice.lineItems = [];
       }
       
-      // Map snake_case properties to camelCase for consistency
-      const formattedInvoice = {
-        id: completeInvoice.id,
-        invoiceNumber: completeInvoice.invoice_number || completeInvoice.invoiceNumber,
-        clientName: completeInvoice.client_name || completeInvoice.clientName,
-        projectName: completeInvoice.project_name || completeInvoice.projectName,
-        issueDate: completeInvoice.issue_date || completeInvoice.issueDate,
-        dueDate: completeInvoice.due_date || completeInvoice.dueDate,
-        amount: completeInvoice.amount,
-        status: completeInvoice.status,
-        notes: completeInvoice.notes,
-        periodStart: completeInvoice.period_start || completeInvoice.periodStart,
-        periodEnd: completeInvoice.period_end || completeInvoice.periodEnd,
-        engagementId: completeInvoice.engagement_id || completeInvoice.engagementId,
-        lineItems: completeInvoice.lineItems || completeInvoice.line_items || [],
-        totalHours: completeInvoice.totalHours || completeInvoice.total_hours || 
-          (completeInvoice.lineItems || completeInvoice.line_items || [])
-            .reduce((total: number, item: any) => total + Number(item.hours), 0)
-      };
-      
-      console.log('Formatted invoice data for preview:', formattedInvoice);
-      
-      // Set current invoice and open preview modal
-      setCurrentInvoice(formattedInvoice);
+      setCurrentInvoice(completeInvoice);
       setIsPreviewModalOpen(true);
     } catch (error: any) {
       console.error('Error previewing invoice:', error);
@@ -229,10 +211,10 @@ const Invoices = () => {
         throw new Error('Invalid invoice data received from server');
       }
       
-      // Check if line items exist
+      // Ensure lineItems exists (even if empty)
       if (!completeInvoice.lineItems && !completeInvoice.line_items) {
-        console.error('Invoice has no line items:', completeInvoice);
-        throw new Error('This invoice has no line items and cannot be downloaded');
+        console.warn('Invoice has no line items. Using empty line items array.');
+        completeInvoice.lineItems = [];
       }
       
       // Map snake_case properties to camelCase for consistency
@@ -243,16 +225,16 @@ const Invoices = () => {
         projectName: completeInvoice.project_name || completeInvoice.projectName,
         issueDate: completeInvoice.issue_date || completeInvoice.issueDate,
         dueDate: completeInvoice.due_date || completeInvoice.dueDate,
-        amount: completeInvoice.amount,
+        amount: Number(completeInvoice.total_amount || completeInvoice.totalAmount || 0),
+        totalAmount: completeInvoice.total_amount || completeInvoice.totalAmount || "0", // Keep as original type
         status: completeInvoice.status,
         notes: completeInvoice.notes,
         periodStart: completeInvoice.period_start || completeInvoice.periodStart,
         periodEnd: completeInvoice.period_end || completeInvoice.periodEnd,
         engagementId: completeInvoice.engagement_id || completeInvoice.engagementId,
         lineItems: completeInvoice.lineItems || completeInvoice.line_items || [],
-        totalHours: completeInvoice.totalHours || completeInvoice.total_hours || 
-          (completeInvoice.lineItems || completeInvoice.line_items || [])
-            .reduce((total: number, item: any) => total + Number(item.hours), 0)
+        totalHours: Number(completeInvoice.total_hours || completeInvoice.totalHours || 0),
+        userId: completeInvoice.user_id || completeInvoice.userId
       };
       
       console.log('Formatted invoice data for download:', formattedInvoice);

@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { InvoiceWithLineItems } from "@shared/schema";
-import { generateInvoicePDF } from "@/lib/pdf-generator";
+import { generateInvoicePDF, downloadInvoice } from "@/lib/pdf-generator";
 import { formatCurrency, formatHours } from "@/lib/format-utils";
 import { Download, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -46,11 +46,16 @@ const InvoicePreviewModal = ({
   // Function to format a date for display
   const formatDate = (date: string | Date) => {
     if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    
+    // Use the same approach as in the PDF generator
+    const str = typeof date === 'string' ? date : date.toISOString();
+    const datePart = str.substring(0, 10); // Get YYYY-MM-DD part
+    const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return `${months[month-1]} ${day}, ${year}`;
   };
 
   // Generate a visual preview of the invoice instead of using PDF
@@ -60,6 +65,22 @@ const InvoicePreviewModal = ({
     try {
       setIsLoading(true);
       
+      // Log the raw date values from the API
+      console.log('Raw invoice period dates:', {
+        periodStart: invoice.periodStart,
+        periodEnd: invoice.periodEnd
+      });
+      
+      // Format dates
+      const formattedPeriodStart = formatDate(invoice.periodStart);
+      const formattedPeriodEnd = formatDate(invoice.periodEnd);
+      
+      // Log the formatted dates
+      console.log('Formatted invoice period dates:', {
+        periodStart: formattedPeriodStart,
+        periodEnd: formattedPeriodEnd
+      });
+      
       // Extract the data we need for the preview
       setPreviewData({
         invoiceNumber: invoice.invoiceNumber,
@@ -67,10 +88,10 @@ const InvoicePreviewModal = ({
         projectName: invoice.projectName || 'Consulting Services',
         issueDate: formatDate(invoice.issueDate),
         dueDate: formatDate(invoice.dueDate),
-        amount: formatCurrency(invoice.amount),
+        amount: formatCurrency(invoice.totalAmount),
         totalHours: invoice.totalHours || 0,
-        periodStart: formatDate(invoice.periodStart),
-        periodEnd: formatDate(invoice.periodEnd)
+        periodStart: formattedPeriodStart,
+        periodEnd: formattedPeriodEnd
       });
     } catch (error: any) {
       console.error("Error generating invoice preview:", error);
@@ -89,10 +110,8 @@ const InvoicePreviewModal = ({
     if (!invoice) return;
     
     try {
-      // Generate PDF document specifically for download
-      const doc = generateInvoicePDF(invoice);
-      const downloadFileName = `Invoice-${invoice.invoiceNumber}.pdf`;
-      doc.save(downloadFileName);
+      // Use the shared downloadInvoice function for consistency
+      downloadInvoice(invoice);
       
       toast({
         title: "Download started",
@@ -169,11 +188,7 @@ const InvoicePreviewModal = ({
                   <div>
                     <h2 className="text-2xl font-bold text-gray-800">INVOICE</h2>
                     <div className="mt-2 text-gray-600">
-                      <p className="font-semibold">Agile Infusion, LLC</p>
-                      <p>100 Danby Court</p>
-                      <p>Churchville, PA 18966</p>
-                      <p>bobschatz@agileinfusion.com</p>
-                      <p>(215) 435-3240</p>
+                      {/* Placeholder for company information that will be configurable */}
                     </div>
                   </div>
                   <div className="mt-4 md:mt-0 text-right">
@@ -244,7 +259,7 @@ const InvoicePreviewModal = ({
 
               {/* Payment Terms */}
               <div className="p-6 text-sm text-gray-600">
-                <p>Make all checks payable to Derek Schatz.</p>
+                <p>Make all checks payable to the company name.</p>
                 <p>Total due in 30 days.</p>
                 <p className="mt-4 text-center text-gray-500">Thank you for your business!</p>
               </div>
