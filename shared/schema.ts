@@ -37,6 +37,13 @@ export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   name: text("name").notNull(),
+  billingContactName: text("billing_contact_name"),
+  billingContactEmail: text("billing_contact_email"),
+  billingAddress: text("billing_address"),
+  billingCity: text("billing_city"),
+  billingState: text("billing_state"),
+  billingZip: text("billing_zip"),
+  billingCountry: text("billing_country"),
 });
 
 export const clientsRelations = relations(clients, ({ many }) => ({
@@ -46,13 +53,20 @@ export const clientsRelations = relations(clients, ({ many }) => ({
 export const insertClientSchema = createInsertSchema(clients).pick({
   userId: true,
   name: true,
+  billingContactName: true,
+  billingContactEmail: true,
+  billingAddress: true,
+  billingCity: true,
+  billingState: true,
+  billingZip: true,
+  billingCountry: true,
 });
 
 // Engagements table
 export const engagements = pgTable("engagements", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
-  clientName: text("client_name").notNull(),
+  clientId: integer("client_id").references(() => clients.id).notNull(),
   projectName: text("project_name").notNull(),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
@@ -61,14 +75,18 @@ export const engagements = pgTable("engagements", {
   status: text("status").notNull().default('active')
 });
 
-export const engagementsRelations = relations(engagements, ({ many }) => ({
+export const engagementsRelations = relations(engagements, ({ many, one }) => ({
   timeLogs: many(timeLogs),
-  invoices: many(invoices)
+  invoices: many(invoices),
+  client: one(clients, {
+    fields: [engagements.clientId],
+    references: [clients.id]
+  })
 }));
 
 export const insertEngagementSchema = z.object({
   userId: z.number(),
-  clientName: z.string(),
+  clientId: z.number(),
   projectName: z.string(),
   startDate: z.date(),
   endDate: z.date(),
@@ -121,6 +139,13 @@ export const invoices = pgTable("invoices", {
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
   projectName: text("project_name"),
+  billingContactName: text("billing_contact_name"),
+  billingContactEmail: text("billing_contact_email"),
+  billingAddress: text("billing_address"),
+  billingCity: text("billing_city"),
+  billingState: text("billing_state"),
+  billingZip: text("billing_zip"),
+  billingCountry: text("billing_country"),
 });
 
 export const invoicesRelations = relations(invoices, ({ one }) => ({
@@ -144,6 +169,13 @@ export const insertInvoiceSchema = createInsertSchema(invoices).pick({
   periodStart: true,
   periodEnd: true,
   projectName: true,
+  billingContactName: true,
+  billingContactEmail: true,
+  billingAddress: true,
+  billingCity: true,
+  billingState: true,
+  billingZip: true,
+  billingCountry: true,
 });
 
 // Users table for authentication
@@ -181,7 +213,9 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 
 // Extended types with computed fields
 export type TimeLogWithEngagement = TimeLog & {
-  engagement: Engagement;
+  engagement: Engagement & {
+    clientName?: string; // Add clientName for backward compatibility
+  };
   billableAmount: number;
 };
 

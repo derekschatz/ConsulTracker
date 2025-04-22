@@ -28,6 +28,7 @@ const Invoices = () => {
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<any>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>({
@@ -149,6 +150,62 @@ const Invoices = () => {
 
   const handleCloseCreateModal = (open: boolean) => {
     setIsCreateModalOpen(open);
+  };
+
+  const handleEditInvoice = async (invoice: any) => {
+    console.log("Edit requested for invoice:", invoice);
+    
+    try {
+      // Fetch the complete invoice data with line items to ensure we have all fields
+      const response = await fetch(`/api/invoices/${invoice.id}`);
+      if (!response.ok) {
+        console.error(`API error: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to fetch invoice details: ${response.status} ${response.statusText}`);
+      }
+      
+      const completeInvoice = await response.json();
+      console.log('Received complete invoice data for editing:', completeInvoice);
+      
+      // Map any snake_case properties to camelCase for consistency
+      const formattedInvoice = {
+        id: completeInvoice.id,
+        invoiceNumber: completeInvoice.invoice_number || completeInvoice.invoiceNumber,
+        clientName: completeInvoice.client_name || completeInvoice.clientName,
+        projectName: completeInvoice.project_name || completeInvoice.projectName,
+        issueDate: completeInvoice.issue_date || completeInvoice.issueDate,
+        dueDate: completeInvoice.due_date || completeInvoice.dueDate,
+        totalAmount: completeInvoice.total_amount || completeInvoice.totalAmount,
+        status: completeInvoice.status,
+        notes: completeInvoice.notes,
+        periodStart: completeInvoice.period_start || completeInvoice.periodStart,
+        periodEnd: completeInvoice.period_end || completeInvoice.periodEnd,
+        engagementId: completeInvoice.engagement_id || completeInvoice.engagementId,
+        lineItems: completeInvoice.lineItems || completeInvoice.line_items || [],
+        totalHours: completeInvoice.total_hours || completeInvoice.totalHours,
+        userId: completeInvoice.user_id || completeInvoice.userId
+      };
+      
+      console.log("Setting formatted invoice for edit mode:", formattedInvoice);
+      setCurrentInvoice(formattedInvoice);
+      setIsEditModalOpen(true);
+    } catch (error) {
+      console.error('Error preparing invoice for editing:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load invoice for editing. Please try again.',
+        variant: 'destructive',
+      });
+      // Fallback to basic editing if fetch fails
+      setCurrentInvoice(invoice);
+      setIsEditModalOpen(true);
+    }
+  };
+
+  const handleCloseEditModal = (open: boolean) => {
+    setIsEditModalOpen(open);
+    if (!open) {
+      setCurrentInvoice(null);
+    }
   };
 
   const handleViewInvoice = async (invoice: any) => {
@@ -437,6 +494,7 @@ const Invoices = () => {
         onUpdateStatus={handleUpdateInvoiceStatus}
         onDelete={handleDeleteInvoice}
         onDownload={handleDownloadInvoice}
+        onEdit={handleEditInvoice}
       />
 
       {/* Create Modal */}
@@ -444,6 +502,14 @@ const Invoices = () => {
         open={isCreateModalOpen}
         onOpenChange={handleCloseCreateModal}
         onSuccess={handleSuccess}
+      />
+
+      {/* Edit Modal */}
+      <InvoiceModal
+        open={isEditModalOpen}
+        onOpenChange={handleCloseEditModal}
+        onSuccess={handleSuccess}
+        invoice={currentInvoice}
       />
 
       {/* Email Modal */}

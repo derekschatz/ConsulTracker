@@ -1,5 +1,5 @@
 import { db } from './db';
-import { engagements, timeLogs, invoices } from '@shared/schema';
+import { engagements, timeLogs, invoices, clients } from '@shared/schema';
 import { addMonths, subMonths, addDays, subDays, startOfYear } from 'date-fns';
 
 // Helper to generate dates across multiple years
@@ -15,6 +15,43 @@ async function seed() {
   console.log('Seeding database...');
 
   try {
+    // Create sample clients
+    const [acmeClient] = await db.insert(clients).values({
+      userId: 1,
+      name: "Acme Corp",
+      billingContactName: "John Smith",
+      billingContactEmail: "john.smith@acmecorp.com",
+      billingAddress: "123 Main Street",
+      billingCity: "New York",
+      billingState: "NY",
+      billingZip: "10001",
+      billingCountry: "USA"
+    }).returning();
+
+    const [techStartClient] = await db.insert(clients).values({
+      userId: 1,
+      name: "TechStart",
+      billingContactName: "Jane Doe",
+      billingContactEmail: "jane.doe@techstart.io",
+      billingAddress: "456 Innovation Blvd",
+      billingCity: "San Francisco",
+      billingState: "CA",
+      billingZip: "94105",
+      billingCountry: "USA"
+    }).returning();
+
+    const [globalFirmClient] = await db.insert(clients).values({
+      userId: 1,
+      name: "GlobalFirm",
+      billingContactName: "Michael Chen",
+      billingContactEmail: "mchen@globalfirm.com",
+      billingAddress: "789 International Drive",
+      billingCity: "Chicago",
+      billingState: "IL",
+      billingZip: "60601",
+      billingCountry: "USA"
+    }).returning();
+
     // Generate test data for current year and past 2 years
     const today = new Date();
     const testDates = generateDates(today, 3); // Current year, last year, and year before
@@ -26,7 +63,7 @@ async function seed() {
       // Create sample engagements for each year
       const [acmeEngagement] = await db.insert(engagements).values({
         userId: 1,
-        clientName: "Acme Corp",
+        clientId: acmeClient.id,
         projectName: `Website Redesign ${year}`,
         startDate: subMonths(baseDate, 2),
         endDate: addMonths(baseDate, 2),
@@ -37,7 +74,7 @@ async function seed() {
 
       const [techStartEngagement] = await db.insert(engagements).values({
         userId: 1,
-        clientName: "TechStart",
+        clientId: techStartClient.id,
         projectName: `Strategy Consulting ${year}`,
         startDate: subMonths(baseDate, 3),
         endDate: addMonths(baseDate, 1),
@@ -48,7 +85,7 @@ async function seed() {
 
       const [globalFirmEngagement] = await db.insert(engagements).values({
         userId: 1,
-        clientName: "GlobalFirm",
+        clientId: globalFirmClient.id,
         projectName: `UX Research ${year}`,
         startDate: addMonths(baseDate, 1),
         endDate: addMonths(baseDate, 4),
@@ -100,7 +137,7 @@ async function seed() {
       const [acmeInvoice] = await db.insert(invoices).values({
         userId: 1,
         invoiceNumber: `INV-${year}-001`,
-        clientName: "Acme Corp",
+        clientName: acmeClient.name,
         engagementId: acmeEngagement.id,
         issueDate: invoiceDate,
         dueDate: addDays(invoiceDate, 15),
@@ -110,13 +147,20 @@ async function seed() {
         notes: `Services for ${year}`,
         periodStart: subMonths(invoiceDate, 1),
         periodEnd: invoiceDate,
-        projectName: `Website Redesign ${year}`
+        projectName: `Website Redesign ${year}`,
+        billingContactName: acmeClient.billingContactName,
+        billingContactEmail: acmeClient.billingContactEmail,
+        billingAddress: acmeClient.billingAddress,
+        billingCity: acmeClient.billingCity,
+        billingState: acmeClient.billingState,
+        billingZip: acmeClient.billingZip,
+        billingCountry: acmeClient.billingCountry
       }).returning();
 
       const [techstartInvoice] = await db.insert(invoices).values({
         userId: 1,
         invoiceNumber: `INV-${year}-002`,
-        clientName: "TechStart",
+        clientName: techStartClient.name,
         engagementId: techStartEngagement.id,
         issueDate: subDays(invoiceDate, 15),
         dueDate: addDays(invoiceDate, 0),
@@ -126,13 +170,20 @@ async function seed() {
         notes: `Services for ${year}`,
         periodStart: subMonths(invoiceDate, 1),
         periodEnd: invoiceDate,
-        projectName: `Strategy Consulting ${year}`
+        projectName: `Strategy Consulting ${year}`,
+        billingContactName: techStartClient.billingContactName,
+        billingContactEmail: techStartClient.billingContactEmail,
+        billingAddress: techStartClient.billingAddress,
+        billingCity: techStartClient.billingCity,
+        billingState: techStartClient.billingState,
+        billingZip: techStartClient.billingZip,
+        billingCountry: techStartClient.billingCountry
       }).returning();
 
       const [globalfirmInvoice] = await db.insert(invoices).values({
         userId: 1,
         invoiceNumber: `INV-${year}-003`,
-        clientName: "GlobalFirm",
+        clientName: globalFirmClient.name,
         engagementId: globalFirmEngagement.id,
         issueDate: subDays(invoiceDate, 30),
         dueDate: subDays(invoiceDate, 15),
@@ -142,7 +193,14 @@ async function seed() {
         notes: `Services for ${year}`,
         periodStart: subMonths(invoiceDate, 1),
         periodEnd: invoiceDate,
-        projectName: `UX Research ${year}`
+        projectName: `UX Research ${year}`,
+        billingContactName: globalFirmClient.billingContactName,
+        billingContactEmail: globalFirmClient.billingContactEmail,
+        billingAddress: globalFirmClient.billingAddress,
+        billingCity: globalFirmClient.billingCity,
+        billingState: globalFirmClient.billingState,
+        billingZip: globalFirmClient.billingZip,
+        billingCountry: globalFirmClient.billingCountry
       }).returning();
     }
 

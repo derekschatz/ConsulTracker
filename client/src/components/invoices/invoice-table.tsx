@@ -8,7 +8,8 @@ import {
   MoreHorizontal,
   CheckCircle, 
   Clock,
-  AlertCircle
+  AlertCircle,
+  Edit
 } from 'lucide-react';
 import { 
   DropdownMenu,
@@ -28,6 +29,7 @@ interface InvoiceTableProps {
   onUpdateStatus: (id: number, status: string) => void;
   onDelete: (id: number) => void;
   onDownload?: (invoice: any) => void;
+  onEdit?: (invoice: any) => void;
 }
 
 const InvoiceTable = ({ 
@@ -37,7 +39,8 @@ const InvoiceTable = ({
   onEmail, 
   onUpdateStatus,
   onDelete,
-  onDownload 
+  onDownload,
+  onEdit 
 }: InvoiceTableProps) => {
   const isMobile = useMobile();
   
@@ -107,6 +110,11 @@ const InvoiceTable = ({
               <Download className="h-4 w-4" />
             </Button>
           )}
+          {onEdit && (
+            <Button variant="ghost" size="icon" onClick={() => onEdit(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
+              <Edit className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={() => onEmail(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
             <Mail className="h-4 w-4" />
           </Button>
@@ -117,6 +125,12 @@ const InvoiceTable = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {onEdit && (
+                <DropdownMenuItem onClick={() => onEdit(invoice)}>
+                  <Edit className="h-4 w-4 mr-2 text-blue-600" />
+                  Edit Invoice
+                </DropdownMenuItem>
+              )}
               {invoice.status !== 'paid' && (
                 <DropdownMenuItem onClick={() => onUpdateStatus(invoice.id, 'paid')}>
                   <CheckCircle className="h-4 w-4 mr-2 text-green-600" />

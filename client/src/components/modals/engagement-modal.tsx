@@ -4,13 +4,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { insertEngagementSchema, calculateEngagementStatus } from '@shared/schema';
 import { getISODate } from '@/lib/date-utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useQuery } from '@tanstack/react-query';
+
+// Client interface
+interface Client {
+  id: number;
+  name: string;
+}
 
 // Extend the engagement schema with additional validation
 const formSchema = insertEngagementSchema
@@ -56,6 +64,12 @@ const EngagementModal = ({
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Fetch clients for dropdown
+  const { data: clients = [], isLoading: isLoadingClients } = useQuery<Client[]>({
+    queryKey: ['/api/clients'],
+    enabled: open, // Only fetch when modal is open
+  });
+
   // Debug log to see what data is being passed to the modal
   console.log('EngagementModal received engagement data:', engagement);
 
@@ -66,17 +80,20 @@ const EngagementModal = ({
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: engagement
       ? {
           ...engagement,
+          clientId: engagement.clientId || 0,
           startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
           endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
           hourlyRate: engagement.hourlyRate,
         }
       : {
+          clientId: 0,
           clientName: '',
           projectName: '',
           startDate: getISODate(),
@@ -99,6 +116,7 @@ const EngagementModal = ({
       console.log('Resetting form with engagement data', engagement);
       reset({
         ...engagement,
+        clientId: engagement.clientId || 0,
         startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
         endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
         hourlyRate: engagement.hourlyRate,
@@ -110,6 +128,24 @@ const EngagementModal = ({
   const handleClose = () => {
     reset();
     onOpenChange(false);
+  };
+
+  // Function to handle client selection and set client name
+  const handleClientChange = (clientId: string, onChange: (value: number) => void) => {
+    const id = parseInt(clientId);
+    onChange(id);
+    
+    // Find the selected client to get its name
+    const selectedClient = clients.find(client => client.id === id);
+    if (selectedClient) {
+      // Update client name field
+      const clientNameEvent = {
+        target: { value: selectedClient.name }
+      } as React.ChangeEvent<HTMLInputElement>;
+      
+      // Simulate an input event to update the clientName field
+      register('clientName').onChange(clientNameEvent);
+    }
   };
 
   // Submit form data
@@ -182,17 +218,33 @@ const EngagementModal = ({
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-1 gap-2">
-              <Label htmlFor="clientName" className="text-sm font-medium text-slate-700">
-                Client Name
+              <Label htmlFor="clientId" className="text-sm font-medium text-slate-700">
+                Client
               </Label>
-              <Input
-                id="clientName"
-                placeholder="Enter client name"
-                {...register('clientName')}
-                className={errors.clientName ? 'border-red-500' : ''}
+              <Controller
+                name="clientId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    disabled={isLoadingClients}
+                    value={field.value?.toString() || ''}
+                    onValueChange={(value) => handleClientChange(value, field.onChange)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id.toString()}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               />
-              {errors.clientName && (
-                <span className="text-xs text-red-500">{errors.clientName.message}</span>
+              {errors.clientId && (
+                <span className="text-xs text-red-500">{errors.clientId.message}</span>
               )}
             </div>
             
@@ -250,9 +302,8 @@ const EngagementModal = ({
               <Input
                 id="hourlyRate"
                 type="number"
-                min="0"
                 step="0.01"
-                placeholder="0.00"
+                min="0"
                 {...register('hourlyRate', { valueAsNumber: true })}
                 className={errors.hourlyRate ? 'border-red-500' : ''}
               />
@@ -276,6 +327,9 @@ const EngagementModal = ({
                 <span className="text-xs text-red-500">{errors.description.message}</span>
               )}
             </div>
+            
+            {/* Hidden client name field that gets populated by client selection */}
+            <input type="hidden" {...register('clientName')} />
           </div>
           
           <DialogFooter className="gap-3">

@@ -85,6 +85,7 @@ interface InvoiceModalProps {
   periodStart?: Date | null;
   periodEnd?: Date | null;
   engagementId?: string | null;
+  invoice?: any; // The invoice to edit (if in edit mode)
 }
 
 interface TimeLog {
@@ -129,6 +130,7 @@ const InvoiceModal = ({
   periodStart,
   periodEnd,
   engagementId,
+  invoice,
 }: InvoiceModalProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -138,6 +140,7 @@ const InvoiceModal = ({
   const [totalHours, setTotalHours] = useState(0);
   const [selectedClientName, setSelectedClientName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const router = useRouter();
 
   // Fetch all active engagements
@@ -168,16 +171,16 @@ const InvoiceModal = ({
   // Get the next invoice number (in a real app this would come from the server)
   const nextInvoiceNumber = generateInvoiceNumber("INV", 25);
 
-  // Initialize form with default values
+  // Initialize form with default values or edit values if provided
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      clientName: "",
-      engagementId: engagementId || "",
-      periodStart: periodStart ? toStorageDate(periodStart) : "",
-      periodEnd: periodEnd ? toStorageDate(periodEnd) : "",
+      clientName: invoice?.clientName || "",
+      engagementId: invoice?.engagementId?.toString() || engagementId || "",
+      periodStart: invoice?.periodStart ? toStorageDate(new Date(invoice.periodStart)) : (periodStart ? toStorageDate(periodStart) : ""),
+      periodEnd: invoice?.periodEnd ? toStorageDate(new Date(invoice.periodEnd)) : (periodEnd ? toStorageDate(periodEnd) : ""),
       netTerms: "30",
-      notes: "",
+      notes: invoice?.notes || "",
     },
   });
 
@@ -216,6 +219,30 @@ const InvoiceModal = ({
       }
     }
   }, [selectedClientName, watchEngagementId, filteredEngagements, form]);
+
+  // Set edit mode when invoice is provided
+  useEffect(() => {
+    console.log("Invoice data received for editing:", invoice);
+    if (invoice) {
+      // Handle both camelCase and snake_case property names
+      const clientNameValue = invoice.clientName || invoice.client_name;
+      const totalAmountValue = invoice.totalAmount || invoice.total_amount;
+      const totalHoursValue = invoice.totalHours || invoice.total_hours;
+      
+      console.log("Setting edit mode with values:", {
+        clientName: clientNameValue,
+        totalAmount: Number(totalAmountValue),
+        totalHours: Number(totalHoursValue)
+      });
+      
+      setIsEditMode(true);
+      setSelectedClientName(clientNameValue);
+      setInvoiceTotal(Number(totalAmountValue));
+      setTotalHours(Number(totalHoursValue));
+    } else {
+      setIsEditMode(false);
+    }
+  }, [invoice]);
 
   // Calculate total from time logs
   const calculateTotal = (logs: TimeLog[]): number => {
@@ -275,13 +302,73 @@ const InvoiceModal = ({
 
   // Define close handler
   const handleClose = () => {
+    console.log("Closing modal and resetting form");
     form.reset();
     setSelectedClientName("");
     setTimeLogs([]);
     setInvoiceTotal(0);
     setTotalHours(0);
+    setIsEditMode(false);
     onOpenChange(false);
   };
+
+  // Reset form when modal opens/closes
+  useEffect(() => {
+    console.log("Modal open state changed:", open);
+    if (open && invoice) {
+      console.log("Modal opened in edit mode, resetting form with invoice data");
+      
+      // Debug date processing
+      console.log("Original date values:", {
+        periodStart: invoice.periodStart || invoice.period_start,
+        periodEnd: invoice.periodEnd || invoice.period_end
+      });
+      
+      // Handle both camelCase and snake_case property names
+      const periodStartValue = invoice.periodStart || invoice.period_start;
+      const periodEndValue = invoice.periodEnd || invoice.period_end;
+      const clientNameValue = invoice.clientName || invoice.client_name;
+      const engagementIdValue = invoice.engagementId || invoice.engagement_id;
+      const notesValue = invoice.notes;
+      
+      const periodStartDate = periodStartValue ? new Date(periodStartValue) : null;
+      const periodEndDate = periodEndValue ? new Date(periodEndValue) : null;
+      
+      console.log("Converted to Date objects:", {
+        periodStartDate,
+        periodEndDate
+      });
+      
+      const formattedStartDate = periodStartDate ? toStorageDate(periodStartDate) : "";
+      const formattedEndDate = periodEndDate ? toStorageDate(periodEndDate) : "";
+      
+      console.log("Formatted for storage:", {
+        formattedStartDate,
+        formattedEndDate
+      });
+      
+      const formValues = {
+        clientName: clientNameValue || "",
+        engagementId: engagementIdValue?.toString() || "",
+        periodStart: formattedStartDate,
+        periodEnd: formattedEndDate,
+        netTerms: "30",
+        notes: notesValue || ""
+      };
+      console.log("Setting form values to:", formValues);
+      
+      // Reset form with invoice values
+      form.reset(formValues);
+    } else if (!open) {
+      // Reset everything when modal closes
+      console.log("Modal closed, resetting all state");
+      setSelectedClientName("");
+      setTimeLogs([]);
+      setInvoiceTotal(0);
+      setTotalHours(0);
+      setIsEditMode(false);
+    }
+  }, [open, invoice, form]);
 
   // Convert time logs to line items
   const lineItems: LineItem[] = timeLogs.map((log) => ({
@@ -348,32 +435,35 @@ const InvoiceModal = ({
       }));
 
       const total = lineItems.reduce((sum, item) => sum + item.amount, 0);
-      const issueDate = new Date();
-      const dueDate = addDays(issueDate, parseInt(data.netTerms));
+      const issueDate = isEditMode ? new Date(invoice.issueDate) : new Date();
+      const dueDate = isEditMode ? new Date(invoice.dueDate) : addDays(issueDate, parseInt(data.netTerms));
 
       const submission = {
         engagementId: selectedEngagement.id,
         userId: selectedEngagement.userId,
         clientName: selectedEngagement.clientName,
         projectName: selectedEngagement.projectName,
-        invoiceNumber: nextInvoiceNumber,
+        invoiceNumber: isEditMode ? invoice.invoiceNumber : nextInvoiceNumber,
         issueDate: toStorageDate(issueDate),
         dueDate: toStorageDate(dueDate),
         totalAmount: invoiceTotal,
         totalHours: totalHours,
-        status: "submitted" as const,
+        status: isEditMode ? invoice.status : "submitted" as const,
         periodStart: data.periodStart,
         periodEnd: data.periodEnd,
         notes: data.notes || undefined,
       };
 
-      console.log("Prepared invoice data:", submission);
+      console.log(`Prepared invoice data for ${isEditMode ? 'update' : 'creation'}:`, submission);
 
       // Make the API call
       try {
-        console.log("Making API call to create invoice...");
-        const response = await fetch("/api/invoices", {
-          method: "POST",
+        console.log(`Making API call to ${isEditMode ? 'update' : 'create'} invoice...`);
+        const url = isEditMode ? `/api/invoices/${invoice.id}` : "/api/invoices";
+        const method = isEditMode ? "PUT" : "POST";
+        
+        const response = await fetch(url, {
+          method: method,
           headers: {
             "Content-Type": "application/json",
           },
@@ -388,11 +478,11 @@ const InvoiceModal = ({
         if (!response.ok) {
           const errorData = await response.json();
           console.error("API error details:", errorData);
-          throw new Error(errorData.error || "Failed to create invoice");
+          throw new Error(errorData.error || `Failed to ${isEditMode ? 'update' : 'create'} invoice`);
         }
 
         const result = await response.json();
-        console.log("Successfully created invoice:", result);
+        console.log(`Successfully ${isEditMode ? 'updated' : 'created'} invoice:`, result);
 
         // Invalidate and refetch relevant queries
         await queryClient.refetchQueries({
@@ -409,7 +499,7 @@ const InvoiceModal = ({
 
         toast({
           title: "Success",
-          description: "Invoice created successfully",
+          description: `Invoice ${isEditMode ? 'updated' : 'created'} successfully`,
         });
 
         onOpenChange(false);
@@ -419,7 +509,7 @@ const InvoiceModal = ({
         setError(
           apiError instanceof Error
             ? apiError.message
-            : "Failed to create invoice",
+            : `Failed to ${isEditMode ? 'update' : 'create'} invoice`,
         );
       }
     } catch (error) {
@@ -436,9 +526,9 @@ const InvoiceModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create New Invoice</DialogTitle>
+          <DialogTitle>{isEditMode ? "Edit Invoice" : "Create New Invoice"}</DialogTitle>
           <DialogDescription>
-            Generate an invoice for billable hours
+            {isEditMode ? "Update invoice details" : "Generate an invoice for billable hours"}
           </DialogDescription>
         </DialogHeader>
 
@@ -630,7 +720,9 @@ const InvoiceModal = ({
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Generating..." : "Generate Invoice"}
+                {isSubmitting 
+                  ? (isEditMode ? "Saving..." : "Generating...") 
+                  : (isEditMode ? "Save Changes" : "Generate Invoice")}
               </Button>
             </DialogFooter>
           </form>

@@ -103,7 +103,39 @@ export function generateInvoicePDF(
   doc.text("TO:", 14, 75);
   doc.setFont('helvetica', 'normal');
   doc.text(invoice.clientName, 14, 80);
-  // Placeholder for more client info that would be added later
+  
+  // Add billing information if available
+  let billingY = 85;
+  if (invoice.billingContactName) {
+    doc.text(`ATTN: ${invoice.billingContactName}`, 14, billingY);
+    billingY += 5;
+  }
+  
+  if (invoice.billingAddress) {
+    doc.text(invoice.billingAddress, 14, billingY);
+    billingY += 5;
+  }
+  
+  // Add city, state, zip on same line if available
+  const addressLine = [
+    invoice.billingCity,
+    invoice.billingState,
+    invoice.billingZip
+  ].filter(Boolean).join(", ");
+  
+  if (addressLine) {
+    doc.text(addressLine, 14, billingY);
+    billingY += 5;
+  }
+  
+  if (invoice.billingCountry) {
+    doc.text(invoice.billingCountry, 14, billingY);
+    billingY += 5;
+  }
+  
+  if (invoice.billingContactEmail) {
+    doc.text(invoice.billingContactEmail, 14, billingY);
+  }
   
   // For section - project details
   doc.setFontSize(10);
@@ -304,7 +336,39 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   doc.text("TO:", 14, 75);
   doc.setFont('helvetica', 'normal');
   doc.text(invoice.clientName, 14, 80);
-  // Placeholder for more client info that would be added later
+  
+  // Add billing information if available
+  let billingY = 85;
+  if (invoice.billingContactName) {
+    doc.text(`ATTN: ${invoice.billingContactName}`, 14, billingY);
+    billingY += 5;
+  }
+  
+  if (invoice.billingAddress) {
+    doc.text(invoice.billingAddress, 14, billingY);
+    billingY += 5;
+  }
+  
+  // Add city, state, zip on same line if available
+  const addressLine = [
+    invoice.billingCity,
+    invoice.billingState,
+    invoice.billingZip
+  ].filter(Boolean).join(", ");
+  
+  if (addressLine) {
+    doc.text(addressLine, 14, billingY);
+    billingY += 5;
+  }
+  
+  if (invoice.billingCountry) {
+    doc.text(invoice.billingCountry, 14, billingY);
+    billingY += 5;
+  }
+  
+  if (invoice.billingContactEmail) {
+    doc.text(invoice.billingContactEmail, 14, billingY);
+  }
   
   // For section - project details
   doc.setFontSize(10);

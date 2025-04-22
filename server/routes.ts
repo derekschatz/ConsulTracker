@@ -5,7 +5,10 @@ import {
   insertEngagementSchema, 
   insertTimeLogSchema, 
   insertInvoiceSchema,
-  calculateEngagementStatus
+  calculateEngagementStatus,
+  type Invoice,
+  type InvoiceWithLineItems,
+  type InvoiceLineItem
 } from "@shared/schema";
 import { setupAuth } from "./auth";
 import { z } from "zod";
@@ -13,6 +16,17 @@ import nodemailer from "nodemailer";
 import { format, parse, isValid, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
 import { pool } from './db';
 import rateLimit from 'express-rate-limit';
+import express from 'express';
+import { ServerError } from './serverError';
+
+const insertClientSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  notes: z.string().optional(),
+  userId: z.number()
+});
 
 // Helper function to get date range based on predefined ranges
 function getDateRange(range: string, referenceDate: Date = new Date()): { startDate: Date; endDate: Date } {
@@ -317,6 +331,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("Validated engagement data:", result.data);
 
+      // Verify client exists
+      if (result.data.clientId) {
+        try {
+          const client = await storage.getClient(result.data.clientId);
+          if (!client) {
+            return res.status(400).json({ message: "Client does not exist" });
+          }
+        } catch (error) {
+          console.error("Error checking client:", error);
+          return res.status(500).json({ message: "Error verifying client" });
+        }
+      }
+
       // Calculate status based on dates
       const status = calculateEngagementStatus(
         new Date(result.data.startDate),
@@ -450,6 +477,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to delete engagement:", error);
       res.status(500).json({ message: "Failed to delete engagement" });
+    }
+  });
+
+  // Client routes
+  app.get("/api/clients", async (req, res) => {
+    try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      // Get clients filtered by userId if authenticated
+      const clients = await storage.getClients(userId);
+      
+      res.json(clients);
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+      res.status(500).json({ message: "Failed to fetch clients" });
+    }
+  });
+
+  app.get("/api/clients/:id", async (req, res) => {
+    try {
+      const client = await storage.getClient(Number(req.params.id));
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      
+      res.json(client);
+    } catch (error) {
+      console.error("Error fetching client:", error);
+      res.status(500).json({ message: "Failed to fetch client" });
+    }
+  });
+
+  app.post("/api/clients", async (req, res) => {
+    try {
+      // Check authentication
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const userId = (req.user as any).id;
+      
+      // Process data to match expected schema
+      const processedData = {
+        ...req.body,
+        userId
+      };
+      
+      // Validate the client data
+      const validationResult = insertClientSchema.safeParse(processedData);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid client data", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      // Create the client
+      const client = await storage.createClient(validationResult.data);
+      res.status(201).json(client);
+    } catch (error) {
+      console.error("Error creating client:", error);
+      res.status(500).json({ message: "Failed to create client" });
+    }
+  });
+
+  app.put("/api/clients/:id", async (req, res) => {
+    try {
+      // Check if the user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to update a client" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      // Validate input data
+      const validationResult = insertClientSchema.partial().safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid client data", errors: validationResult.error.errors });
+      }
+      
+      // Update the client
+      const updatedClient = await storage.updateClient(id, validationResult.data, userId);
+      if (!updatedClient) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      
+      res.json(updatedClient);
+    } catch (error) {
+      console.error("Failed to update client:", error);
+      res.status(500).json({ message: "Failed to update client" });
+    }
+  });
+
+  app.delete("/api/clients/:id", async (req, res) => {
+    try {
+      // Check if the user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to delete a client" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      // Delete the client
+      const success = await storage.deleteClient(id, userId);
+      if (!success) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete client:", error);
+      res.status(500).json({ message: "Failed to delete client" });
     }
   });
 
@@ -876,7 +1019,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get engagement details
       try {
         const engagementResult = await pool.query(
-          'SELECT client_name, project_name, hourly_rate FROM engagements WHERE id = $1 AND user_id = $2',
+          'SELECT e.project_name, e.hourly_rate, c.name as client_name FROM engagements e ' +
+          'LEFT JOIN clients c ON e.client_id = c.id ' +
+          'WHERE e.id = $1 AND e.user_id = $2',
           [engagementId, userId]
         );
         
@@ -1008,6 +1153,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedInvoice);
     } catch (error) {
       res.status(500).json({ message: "Failed to update invoice status" });
+    }
+  });
+
+  app.put("/api/invoices/:id", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to update invoices" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      // Extract fields that can be updated
+      const {
+        clientName,
+        projectName,
+        issueDate,
+        dueDate,
+        totalAmount,
+        totalHours,
+        notes,
+        periodStart,
+        periodEnd
+      } = req.body;
+      
+      // Prepare update object with only provided fields
+      const updateData: Partial<Invoice> = {};
+      
+      if (clientName !== undefined) updateData.clientName = clientName;
+      if (projectName !== undefined) updateData.projectName = projectName;
+      if (issueDate !== undefined) updateData.issueDate = new Date(issueDate);
+      if (dueDate !== undefined) updateData.dueDate = new Date(dueDate);
+      if (totalAmount !== undefined) updateData.totalAmount = totalAmount;
+      if (totalHours !== undefined) updateData.totalHours = totalHours;
+      if (notes !== undefined) updateData.notes = notes;
+      if (periodStart !== undefined) updateData.periodStart = new Date(periodStart);
+      if (periodEnd !== undefined) updateData.periodEnd = new Date(periodEnd);
+      
+      // Update invoice
+      const updatedInvoice = await storage.updateInvoice(id, updateData, userId);
+      
+      if (!updatedInvoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      res.json(updatedInvoice);
+    } catch (error) {
+      console.error('Error updating invoice:', error);
+      res.status(500).json({ 
+        message: "Failed to update invoice",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
@@ -1152,20 +1350,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
       pdf.setFontSize(16);
       pdf.text(`INVOICE #${invoice.invoiceNumber}`, 105, 20, { align: 'center' });
       
+      // Client section
       pdf.setFontSize(12);
-      pdf.text(`Client: ${invoice.clientName}`, 20, 40);
-      pdf.text(`Amount: $${invoice.totalAmount}`, 20, 50);
-      pdf.text(`Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}`, 20, 60);
-      pdf.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`, 20, 70);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("Bill To:", 20, 40);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`${invoice.clientName}`, 20, 50);
       
-      // Line items table
+      // Add billing information if available
+      let yPos = 60;
+      if (invoice.billingContactName) {
+        pdf.text(`ATTN: ${invoice.billingContactName}`, 20, yPos);
+        yPos += 10;
+      }
+      
+      if (invoice.billingAddress) {
+        pdf.text(invoice.billingAddress, 20, yPos);
+        yPos += 10;
+      }
+      
+      // Add city, state, zip on same line if available
+      const addressLine = [
+        invoice.billingCity,
+        invoice.billingState,
+        invoice.billingZip
+      ].filter(Boolean).join(", ");
+      
+      if (addressLine) {
+        pdf.text(addressLine, 20, yPos);
+        yPos += 10;
+      }
+      
+      if (invoice.billingCountry) {
+        pdf.text(invoice.billingCountry, 20, yPos);
+        yPos += 10;
+      }
+      
+      if (invoice.billingContactEmail) {
+        pdf.text(invoice.billingContactEmail, 20, yPos);
+        yPos += 10;
+      }
+      
+      // Invoice dates and amounts on the right side
+      pdf.text(`Amount: $${invoice.totalAmount}`, 140, 50);
+      pdf.text(`Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}`, 140, 60);
+      pdf.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`, 140, 70);
+      
+      // Line items table - adjust starting position based on billing info
+      yPos = Math.max(yPos + 10, 90); // Make sure we don't overlap with previous content
       pdf.setFontSize(12);
-      pdf.text("Service Items:", 20, 90);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("Service Items:", 20, yPos);
       
-      let yPos = 100;
-      pdf.setFontSize(10);
+      yPos += 10;
       
       // Table header
+      pdf.setFontSize(10);
       pdf.text("Description", 20, yPos);
       pdf.text("Hours", 120, yPos);
       pdf.text("Rate", 140, yPos);
@@ -1173,12 +1413,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       yPos += 10;
       
+      // Create a default line item from the invoice total if no line items exist
+      const defaultLineItems: InvoiceLineItem[] = [{
+        invoiceId: invoice.id,
+        description: `Services for ${invoice.projectName || 'project'}`,
+        hours: Number(invoice.totalHours),
+        rate: Number(invoice.totalAmount) / Number(invoice.totalHours),
+        amount: Number(invoice.totalAmount)
+      }];
+      
+      // Use either the existing lineItems if available, or the default line item
+      const itemsToDisplay = (invoice as InvoiceWithLineItems).lineItems || defaultLineItems;
+      
       // Table data
-      invoice.lineItems.forEach(item => {
+      itemsToDisplay.forEach(item => {
         pdf.text(item.description.substring(0, 50), 20, yPos);
         pdf.text(item.hours.toString(), 120, yPos);
-        pdf.text(`$${item.rate}`, 140, yPos);
-        pdf.text(`$${item.amount}`, 170, yPos);
+        pdf.text(`$${typeof item.rate === 'string' ? item.rate : item.rate.toFixed(2)}`, 140, yPos);
+        pdf.text(`$${typeof item.amount === 'string' ? item.amount : item.amount.toFixed(2)}`, 170, yPos);
         yPos += 10;
       });
       
@@ -1218,4 +1470,97 @@ Invoice Details:
 
   const httpServer = createServer(app);
   return httpServer;
+}
+
+export function createRouter(storage: DatabaseStorage): Router {
+  const router = express.Router();
+  
+  // ... existing code ...
+
+  // Client routes
+  router.get("/clients", auth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const clients = await storage.getClients(userId);
+      res.json(clients);
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  router.get("/clients/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ServerError("Invalid client ID", 400);
+      }
+      
+      const client = await storage.getClient(id, userId);
+      if (!client) {
+        throw new ServerError("Client not found", 404);
+      }
+      
+      res.json(client);
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  router.post("/clients", auth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const data = insertClientSchema.parse({ ...req.body, userId });
+      const client = await storage.createClient(data);
+      res.status(201).json(client);
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  router.put("/clients/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ServerError("Invalid client ID", 400);
+      }
+      
+      // Validate and clean data, but don't include userId in the update
+      const updateData = { ...req.body };
+      delete updateData.userId; // Prevent overwriting the owner
+      
+      const client = await storage.updateClient(id, updateData, userId);
+      if (!client) {
+        throw new ServerError("Client not found", 404);
+      }
+      
+      res.json(client);
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  router.delete("/clients/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ServerError("Invalid client ID", 400);
+      }
+      
+      const success = await storage.deleteClient(id, userId);
+      if (!success) {
+        throw new ServerError("Client not found", 404);
+      }
+      
+      res.status(204).end();
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  // ... existing code ...
+
+  return router;
 }
