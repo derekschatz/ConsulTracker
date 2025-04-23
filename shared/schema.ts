@@ -102,7 +102,7 @@ export const timeLogs = pgTable("time_logs", {
   engagementId: integer("engagement_id").notNull(),
   date: timestamp("date").notNull(),
   hours: doublePrecision("hours").notNull(),
-  description: text("description").notNull(),
+  description: text("description"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -120,7 +120,7 @@ export const insertTimeLogSchema = z.object({
   hours: z.number()
     .positive('Hours must be positive')
     .max(8, 'Hours cannot exceed 8 per entry'),
-  description: z.string()
+  description: z.string().nullable().optional()
 });
 
 // Invoices table - updated with totalHours and renamed amount to totalAmount for clarity

@@ -291,7 +291,15 @@ const Invoices = () => {
         engagementId: completeInvoice.engagement_id || completeInvoice.engagementId,
         lineItems: completeInvoice.lineItems || completeInvoice.line_items || [],
         totalHours: Number(completeInvoice.total_hours || completeInvoice.totalHours || 0),
-        userId: completeInvoice.user_id || completeInvoice.userId
+        userId: completeInvoice.user_id || completeInvoice.userId,
+        // Add billing details
+        billingContactName: completeInvoice.billing_contact_name || completeInvoice.billingContactName,
+        billingContactEmail: completeInvoice.billing_contact_email || completeInvoice.billingContactEmail,
+        billingAddress: completeInvoice.billing_address || completeInvoice.billingAddress,
+        billingCity: completeInvoice.billing_city || completeInvoice.billingCity,
+        billingState: completeInvoice.billing_state || completeInvoice.billingState,
+        billingZip: completeInvoice.billing_zip || completeInvoice.billingZip,
+        billingCountry: completeInvoice.billing_country || completeInvoice.billingCountry
       };
       
       console.log('Formatted invoice data for download:', formattedInvoice);

@@ -141,6 +141,7 @@ const InvoiceModal = ({
   const [selectedClientName, setSelectedClientName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [clientBillingDetails, setClientBillingDetails] = useState<any>(null);
   const router = useRouter();
 
   // Fetch all active engagements
@@ -151,22 +152,40 @@ const InvoiceModal = ({
     enabled: open,
   });
 
+  // Debug logs for data loading issues
+  useEffect(() => {
+    if (open) {
+      console.log("Invoice Modal - Active Engagements:", engagements);
+    }
+  }, [engagements, open]);
+
   // Get unique clients from active engagements
-  const uniqueClients = engagements
-    .reduce((clients: string[], engagement: Engagement) => {
-      if (!clients.includes(engagement.clientName)) {
-        clients.push(engagement.clientName);
-      }
-      return clients;
-    }, [])
-    .sort();
+  const uniqueClients = useMemo(() => {
+    const clients = engagements
+      .filter((engagement: Engagement) => 
+        // Only include engagements that have a clientName
+        engagement.clientName && typeof engagement.clientName === 'string' && 
+        engagement.clientName.trim() !== ''
+      )
+      .map((engagement: Engagement) => engagement.clientName)
+      .filter((name, index, array) => array.indexOf(name) === index)
+      .sort();
+    
+    console.log("Computed unique clients:", clients);
+    return clients;
+  }, [engagements]);
 
   // Filter active engagements by selected client
-  const filteredEngagements = engagements.filter(
-    (engagement: Engagement) =>
-      engagement.clientName === selectedClientName &&
-      engagement.status === "active",
-  );
+  const filteredEngagements = useMemo(() => {
+    const filtered = engagements.filter(
+      (engagement: Engagement) =>
+        engagement.clientName === selectedClientName &&
+        engagement.status === "active"
+    );
+    
+    console.log("Filtered engagements:", filtered);
+    return filtered;
+  }, [engagements, selectedClientName]);
 
   // Get the next invoice number (in a real app this would come from the server)
   const nextInvoiceNumber = generateInvoiceNumber("INV", 25);
@@ -219,6 +238,40 @@ const InvoiceModal = ({
       }
     }
   }, [selectedClientName, watchEngagementId, filteredEngagements, form]);
+
+  // Fetch client billing details when engagement is selected
+  useEffect(() => {
+    if (watchEngagementId && selectedClientName && !isEditMode) {
+      const selectedEngagement = filteredEngagements.find(
+        (e) => e.id.toString() === watchEngagementId.toString()
+      );
+      
+      if (selectedEngagement) {
+        // Fetch detailed engagement with client information
+        const fetchClientDetails = async () => {
+          try {
+            const response = await fetch(`/api/engagements/${selectedEngagement.id}`);
+            if (!response.ok) {
+              console.error("Failed to fetch engagement details");
+              return;
+            }
+            
+            const data = await response.json();
+            
+            // If the engagement has associated client billing information, use it
+            if (data.client) {
+              console.log("Found client billing details:", data.client);
+              setClientBillingDetails(data.client);
+            }
+          } catch (error) {
+            console.error("Error fetching client billing details:", error);
+          }
+        };
+        
+        fetchClientDetails();
+      }
+    }
+  }, [watchEngagementId, selectedClientName, filteredEngagements, isEditMode]);
 
   // Set edit mode when invoice is provided
   useEffect(() => {
@@ -367,6 +420,7 @@ const InvoiceModal = ({
       setInvoiceTotal(0);
       setTotalHours(0);
       setIsEditMode(false);
+      setClientBillingDetails(null);
     }
   }, [open, invoice, form]);
 
@@ -452,6 +506,16 @@ const InvoiceModal = ({
         periodStart: data.periodStart,
         periodEnd: data.periodEnd,
         notes: data.notes || undefined,
+        // Include client billing details if available
+        ...(clientBillingDetails && {
+          billingContactName: clientBillingDetails.billingContactName,
+          billingContactEmail: clientBillingDetails.billingContactEmail,
+          billingAddress: clientBillingDetails.billingAddress,
+          billingCity: clientBillingDetails.billingCity,
+          billingState: clientBillingDetails.billingState,
+          billingZip: clientBillingDetails.billingZip,
+          billingCountry: clientBillingDetails.billingCountry,
+        }),
       };
 
       console.log(`Prepared invoice data for ${isEditMode ? 'update' : 'creation'}:`, submission);

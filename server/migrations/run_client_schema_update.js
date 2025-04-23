@@ -1,6 +1,11 @@
-const { pool } = require('../db');
-const fs = require('fs');
-const path = require('path');
+import { pool } from '../db.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the directory name correctly in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function runMigration() {
   const client = await pool.connect();
@@ -33,7 +38,7 @@ async function runMigration() {
 }
 
 // Run the migration when executed directly
-if (require.main === module) {
+if (import.meta.url === import.meta.resolve(process.argv[1])) {
   runMigration()
     .then(() => {
       console.log('Migration completed');
@@ -45,4 +50,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = runMigration; 
+export default runMigration; 

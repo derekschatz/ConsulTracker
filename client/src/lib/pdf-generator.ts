@@ -45,6 +45,18 @@ export function generateInvoicePDF(
   invoice: InvoiceWithLineItems,
   options: InvoiceGeneratorOptions = {}
 ): jsPDF {
+  // Debug client billing information
+  console.log('PDF Generator - Invoice billing details:', {
+    clientName: invoice.clientName,
+    billingContactName: invoice.billingContactName,
+    billingContactEmail: invoice.billingContactEmail,
+    billingAddress: invoice.billingAddress,
+    billingCity: invoice.billingCity,
+    billingState: invoice.billingState,
+    billingZip: invoice.billingZip,
+    billingCountry: invoice.billingCountry
+  });
+
   // Default options
   const defaultOptions: InvoiceGeneratorOptions = {
     companyName: '',
@@ -221,6 +233,15 @@ export function generateInvoicePDF(
     
     // Add hours, rate and amount
     doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
+    
+    // Calculate effective hourly rate if we have total hours and amount
+    if (invoice.totalHours && invoice.totalAmount) {
+      const effectiveRate = Number(invoice.totalAmount) / Number(invoice.totalHours);
+      doc.text(`${formatCurrency(effectiveRate)}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
+    } else {
+      doc.text("N/A", pageWidth - 55, startY + 17, { align: 'center' });
+    }
+    
     doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
     
     currentY += 10;
@@ -454,6 +475,15 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
     
     // Add hours, rate and amount
     doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
+    
+    // Calculate effective hourly rate if we have total hours and amount
+    if (invoice.totalHours && invoice.totalAmount) {
+      const effectiveRate = Number(invoice.totalAmount) / Number(invoice.totalHours);
+      doc.text(`${formatCurrency(effectiveRate)}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
+    } else {
+      doc.text("N/A", pageWidth - 55, startY + 17, { align: 'center' });
+    }
+    
     doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
     
     currentY += 10;
@@ -489,6 +519,18 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
 export function downloadInvoice(invoice: InvoiceWithLineItems): void {
   try {
     console.log('Starting PDF generation for invoice:', invoice.invoiceNumber);
+    
+    // Debug billing details
+    console.log('Invoice billing details for PDF:', {
+      clientName: invoice.clientName,
+      billingContactName: invoice.billingContactName,
+      billingContactEmail: invoice.billingContactEmail,
+      billingAddress: invoice.billingAddress,
+      billingCity: invoice.billingCity,
+      billingState: invoice.billingState,
+      billingZip: invoice.billingZip,
+      billingCountry: invoice.billingCountry
+    });
     
     // Validate required fields
     if (!invoice.invoiceNumber) {

@@ -128,19 +128,24 @@ export const ClientDetailsPanel = ({
     setSubmitError(null);
     
     try {
-      // Ensure empty strings are converted to null for database compatibility
+      // Use the actual form data instead of test values
       const formattedData = {
         ...data,
-        billingContactName: data.billingContactName || null,
-        billingContactEmail: data.billingContactEmail || null,
-        billingAddress: data.billingAddress || null,
-        billingCity: data.billingCity || null,
-        billingState: data.billingState || null,
-        billingZip: data.billingZip || null,
-        billingCountry: data.billingCountry || null,
+        // Ensure empty strings are sent as empty strings, not null
+        billingContactName: data.billingContactName || '',
+        billingContactEmail: data.billingContactEmail || '',
+        billingAddress: data.billingAddress || '',
+        billingCity: data.billingCity || '',
+        billingState: data.billingState || '',
+        billingZip: data.billingZip || '',
+        billingCountry: data.billingCountry || ''
       };
       
-      console.log('Submitting client data:', formattedData);
+      // Add more detailed logging of the data being sent
+      console.log('⭐⭐⭐ ORIGINAL form data:', data);
+      console.log('⭐⭐⭐ FORMATTED data being sent:', formattedData);
+      console.log('⭐⭐⭐ billingContactName type:', typeof formattedData.billingContactName, 'value:', JSON.stringify(formattedData.billingContactName));
+      console.log('⭐⭐⭐ billingContactEmail type:', typeof formattedData.billingContactEmail, 'value:', JSON.stringify(formattedData.billingContactEmail));
       
       const response = await apiRequest(
         'PUT',
@@ -148,18 +153,34 @@ export const ClientDetailsPanel = ({
         formattedData
       );
 
+      console.log('💥 Client update API response status:', response.status);
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: 'Failed to update client' }));
+        console.error('💥 Client update API error:', errorData);
         throw new Error(errorData.message || 'Failed to update client');
       }
 
       // Get the updated client data (clone the response before using it)
       const clonedResponse = response.clone();
       const updatedClient = await clonedResponse.json().catch(() => null);
-      console.log('Updated client data received:', updatedClient);
+      console.log('💥 Updated client data received:', updatedClient);
       
       if (updatedClient) {
         setClient(updatedClient);
+        
+        // Verify the returned data has the billing details
+        console.log('💥 Billing contact name from response:', updatedClient.billingContactName);
+        console.log('💥 Billing contact email from response:', updatedClient.billingContactEmail);
+        console.log('💥 Billing fields received:', {
+          billingContactName: updatedClient.billingContactName,
+          billingContactEmail: updatedClient.billingContactEmail,
+          billingAddress: updatedClient.billingAddress,
+          billingCity: updatedClient.billingCity,
+          billingState: updatedClient.billingState,
+          billingZip: updatedClient.billingZip,
+          billingCountry: updatedClient.billingCountry
+        });
       }
 
       // Success toast

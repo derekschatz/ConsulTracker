@@ -5,6 +5,7 @@ import {
   insertEngagementSchema, 
   insertTimeLogSchema, 
   insertInvoiceSchema,
+  insertClientSchema,
   calculateEngagementStatus,
   type Invoice,
   type InvoiceWithLineItems,
@@ -18,15 +19,7 @@ import { pool } from './db';
 import rateLimit from 'express-rate-limit';
 import express from 'express';
 import { ServerError } from './serverError';
-
-const insertClientSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  notes: z.string().optional(),
-  userId: z.number()
-});
+import fs from 'fs';
 
 // Helper function to get date range based on predefined ranges
 function getDateRange(range: string, referenceDate: Date = new Date()): { startDate: Date; endDate: Date } {
@@ -260,7 +253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/engagements/:id", async (req, res) => {
     try {
-      const engagement = await storage.getEngagement(Number(req.params.id));
+      const engagement = await storage.getEngagementWithClient(Number(req.params.id));
       if (!engagement) {
         return res.status(404).json({ message: "Engagement not found" });
       }
@@ -271,10 +264,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         new Date(engagement.endDate)
       );
       
-      // Create a new object with updated status
+      // Create a new object with updated status including client info
       const updatedEngagement = {
         ...engagement,
-        status: currentStatus
+        status: currentStatus,
+        // Extract name from client object if available
+        clientName: engagement.client?.name || engagement.clientName || ""
       };
       
       res.json(updatedEngagement);
@@ -554,17 +549,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = Number(req.params.id);
       const userId = (req.user as any).id;
       
+      // Log to file for debugging
+      const logData = `
+[${new Date().toISOString()}] PUT /api/clients/${id} RECEIVED
+User ID: ${userId}
+Request body: ${JSON.stringify(req.body, null, 2)}
+billingContactName value: ${req.body.billingContactName}
+billingContactName type: ${typeof req.body.billingContactName}
+billingContactEmail value: ${req.body.billingContactEmail}
+billingContactEmail type: ${typeof req.body.billingContactEmail}
+      `;
+      fs.appendFileSync('client-api-debug.log', logData);
+      
+      console.log('PUT /api/clients/:id - Client update request received');
+      console.log('Request body RAW:', req.body);
+      console.log('Request body as JSON:', JSON.stringify(req.body));
+      console.log('Client ID:', id, 'User ID:', userId);
+      
+      // Log actual values and types for key fields
+      console.log('DETAILED VALUES:');
+      console.log('billingContactName:', req.body.billingContactName);
+      console.log('billingContactName type:', typeof req.body.billingContactName);
+      console.log('billingContactEmail:', req.body.billingContactEmail);
+      console.log('billingContactEmail type:', typeof req.body.billingContactEmail);
+      
+      // Show what schema we're using for validation
+      console.log('Schema for validation:', Object.keys(insertClientSchema.shape));
+      
       // Validate input data
       const validationResult = insertClientSchema.partial().safeParse(req.body);
       if (!validationResult.success) {
+        console.error('Client data validation failed:', validationResult.error.errors);
         return res.status(400).json({ message: "Invalid client data", errors: validationResult.error.errors });
       }
       
-      // Update the client
+      // Log to file - after validation
+      fs.appendFileSync('client-api-debug.log', `
+Validated data: ${JSON.stringify(validationResult.data, null, 2)}
+billingContactName after validation: ${validationResult.data.billingContactName}
+billingContactName type after validation: ${typeof validationResult.data.billingContactName}
+      `);
+      
+      console.log('Validated client data:', JSON.stringify(validationResult.data));
+      console.log('Fields that will be sent to the database:', Object.keys(validationResult.data));
+      console.log('DETAILED VALIDATED VALUES:');
+      console.log('validationResult.data.billingContactName:', validationResult.data.billingContactName);
+      console.log('validationResult.data.billingContactName type:', typeof validationResult.data.billingContactName);
+      
+      // Update the client - log the before and after state
+      console.log('Before storage.updateClient call');
       const updatedClient = await storage.updateClient(id, validationResult.data, userId);
+      console.log('After storage.updateClient call, result:', updatedClient ? JSON.stringify(updatedClient) : 'undefined');
+      
       if (!updatedClient) {
+        console.error('Client not found or update failed');
         return res.status(404).json({ message: "Client not found" });
       }
+      
+      // Log final result to file
+      fs.appendFileSync('client-api-debug.log', `
+Result from storage: ${JSON.stringify(updatedClient, null, 2)}
+      `);
+      
+      console.log('Client updated successfully:', JSON.stringify(updatedClient));
       
       res.json(updatedClient);
     } catch (error) {
@@ -690,7 +737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (timeLogs && search) {
         const searchLower = search.toLowerCase();
         timeLogs = timeLogs.filter(log => 
-          log.description.toLowerCase().includes(searchLower) ||
+          (log.description ? log.description.toLowerCase().includes(searchLower) : false) ||
           log.engagement.clientName.toLowerCase().includes(searchLower) ||
           log.engagement.projectName.toLowerCase().includes(searchLower)
         );
@@ -706,6 +753,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timeLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       }
 
+      // IMPORTANT: Sanitize all time log descriptions to ensure consistency
+      if (timeLogs) {
+        console.log(`Sanitizing ${timeLogs.length} time logs before sending to client`);
+        
+        timeLogs = timeLogs.map(log => {
+          // Check if the description is empty or whitespace only
+          if (log.description === '' || (log.description && log.description.trim() === '')) {
+            console.log(`Fixing empty description for time log ${log.id}`);
+            return {
+              ...log,
+              description: null
+            };
+          }
+          return log;
+        });
+        
+        // Log a sample of the sanitized time logs
+        if (timeLogs.length > 0) {
+          console.log(`Sample sanitized time log (ID ${timeLogs[0].id}):`, {
+            id: timeLogs[0].id,
+            description: timeLogs[0].description,
+            descriptionType: typeof timeLogs[0].description
+          });
+        }
+      }
+
       res.json(timeLogs || []);
     } catch (error) {
       console.error("Error fetching time logs:", error);
@@ -718,12 +791,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get user ID from authenticated session if available
       const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
       
-      const timeLog = await storage.getTimeLog(Number(req.params.id), userId);
+      const id = Number(req.params.id);
+      console.log(`Fetching time log with ID: ${id}`);
+      
+      const timeLog = await storage.getTimeLog(id, userId);
       if (!timeLog) {
         return res.status(404).json({ message: "Time log not found" });
       }
-      res.json(timeLog);
+      
+      // Ensure description is consistently handled
+      const sanitizedTimeLog = {
+        ...timeLog,
+        description: timeLog.description || null
+      };
+      
+      console.log(`Retrieved time log:`, sanitizedTimeLog);
+      res.json(sanitizedTimeLog);
     } catch (error) {
+      console.error(`Error fetching time log:`, error);
       res.status(500).json({ message: "Failed to fetch time log" });
     }
   });
@@ -786,6 +871,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Debug log the incoming request body
       console.log('Time log update request body:', req.body);
+      console.log('Time log description received:', req.body.description);
+      console.log('Description type:', typeof req.body.description);
+      
+      // Handle empty string descriptions explicitly
+      let descriptionValue = req.body.description;
+      if (descriptionValue === "" || descriptionValue === null || descriptionValue === undefined || 
+          (typeof descriptionValue === 'string' && descriptionValue.trim() === '')) {
+        descriptionValue = null;
+        console.log('Converting empty description to null');
+      }
       
       // Process the data before validation, merging with existing data
       const processedData = {
@@ -795,10 +890,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: req.body.date ? new Date(req.body.date) : existingTimeLog.date,
         hours: req.body.hours !== undefined ? Number(req.body.hours) : existingTimeLog.hours,
         engagementId: req.body.engagementId !== undefined ? Number(req.body.engagementId) : existingTimeLog.engagementId,
-        description: req.body.description || existingTimeLog.description
+        description: descriptionValue
       };
       
       console.log('Processed data before validation:', processedData);
+      console.log('Processed description value:', processedData.description);
       
       const validationResult = insertTimeLogSchema.safeParse(processedData);
       if (!validationResult.success) {

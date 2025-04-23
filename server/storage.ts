@@ -13,6 +13,7 @@ import * as expressSession from "express-session";
 import pgSimpleModule from "connect-pg-simple";
 import { pool } from "./db";
 import { type PgColumn } from "drizzle-orm/pg-core";
+import fs from 'fs';
 
 // Create connect-pg-simple after import
 const connectPgSimple = pgSimpleModule(expressSession);
@@ -140,20 +141,149 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateClient(id: number, client: Partial<InsertClient>, userId?: number): Promise<Client | undefined> {
-    // Build the update query
-    const query = db.update(clients).set(client);
+    // Log to file for debugging
+    const logData = `
+[${new Date().toISOString()}] UPDATE CLIENT CALLED
+ID: ${id}
+User ID: ${userId}
+Client data: ${JSON.stringify(client, null, 2)}
+billingContactName value: ${client.billingContactName}
+billingContactName type: ${typeof client.billingContactName}
+billingContactEmail value: ${client.billingContactEmail}
+billingContactEmail type: ${typeof client.billingContactEmail}
+    `;
     
-    // Add appropriate where conditions
-    if (userId !== undefined) {
-      const [updatedClient] = await query
-        .where(and(eq(clients.id, id), eq(clients.userId, userId)))
-        .returning();
+    fs.appendFileSync('client-update-debug.log', logData);
+    
+    console.log('DIRECT SQL: Updating client with ID:', id);
+    console.log('DIRECT SQL: Update data RAW:', client);
+    console.log('DIRECT SQL: Update data as JSON:', JSON.stringify(client));
+    console.log('DIRECT SQL: User ID filter:', userId);
+    
+    // Detailed logging of specific fields
+    console.log('DIRECT SQL: Detail check of billing fields:');
+    console.log('billingContactName:', client.billingContactName, 'type:', typeof client.billingContactName);
+    console.log('billingContactEmail:', client.billingContactEmail, 'type:', typeof client.billingContactEmail);
+    console.log('billingAddress:', client.billingAddress, 'type:', typeof client.billingAddress);
+    
+    try {
+      // Always update all billing fields with whatever values we have
+      // Fix the PostgreSQL empty string to NULL conversion issue
+      let query: string;
+      let values: any[];
+      
+      // Process values to prevent NULL conversion
+      const processValue = (value: string | null | undefined): string => {
+        // Convert null or undefined to empty string
+        if (value === null || value === undefined) return '';
+        // Return the value as is (already a string)
+        return value;
+      };
+      
+      if (userId !== undefined) {
+        query = `
+          UPDATE clients 
+          SET 
+            name = $2,
+            billing_contact_name = $3,
+            billing_contact_email = $4,
+            billing_address = $5,
+            billing_city = $6,
+            billing_state = $7,
+            billing_zip = $8,
+            billing_country = $9
+          WHERE id = $1 AND user_id = $10
+          RETURNING *
+        `;
+        values = [
+          id,
+          client.name || (await this.getClient(id, userId))?.name || '',
+          processValue(client.billingContactName),
+          processValue(client.billingContactEmail),
+          processValue(client.billingAddress),
+          processValue(client.billingCity),
+          processValue(client.billingState),
+          processValue(client.billingZip),
+          processValue(client.billingCountry),
+          userId
+        ];
+      } else {
+        query = `
+          UPDATE clients 
+          SET 
+            name = $2,
+            billing_contact_name = $3,
+            billing_contact_email = $4,
+            billing_address = $5,
+            billing_city = $6,
+            billing_state = $7,
+            billing_zip = $8,
+            billing_country = $9
+          WHERE id = $1
+          RETURNING *
+        `;
+        values = [
+          id,
+          client.name || (await this.getClient(id))?.name || '',
+          processValue(client.billingContactName),
+          processValue(client.billingContactEmail),
+          processValue(client.billingAddress),
+          processValue(client.billingCity),
+          processValue(client.billingState),
+          processValue(client.billingZip),
+          processValue(client.billingCountry)
+        ];
+      }
+      
+      // Log to file for debugging
+      fs.appendFileSync('client-update-debug.log', `
+Query: ${query}
+Values: ${JSON.stringify(values, null, 2)}
+      `);
+      
+      console.log('DIRECT SQL: Executing query:', query);
+      console.log('DIRECT SQL: With values:', values);
+      
+      // Detailed logging of prepared values
+      console.log('DIRECT SQL: Prepared values detail check:');
+      console.log('Value for billing_contact_name:', values[2], 'type:', typeof values[2]);
+      console.log('Value for billing_contact_email:', values[3], 'type:', typeof values[3]);
+      console.log('Value for billing_address:', values[4], 'type:', typeof values[4]);
+      
+      // Execute the query directly using pool
+      const result = await pool.query(query, values);
+      
+      if (result.rows.length === 0) {
+        console.log('DIRECT SQL: No rows updated');
+        fs.appendFileSync('client-update-debug.log', `No rows updated\n`);
+        return undefined;
+      }
+      
+      // Log result to file
+      fs.appendFileSync('client-update-debug.log', `
+Result: ${JSON.stringify(result.rows[0], null, 2)}
+      `);
+      
+      console.log('DIRECT SQL: Update successful, result:', result.rows[0]);
+      
+      // Convert the returned data to our Client type
+      const updatedClient: Client = {
+        id: result.rows[0].id,
+        userId: result.rows[0].user_id,
+        name: result.rows[0].name,
+        billingContactName: result.rows[0].billing_contact_name || '',
+        billingContactEmail: result.rows[0].billing_contact_email || '',
+        billingAddress: result.rows[0].billing_address || '',
+        billingCity: result.rows[0].billing_city || '',
+        billingState: result.rows[0].billing_state || '',
+        billingZip: result.rows[0].billing_zip || '',
+        billingCountry: result.rows[0].billing_country || ''
+      };
+      
       return updatedClient;
-    } else {
-      const [updatedClient] = await query
-        .where(eq(clients.id, id))
-        .returning();
-      return updatedClient;
+    } catch (error) {
+      console.error('DIRECT SQL: Error updating client:', error);
+      throw error;
     }
   }
 
@@ -266,33 +396,143 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEngagement(id: number, userId?: number): Promise<Engagement | undefined> {
-    let query = db.select().from(engagements).where(eq(engagements.id, id));
-    
-    if (userId) {
-      query = db.select().from(engagements)
+    try {
+      let query;
+      
+      // Build a query with a join to clients table
+      if (userId) {
+        query = db.select({
+          id: engagements.id,
+          userId: engagements.userId,
+          clientId: engagements.clientId,
+          projectName: engagements.projectName,
+          startDate: engagements.startDate,
+          endDate: engagements.endDate,
+          hourlyRate: engagements.hourlyRate,
+          description: engagements.description,
+          status: engagements.status,
+          clientName: clients.name,
+          clientEmail: clients.billingContactEmail
+        })
+        .from(engagements)
+        .leftJoin(clients, eq(engagements.clientId, clients.id))
         .where(and(
           eq(engagements.id, id),
           eq(engagements.userId, userId)
         ));
+      } else {
+        query = db.select({
+          id: engagements.id,
+          userId: engagements.userId,
+          clientId: engagements.clientId,
+          projectName: engagements.projectName,
+          startDate: engagements.startDate,
+          endDate: engagements.endDate,
+          hourlyRate: engagements.hourlyRate,
+          description: engagements.description,
+          status: engagements.status,
+          clientName: clients.name,
+          clientEmail: clients.billingContactEmail
+        })
+        .from(engagements)
+        .leftJoin(clients, eq(engagements.clientId, clients.id))
+        .where(eq(engagements.id, id));
+      }
+      
+      const results = await query;
+      
+      if (results.length === 0) {
+        return undefined;
+      }
+      
+      console.log(`Retrieved engagement with client data via join:`, results[0]);
+      
+      return results[0] as Engagement;
+    } catch (error) {
+      console.error('Error fetching engagement with join:', error);
+      
+      // Fallback to basic query if join fails
+      const query = userId
+        ? db.select().from(engagements).where(and(eq(engagements.id, id), eq(engagements.userId, userId)))
+        : db.select().from(engagements).where(eq(engagements.id, id));
+      
+      const results = await query;
+      
+      if (results.length === 0) {
+        return undefined;
+      }
+      
+      return results[0];
     }
-    
-    const results = await query;
-    return results.length > 0 ? results[0] : undefined;
   }
 
   async getActiveEngagements(userId?: number): Promise<Engagement[]> {
-    if (userId) {
-      return await db.select().from(engagements)
+    try {
+      let query;
+      
+      // Build a query with a join to clients table
+      if (userId) {
+        query = db.select({
+          id: engagements.id,
+          userId: engagements.userId,
+          clientId: engagements.clientId,
+          projectName: engagements.projectName,
+          startDate: engagements.startDate,
+          endDate: engagements.endDate,
+          hourlyRate: engagements.hourlyRate,
+          description: engagements.description,
+          status: engagements.status,
+          clientName: clients.name,
+          clientEmail: clients.billingContactEmail
+        })
+        .from(engagements)
+        .leftJoin(clients, eq(engagements.clientId, clients.id))
         .where(and(
           eq(engagements.status, 'active'),
           eq(engagements.userId, userId)
         ))
         .orderBy(desc(engagements.startDate));
+      } else {
+        query = db.select({
+          id: engagements.id,
+          userId: engagements.userId,
+          clientId: engagements.clientId,
+          projectName: engagements.projectName,
+          startDate: engagements.startDate,
+          endDate: engagements.endDate,
+          hourlyRate: engagements.hourlyRate,
+          description: engagements.description,
+          status: engagements.status,
+          clientName: clients.name,
+          clientEmail: clients.billingContactEmail
+        })
+        .from(engagements)
+        .leftJoin(clients, eq(engagements.clientId, clients.id))
+        .where(eq(engagements.status, 'active'))
+        .orderBy(desc(engagements.startDate));
+      }
+      
+      const results = await query;
+      console.log(`Retrieved ${results.length} active engagements with client data via join`);
+      
+      return results as Engagement[];
+    } catch (error) {
+      console.error('Error fetching active engagements with join:', error);
+      
+      // Fallback to basic query if join fails
+      if (userId) {
+        return await db.select().from(engagements)
+          .where(and(
+            eq(engagements.status, 'active'),
+            eq(engagements.userId, userId)
+          ))
+          .orderBy(desc(engagements.startDate));
+      }
+      
+      return await db.select().from(engagements)
+        .where(eq(engagements.status, 'active'))
+        .orderBy(desc(engagements.startDate));
     }
-    
-    return await db.select().from(engagements)
-      .where(eq(engagements.status, 'active'))
-      .orderBy(desc(engagements.startDate));
   }
 
   async createEngagement(engagement: InsertEngagement): Promise<Engagement> {
@@ -443,18 +683,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTimeLog(id: number, timeLog: Partial<InsertTimeLog>, userId?: number): Promise<TimeLog | undefined> {
+    // Ensure description is properly handled
+    console.log('In storage.updateTimeLog - received data:', timeLog);
+    console.log('Description value in storage:', timeLog.description);
+    
+    // Handle the description field specifically to ensure null values are preserved
+    const dataToUpdate = { ...timeLog };
+    if ('description' in dataToUpdate && (dataToUpdate.description === null || dataToUpdate.description === '' || 
+        (typeof dataToUpdate.description === 'string' && dataToUpdate.description.trim() === ''))) {
+      dataToUpdate.description = null;
+      console.log('Storage: Setting description to null');
+    }
+    
     // Instead of condition reassignment, use conditional directly in the query
-    const query = db.update(timeLogs).set(timeLog);
+    const query = db.update(timeLogs).set(dataToUpdate);
     
     if (userId !== undefined) {
       const [updatedTimeLog] = await query
         .where(and(eq(timeLogs.id, id), eq(timeLogs.userId, userId)))
         .returning();
+      console.log('Updated time log in storage:', updatedTimeLog);
       return updatedTimeLog;
     } else {
       const [updatedTimeLog] = await query
         .where(eq(timeLogs.id, id))
         .returning();
+      console.log('Updated time log in storage:', updatedTimeLog);
       return updatedTimeLog;
     }
   }
@@ -494,9 +748,54 @@ export class DatabaseStorage implements IStorage {
     
     // Convert Invoice to InvoiceWithLineItems
     const invoice = results[0] as Invoice;
+    let hourlyRate: string | number | null = null;
+    
+    // If we have the engagement ID, fetch additional details
+    if (invoice.engagementId) {
+      try {
+        // Get the engagement to fetch hourly rate and client details
+        const engagement = await this.getEngagement(invoice.engagementId);
+        if (engagement) {
+          // Get the hourly rate from the engagement
+          hourlyRate = engagement.hourlyRate;
+          
+          if (engagement.clientId) {
+            // Get the client details
+            const client = await this.getClient(engagement.clientId);
+            if (client) {
+              // Update billing information from the client
+              invoice.billingContactName = invoice.billingContactName || client.billingContactName || null;
+              invoice.billingContactEmail = invoice.billingContactEmail || client.billingContactEmail || null;
+              invoice.billingAddress = invoice.billingAddress || client.billingAddress || null;
+              invoice.billingCity = invoice.billingCity || client.billingCity || null;
+              invoice.billingState = invoice.billingState || client.billingState || null;
+              invoice.billingZip = invoice.billingZip || client.billingZip || null;
+              invoice.billingCountry = invoice.billingCountry || client.billingCountry || null;
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching engagement details for invoice:", error);
+        // Continue returning the invoice even if engagement info can't be fetched
+      }
+    }
+    
+    // Create a line item with the hourly rate if we found it
+    const lineItems = [];
+    if (hourlyRate) {
+      lineItems.push({
+        id: 0,
+        invoiceId: invoice.id,
+        description: "Services rendered",
+        hours: invoice.totalHours,
+        rate: hourlyRate,
+        amount: invoice.totalAmount
+      });
+    }
+    
     return {
       ...invoice,
-      lineItems: [] // Add empty lineItems array to match expected interface
+      lineItems
     };
   }
 

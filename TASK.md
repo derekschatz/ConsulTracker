@@ -25,6 +25,7 @@
   - [x] Separate client and project columns in Engagements table
   - [x] Reverse display focus to prioritize engagements over clients
   - [x] Add clickable client names with sliding details panel
+  - [x] Automatically populate client billing details on invoices
 - [x] Add PDF generation for invoices
 - [ ] Implement email notifications
 - [ ] Add data validation and error handling
@@ -50,3 +51,4 @@
 - Schema includes support for multiple clients and engagements
 - Time logs are linked to engagements for proper tracking
 - Invoice system supports line items and different statuses 
+- Client billing details are automatically pulled when creating invoices 

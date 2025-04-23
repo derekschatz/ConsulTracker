@@ -30,6 +30,14 @@ const InvoicePreviewModal = ({
     totalHours: number;
     periodStart: string;
     periodEnd: string;
+    rate?: string;
+    billingContactName?: string;
+    billingContactEmail?: string;
+    billingAddress?: string;
+    billingCity?: string;
+    billingState?: string;
+    billingZip?: string;
+    billingCountry?: string;
   } | null>(null);
   
   const { toast } = useToast();
@@ -81,6 +89,16 @@ const InvoicePreviewModal = ({
         periodEnd: formattedPeriodEnd
       });
       
+      // Get rate from the first line item if available
+      let rate = '';
+      if (invoice.lineItems && invoice.lineItems.length > 0 && invoice.lineItems[0].rate) {
+        rate = formatCurrency(Number(invoice.lineItems[0].rate)) + '/hr';
+      } else if (invoice.totalHours && invoice.totalAmount) {
+        // Calculate effective hourly rate from total amount and hours
+        const effectiveRate = Number(invoice.totalAmount) / Number(invoice.totalHours);
+        rate = formatCurrency(effectiveRate) + '/hr';
+      }
+      
       // Extract the data we need for the preview
       setPreviewData({
         invoiceNumber: invoice.invoiceNumber,
@@ -91,7 +109,15 @@ const InvoicePreviewModal = ({
         amount: formatCurrency(invoice.totalAmount),
         totalHours: invoice.totalHours || 0,
         periodStart: formattedPeriodStart,
-        periodEnd: formattedPeriodEnd
+        periodEnd: formattedPeriodEnd,
+        rate,
+        billingContactName: invoice.billingContactName || undefined,
+        billingContactEmail: invoice.billingContactEmail || undefined,
+        billingAddress: invoice.billingAddress || undefined,
+        billingCity: invoice.billingCity || undefined,
+        billingState: invoice.billingState || undefined,
+        billingZip: invoice.billingZip || undefined,
+        billingCountry: invoice.billingCountry || undefined
       });
     } catch (error: any) {
       console.error("Error generating invoice preview:", error);
@@ -201,17 +227,39 @@ const InvoicePreviewModal = ({
                 </div>
               </div>
 
-              {/* Client Info and Project */}
+              {/* Bill To section */}
               <div className="p-6 border-b">
-                <div className="flex flex-col md:flex-row justify-between">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h3 className="text-sm font-semibold uppercase text-gray-500 mb-2">Bill To:</h3>
-                    <p className="text-gray-700 font-medium">{previewData.clientName}</p>
+                    <h3 className="text-sm font-medium text-gray-500 mb-2">BILL TO:</h3>
+                    <p className="font-semibold text-gray-800">{previewData.clientName}</p>
+                    {previewData.billingContactName && (
+                      <p>ATTN: {previewData.billingContactName}</p>
+                    )}
+                    {previewData.billingAddress && (
+                      <p>{previewData.billingAddress}</p>
+                    )}
+                    {/* City, State ZIP on one line if available */}
+                    {(previewData.billingCity || previewData.billingState || previewData.billingZip) && (
+                      <p>
+                        {[
+                          previewData.billingCity,
+                          previewData.billingState,
+                          previewData.billingZip
+                        ].filter(Boolean).join(", ")}
+                      </p>
+                    )}
+                    {previewData.billingCountry && (
+                      <p>{previewData.billingCountry}</p>
+                    )}
+                    {previewData.billingContactEmail && (
+                      <p>{previewData.billingContactEmail}</p>
+                    )}
                   </div>
-                  <div className="mt-4 md:mt-0">
-                    <h3 className="text-sm font-semibold uppercase text-gray-500 mb-2">For:</h3>
-                    <p className="text-gray-700">{previewData.projectName}</p>
-                    <p className="text-gray-700">Period: {previewData.periodStart} - {previewData.periodEnd}</p>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 mb-2">FOR:</h3>
+                    <p className="font-semibold text-gray-800">{previewData.projectName}</p>
+                    <p>Period: {previewData.periodStart} - {previewData.periodEnd}</p>
                   </div>
                 </div>
               </div>
@@ -225,6 +273,7 @@ const InvoicePreviewModal = ({
                       <tr className="bg-gray-50">
                         <th className="py-2 px-4 font-semibold text-gray-600">Description</th>
                         <th className="py-2 px-4 font-semibold text-gray-600 text-right">Hours</th>
+                        <th className="py-2 px-4 font-semibold text-gray-600 text-right">Rate</th>
                         <th className="py-2 px-4 font-semibold text-gray-600 text-right">Amount</th>
                       </tr>
                     </thead>
@@ -240,12 +289,16 @@ const InvoicePreviewModal = ({
                           {formatHours(previewData.totalHours)}
                         </td>
                         <td className="py-4 px-4 border-t text-right">
+                          {previewData.rate || 'N/A'}
+                        </td>
+                        <td className="py-4 px-4 border-t text-right">
                           {previewData.amount}
                         </td>
                       </tr>
                     </tbody>
                     <tfoot>
                       <tr>
+                        <td className="py-4 px-4 border-t"></td>
                         <td className="py-4 px-4 border-t"></td>
                         <td className="py-4 px-4 border-t text-right font-semibold">Total:</td>
                         <td className="py-4 px-4 border-t text-right font-bold">

@@ -34,7 +34,7 @@ const formSchema = insertTimeLogSchema
     engagementId: z.number().min(1, 'Please select an engagement'),
     date: z.string().min(1, 'Date is required'), // Validate date string is not empty
     hours: z.number().min(0.25, 'Hours must be at least 0.25').max(8, 'Hours cannot exceed 8'),
-    description: z.string().min(1, 'Description is required'),
+    description: z.string().optional(), // Make description optional
   });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -50,7 +50,7 @@ interface TimeLogModalProps {
 interface TimeLogEntry {
   date: string;
   hours: number;
-  description: string;
+  description: string | null;
 }
 
 const TimeLogModal = ({
@@ -144,7 +144,7 @@ const TimeLogModal = ({
       ? {
           date: formatDateInput(timeLog.date),
           hours: timeLog.hours ? Number(timeLog.hours) : 0,
-          description: timeLog.description || '',
+          description: timeLog.description === null || timeLog.description === undefined ? '' : timeLog.description,
           engagementId: getEngagementId(),
         }
       : {
@@ -158,11 +158,12 @@ const TimeLogModal = ({
   // Debug log the form initialization
   console.log('Form initialized with:', {
     timeLog,
+    defaultDescription: timeLog ? (timeLog.description === null || timeLog.description === undefined ? '' : timeLog.description) : '',
     defaultValues: timeLog
       ? {
           date: formatDateInput(timeLog.date),
           hours: timeLog.hours ? Number(timeLog.hours) : 0,
-          description: timeLog.description || '',
+          description: timeLog.description === null || timeLog.description === undefined ? '' : timeLog.description,
           engagementId: getEngagementId(),
         }
       : {
@@ -181,12 +182,17 @@ const TimeLogModal = ({
   useEffect(() => {
     if (open && timeLog) {
       // Reset form with time log data using the safe formatter
+      console.log('Resetting form with time log data:', timeLog);
+      console.log('Description from API:', timeLog.description);
+      
       reset({
         date: formatDateInput(timeLog.date),
         hours: timeLog.hours ? Number(timeLog.hours) : 0,
-        description: timeLog.description || '',
+        description: timeLog.description === null || timeLog.description === undefined ? '' : timeLog.description,
         engagementId: getEngagementId(),
       });
+      
+      console.log('Form reset complete');
     }
   }, [open, timeLog, reset]);
   
@@ -235,10 +241,14 @@ const TimeLogModal = ({
         engagementId: Number(data.engagementId),
         date: new Date(data.date), // Create Date object from the input date string
         hours: Number(data.hours),
-        description: data.description.trim()
+        description: data.description === undefined || data.description === "" || data.description.trim() === '' 
+          ? null 
+          : data.description.trim()
       };
 
       console.log('Submitting time log with data:', formattedData);
+      console.log('Description value before submission:', data.description);
+      console.log('Formatted description value:', formattedData.description);
 
       // Create/update time log
       const response = await apiRequest(
@@ -255,6 +265,11 @@ const TimeLogModal = ({
 
       const savedTimeLog = await response.json();
       console.log('Time log saved successfully:', savedTimeLog);
+      
+      // Verify the returned data has the correct description value
+      if (formattedData.description === null && savedTimeLog.description !== null) {
+        console.error('Description mismatch: Sent null but received', savedTimeLog.description);
+      }
 
       // Success toast
       toast({
@@ -276,10 +291,10 @@ const TimeLogModal = ({
       });
 
       // Explicitly force refetch any active queries
-      console.log('Force refetching active queries');
+      console.log('Force refetching all queries');
       await queryClient.refetchQueries({
         queryKey: ['/api/time-logs'],
-        type: 'active',
+        type: 'all', // Change from 'active' to 'all'
       });
 
       if (multipleEntries && !isEditMode) {
@@ -298,7 +313,11 @@ const TimeLogModal = ({
           description: ''
         });
       } else {
-        handleClose();
+        // Force a complete reset of the form and modal state
+        reset();
+        setMultipleEntries(false);
+        setCreatedLogs([]);
+        onOpenChange(false);
       }
       
       // Call the success callback
@@ -316,6 +335,7 @@ const TimeLogModal = ({
   };
 
   const handleClose = () => {
+    // Completely reset all state
     setMultipleEntries(false);
     setCreatedLogs([]);
     reset();
