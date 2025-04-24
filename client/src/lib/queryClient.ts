@@ -7,21 +7,45 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+interface ApiRequestOptions {
+  headers?: Record<string, string>;
+  [key: string]: any;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options?: ApiRequestOptions,
 ): Promise<Response> {
   console.log(`API Request: ${method} ${url}`, data);
   
-  const requestData = data ? JSON.stringify(data) : undefined;
-  console.log('Request body:', requestData);
+  let requestData: string | FormData | undefined = undefined;
+  let requestHeaders: HeadersInit = {};
+  
+  // Handle FormData or JSON data
+  if (data instanceof FormData) {
+    requestData = data;
+    // Don't set Content-Type for FormData, browser will set it with boundary
+  } else if (data) {
+    requestData = JSON.stringify(data);
+    requestHeaders = { "Content-Type": "application/json" };
+  }
+  
+  // Merge headers from options
+  if (options?.headers) {
+    requestHeaders = { ...requestHeaders, ...options.headers };
+  }
+  
+  console.log('Request headers:', requestHeaders);
+  console.log('Request body type:', requestData instanceof FormData ? 'FormData' : typeof requestData);
   
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: requestHeaders,
     body: requestData,
     credentials: "include",
+    ...options, // Spread remaining options
   });
 
   console.log(`API Response: ${res.status} ${res.statusText}`);

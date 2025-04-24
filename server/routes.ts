@@ -20,6 +20,26 @@ import rateLimit from 'express-rate-limit';
 import express from 'express';
 import { ServerError } from './serverError';
 import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import type { Request as ExpressRequest } from 'express';
+import type { FileFilterCallback } from 'multer';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Fix for __dirname in ES modules
+const __filename = fileURLToPath(import.meta.url || '');
+const __dirname = dirname(__filename);
+
+// Ensure uploads directory exists at startup
+const UPLOADS_DIR = path.join(dirname(fileURLToPath(import.meta.url || '')), '..', 'uploads', 'logos');
+console.log(`Checking uploads directory: ${UPLOADS_DIR}`);
+if (!fs.existsSync(UPLOADS_DIR)) {
+  console.log(`Creating uploads directory: ${UPLOADS_DIR}`);
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+} else {
+  console.log(`Uploads directory exists: ${UPLOADS_DIR}`);
+}
 
 // Helper function to get date range based on predefined ranges
 function getDateRange(range: string, referenceDate: Date = new Date()): { startDate: Date; endDate: Date } {
@@ -141,9 +161,57 @@ const invoiceRateLimiter = rateLimit({
   message: 'Too many invoice requests, please try again later'
 });
 
+// Define the schema for personal info updates
+const personalInfoSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  username: z.string().min(3, { message: "Username must be at least 3 characters" }),
+});
+
+// Define the schema for business info
+const businessInfoSchema = z.object({
+  companyName: z.string().min(1, { message: "Company name is required" }),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.string().optional(),
+  phoneNumber: z.string().optional(),
+  taxId: z.string().optional(),
+  companyLogo: z.string().optional(),
+});
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication
   setupAuth(app);
+  
+  // Using the pre-defined UPLOADS_DIR const instead of potentially problematic __dirname
+  const uploadsDir = UPLOADS_DIR;
+  
+  // Configure multer for file uploads
+  const logoStorage = multer.diskStorage({
+    destination: function (req: Express.Request, file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) {
+      cb(null, uploadsDir);
+    },
+    filename: function (req: Express.Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) {
+      // Generate unique filename with original extension
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(file.originalname);
+      const userId = req.user ? (req.user as any).id : 'unknown';
+      cb(null, `logo-${userId}-${uniqueSuffix}${ext}`);
+    }
+  });
+  
+  const upload = multer({ 
+    storage: logoStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    fileFilter: function (req: Express.Request, file: Express.Multer.File, cb: FileFilterCallback) {
+      // Accept only image files
+      if (!file.mimetype.startsWith('image/')) {
+        return cb(new Error('Only image files are allowed'));
+      }
+      cb(null, true);
+    }
+  });
   
   // prefix all routes with /api
 
@@ -1442,77 +1510,129 @@ Result from storage: ${JSON.stringify(updatedClient, null, 2)}
       const { jsPDF } = await import('jspdf');
       const pdf = new jsPDF();
       
-      // Add invoice details to PDF
+      // First, fetch the business info
+      console.log("Fetching business info for invoice...");
+      const businessInfoQuery = `SELECT * FROM business_info WHERE user_id = $1`;
+      const businessInfoResult = await pool.query(businessInfoQuery, [userId]);
+      const businessInfo = businessInfoResult.rows.length > 0 ? businessInfoResult.rows[0] : null;
+      
+      // Get user's name - use req.user if available or business info
+      const userName = (req.user as any)?.name || businessInfo?.company_name || "Derek Schatz";
+      
+      // 1. Name at top left
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(userName, 20, 30);
+      
+      // 2. Logo centered at top (or company name if no logo)
       pdf.setFontSize(16);
-      pdf.text(`INVOICE #${invoice.invoiceNumber}`, 105, 20, { align: 'center' });
-      
-      // Client section
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text("Bill To:", 20, 40);
       pdf.setFont('helvetica', 'normal');
-      pdf.text(`${invoice.clientName}`, 20, 50);
-      
-      // Add billing information if available
-      let yPos = 60;
-      if (invoice.billingContactName) {
-        pdf.text(`ATTN: ${invoice.billingContactName}`, 20, yPos);
-        yPos += 10;
+      if (businessInfo && businessInfo.company_name) {
+        pdf.text(businessInfo.company_name, 105, 30, { align: 'center' });
+      } else {
+        pdf.text("Agile Infusion", 105, 30, { align: 'center' });
       }
       
-      if (invoice.billingAddress) {
-        pdf.text(invoice.billingAddress, 20, yPos);
-        yPos += 10;
-      }
-      
-      // Add city, state, zip on same line if available
-      const addressLine = [
-        invoice.billingCity,
-        invoice.billingState,
-        invoice.billingZip
-      ].filter(Boolean).join(", ");
-      
-      if (addressLine) {
-        pdf.text(addressLine, 20, yPos);
-        yPos += 10;
-      }
-      
-      if (invoice.billingCountry) {
-        pdf.text(invoice.billingCountry, 20, yPos);
-        yPos += 10;
-      }
-      
-      if (invoice.billingContactEmail) {
-        pdf.text(invoice.billingContactEmail, 20, yPos);
-        yPos += 10;
-      }
-      
-      // Invoice dates and amounts on the right side
-      pdf.text(`Amount: $${invoice.totalAmount}`, 140, 50);
-      pdf.text(`Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}`, 140, 60);
-      pdf.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`, 140, 70);
-      
-      // Line items table - adjust starting position based on billing info
-      yPos = Math.max(yPos + 10, 90); // Make sure we don't overlap with previous content
-      pdf.setFontSize(12);
+      // 3. INVOICE title and info at top right
+      pdf.setFontSize(20);
       pdf.setFont('helvetica', 'bold');
-      pdf.text("Service Items:", 20, yPos);
+      pdf.text("INVOICE", 190, 30, { align: 'right' });
       
-      yPos += 10;
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`INVOICE #${invoice.invoiceNumber}`, 190, 40, { align: 'right' });
+      pdf.text(`DATE: ${new Date(invoice.issueDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long', 
+        day: 'numeric'
+      })}`, 190, 50, { align: 'right' });
       
-      // Table header
-      pdf.setFontSize(10);
-      pdf.text("Description", 20, yPos);
-      pdf.text("Hours", 120, yPos);
-      pdf.text("Rate", 140, yPos);
-      pdf.text("Amount", 170, yPos);
+      // Due date
+      if (invoice.dueDate) {
+        pdf.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })}`, 190, 60, { align: 'right' });
+      }
       
-      yPos += 10;
+      // 4. Company details below name on left
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      let yPos = 40;
+      
+      if (businessInfo) {
+        if (businessInfo.company_name) {
+          pdf.text(businessInfo.company_name, 20, yPos);
+          yPos += 8;
+        }
+        
+        if (businessInfo.address) {
+          pdf.text(businessInfo.address, 20, yPos);
+          yPos += 8;
+        }
+        
+        // City, state, zip
+        const addressLine = [
+          businessInfo.city,
+          businessInfo.state,
+          businessInfo.zip
+        ].filter(Boolean).join(", ");
+        
+        if (addressLine) {
+          pdf.text(addressLine, 20, yPos);
+          yPos += 8;
+        }
+        
+        if (businessInfo.phone_number) {
+          pdf.text(`Phone: ${businessInfo.phone_number}`, 20, yPos);
+          yPos += 8;
+        }
+        
+        if (businessInfo.tax_id) {
+          pdf.text(`Tax ID: ${businessInfo.tax_id}`, 20, yPos);
+          yPos += 8;
+        }
+      } else {
+        // Default business info matching screenshot
+        pdf.text("Agile Infusion", 20, 40);
+        pdf.text("100 Danby Court", 20, 48);
+        pdf.text("Churchville, PA, 18966", 20, 56);
+        pdf.text("Phone: 215-630-3317", 20, 64);  
+        pdf.text("Tax ID: 20-5199056", 20, 72);
+        yPos = 80;
+      }
+      
+      // Add horizontal line 
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(20, 100, 190, 100);
+      
+      // BILL TO section - keep this
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("BILL TO:", 20, 115);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`${invoice.clientName}`, 50, 115);
+      
+      // 7. Table layout - moved up since we're removing just the FOR section
+      const tableStartY = 140;
+      
+      // Column headers
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("DESCRIPTION", 20, tableStartY);
+      pdf.text("HOURS", 120, tableStartY);
+      pdf.text("RATE", 145, tableStartY);
+      pdf.text("AMOUNT", 170, tableStartY);
+      
+      // Add a line under the header
+      pdf.setDrawColor(0, 0, 0);
+      pdf.line(20, tableStartY + 5, 190, tableStartY + 5);
       
       // Create a default line item from the invoice total if no line items exist
       const defaultLineItems: InvoiceLineItem[] = [{
         invoiceId: invoice.id,
-        description: `Services for ${invoice.projectName || 'project'}`,
+        description: `Consultant ${invoice.projectName || 'Scrum Master'} Activities`,
         hours: Number(invoice.totalHours),
         rate: Number(invoice.totalAmount) / Number(invoice.totalHours),
         amount: Number(invoice.totalAmount)
@@ -1522,17 +1642,40 @@ Result from storage: ${JSON.stringify(updatedClient, null, 2)}
       const itemsToDisplay = (invoice as InvoiceWithLineItems).lineItems || defaultLineItems;
       
       // Table data
+      let itemY = tableStartY + 15;
+      pdf.setFont('helvetica', 'normal');
+      
       itemsToDisplay.forEach(item => {
-        pdf.text(item.description.substring(0, 50), 20, yPos);
-        pdf.text(item.hours.toString(), 120, yPos);
-        pdf.text(`$${typeof item.rate === 'string' ? item.rate : item.rate.toFixed(2)}`, 140, yPos);
-        pdf.text(`$${typeof item.amount === 'string' ? item.amount : item.amount.toFixed(2)}`, 170, yPos);
-        yPos += 10;
+        pdf.text(item.description.substring(0, 50), 20, itemY);
+        pdf.text(item.hours.toString(), 120, itemY);
+        pdf.text(`$${typeof item.rate === 'string' ? item.rate : item.rate.toFixed(2)}/hr`, 145, itemY);
+        pdf.text(`$${typeof item.amount === 'string' ? item.amount : item.amount.toFixed(2)}`, 170, itemY);
+        itemY += 10;
       });
       
+      // If we have period info, add it as a separate line
+      if (invoice.periodStart && invoice.periodEnd) {
+        itemY += 10;
+        pdf.text(`Period: ${new Date(invoice.periodStart).toLocaleDateString()} - ${new Date(invoice.periodEnd).toLocaleDateString()}`, 20, itemY);
+        itemY += 10;
+      }
+      
+      // Horizontal line above total
+      itemY += 10;
+      pdf.line(120, itemY, 190, itemY);
+      itemY += 10;
+      
       // Total
-      yPos += 10;
-      pdf.text(`Total Amount: $${invoice.totalAmount}`, 120, yPos);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("TOTAL", 145, itemY);
+      pdf.text(`$${invoice.totalAmount}`, 170, itemY);
+      
+      // 8. Payment terms at bottom
+      itemY += 35;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text("Make all checks payable to the company name.", 20, itemY);
+      pdf.text("Total due in 30 days.", 20, itemY + 8);
       
       // Convert PDF to base64
       const pdfBase64 = pdf.output('datauristring');
@@ -1562,6 +1705,547 @@ Invoice Details:
         error: error instanceof Error ? error.message : "Unknown error" 
       });
     }
+  });
+
+  // Update user personal information
+  app.put("/api/user", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).send("Not authenticated");
+    }
+    
+    try {
+      const userId = req.user?.id;
+      const data = personalInfoSchema.parse(req.body);
+      
+      // Check if username is being changed and if it's already taken
+      if (data.username !== req.user?.username) {
+        const existingUser = await storage.getUserByUsername(data.username);
+        if (existingUser) {
+          return res.status(400).send("Username already exists");
+        }
+      }
+      
+      // Update user info
+      const updateQuery = `
+        UPDATE users
+        SET 
+          name = $1,
+          email = $2,
+          username = $3
+        WHERE id = $4
+        RETURNING id, username, name, email, created_at
+      `;
+      
+      const result = await pool.query(updateQuery, [
+        data.name,
+        data.email,
+        data.username,
+        userId
+      ]);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).send("User not found");
+      }
+      
+      // Update the user in the session
+      const updatedUser = result.rows[0];
+      req.login({
+        ...updatedUser,
+        createdAt: updatedUser.created_at
+      }, (err) => {
+        if (err) {
+          return res.status(500).send("Error updating session");
+        }
+        res.json(updatedUser);
+      });
+    } catch (error) {
+      console.error("Error updating user:", error);
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      
+      res.status(500).send("Server error");
+    }
+  });
+  
+  // Helper function to ensure business_info table exists
+  const ensureBusinessInfoTable = async () => {
+    try {
+      // Check if business_info table exists
+      const checkTableQuery = `
+        SELECT EXISTS (
+          SELECT 1 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'business_info'
+        );
+      `;
+      
+      const tableExists = await pool.query(checkTableQuery);
+      console.log('business_info table exists:', tableExists.rows[0].exists);
+      
+      if (!tableExists.rows[0].exists) {
+        console.log('Creating business_info table...');
+        
+        // Create the table
+        const createTableQuery = `
+          CREATE TABLE business_info (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            company_name VARCHAR(255) NOT NULL,
+            address TEXT,
+            city VARCHAR(255),
+            state VARCHAR(255),
+            zip VARCHAR(50),
+            phone_number VARCHAR(50),
+            tax_id VARCHAR(100),
+            company_logo VARCHAR(255),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+          );
+          
+          -- Add index for faster lookups
+          CREATE INDEX business_info_user_id_idx ON business_info(user_id);
+          
+          -- Ensure user_id is unique
+          ALTER TABLE business_info ADD CONSTRAINT unique_user_id UNIQUE (user_id);
+        `;
+        
+        await pool.query(createTableQuery);
+        console.log('business_info table created successfully');
+        return true;
+      }
+      
+      // Check if the table has phone_number column
+      const checkPhoneNumberColumnQuery = `
+        SELECT EXISTS (
+          SELECT 1 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'business_info'
+          AND column_name = 'phone_number'
+        );
+      `;
+      
+      const phoneNumberExists = await pool.query(checkPhoneNumberColumnQuery);
+      console.log('phone_number column exists:', phoneNumberExists.rows[0].exists);
+      
+      // Check if the table has country column
+      const checkCountryColumnQuery = `
+        SELECT EXISTS (
+          SELECT 1 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'business_info'
+          AND column_name = 'country'
+        );
+      `;
+      
+      const countryExists = await pool.query(checkCountryColumnQuery);
+      console.log('country column exists:', countryExists.rows[0].exists);
+      
+      // If there's country but no phone_number, update the table
+      if (countryExists.rows[0].exists && !phoneNumberExists.rows[0].exists) {
+        console.log('Adding phone_number column...');
+        await pool.query(`ALTER TABLE business_info ADD COLUMN phone_number VARCHAR(50)`);
+        
+        // Migrate data
+        console.log('Copying data from country to phone_number...');
+        await pool.query(`UPDATE business_info SET phone_number = country`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error ensuring business_info table:', error);
+      return false;
+    }
+  };
+
+  // Get business information
+  app.get("/api/business-info", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).send("Not authenticated");
+    }
+    
+    try {
+      // Ensure the table exists
+      await ensureBusinessInfoTable();
+      
+      const userId = req.user?.id;
+      
+      // Check if business info exists
+      const checkQuery = `
+        SELECT * FROM business_info WHERE user_id = $1
+      `;
+      
+      const checkResult = await pool.query(checkQuery, [userId]);
+      
+      if (checkResult.rows.length === 0) {
+        // Return default empty object
+        return res.json({
+          companyName: "",
+          address: "",
+          city: "",
+          state: "",
+          zip: "",
+          phoneNumber: "",
+          taxId: "",
+        });
+      }
+      
+      // Convert snake_case to camelCase for response
+      const businessInfo = checkResult.rows[0];
+      
+      console.log("Business info from database:", businessInfo);
+      
+      res.json({
+        companyName: businessInfo.company_name,
+        address: businessInfo.address,
+        city: businessInfo.city,
+        state: businessInfo.state,
+        zip: businessInfo.zip,
+        phoneNumber: businessInfo.phone_number, // Make sure we're using phone_number from DB
+        taxId: businessInfo.tax_id,
+        companyLogo: businessInfo.company_logo,
+      });
+    } catch (error) {
+      console.error("Error getting business info:", error);
+      res.status(500).send("Server error");
+    }
+  });
+  
+  // Update business information
+  app.put("/api/business-info", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).send("Not authenticated");
+    }
+    
+    try {
+      // Ensure the table exists
+      await ensureBusinessInfoTable();
+      
+      console.log("PUT /api/business-info - Request body:", req.body);
+      
+      const userId = req.user?.id;
+      console.log("User ID:", userId);
+      
+      const data = businessInfoSchema.parse(req.body);
+      console.log("Parsed data:", data);
+      
+      // Check if business info exists for this user
+      const checkQuery = `
+        SELECT id FROM business_info WHERE user_id = $1
+      `;
+      
+      console.log("Checking if business info exists for user:", userId);
+      const checkResult = await pool.query(checkQuery, [userId]);
+      console.log("Check result:", checkResult.rows.length > 0 ? "Exists" : "Does not exist");
+      
+      let result;
+      
+      if (checkResult.rows.length === 0) {
+        // Insert new business info
+        console.log("Inserting new business info");
+        const insertQuery = `
+          INSERT INTO business_info (
+            user_id, company_name, address, city, state, 
+            zip, phone_number, tax_id, company_logo
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING *
+        `;
+        
+        const params = [
+          userId,
+          data.companyName,
+          data.address || "",
+          data.city || "",
+          data.state || "",
+          data.zip || "",
+          data.phoneNumber || "",
+          data.taxId || "",
+          data.companyLogo || null
+        ];
+        
+        console.log("Insert params:", params);
+        
+        try {
+          result = await pool.query(insertQuery, params);
+          console.log("Insert result rows:", result.rows.length);
+        } catch (dbError) {
+          console.error("Database insert error:", dbError);
+          throw dbError;
+        }
+      } else {
+        // Update existing business info
+        console.log("Updating existing business info");
+        const updateQuery = `
+          UPDATE business_info
+          SET 
+            company_name = $2,
+            address = $3,
+            city = $4,
+            state = $5,
+            zip = $6,
+            phone_number = $7,
+            tax_id = $8
+          WHERE user_id = $1
+          RETURNING *
+        `;
+        
+        const params = [
+          userId,
+          data.companyName,
+          data.address || "",
+          data.city || "",
+          data.state || "",
+          data.zip || "",
+          data.phoneNumber || "",
+          data.taxId || ""
+        ];
+        
+        console.log("Update params:", params);
+        
+        try {
+          result = await pool.query(updateQuery, params);
+          console.log("Update result rows:", result.rows.length);
+        } catch (dbError) {
+          console.error("Database update error:", dbError);
+          throw dbError;
+        }
+      }
+      
+      // Convert snake_case to camelCase for response
+      const businessInfo = result.rows[0];
+      console.log("Business info from database:", businessInfo);
+      
+      const response = {
+        companyName: businessInfo.company_name,
+        address: businessInfo.address,
+        city: businessInfo.city,
+        state: businessInfo.state,
+        zip: businessInfo.zip,
+        phoneNumber: businessInfo.phone_number,
+        taxId: businessInfo.tax_id,
+        companyLogo: businessInfo.company_logo,
+      };
+      
+      console.log("Sending response:", response);
+      res.json(response);
+    } catch (error) {
+      console.error("Error updating business info:", error);
+      
+      if (error instanceof z.ZodError) {
+        console.error("Validation error:", error.errors);
+        return res.status(400).json({ error: error.errors });
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error("Error message:", errorMessage);
+      res.status(500).send(`Server error: ${errorMessage}`);
+    }
+  });
+  
+  // Upload business logo
+  app.post("/api/business-logo", (req, res) => {
+    console.log("Received logo upload request");
+    
+    // Use a try-catch block around the middleware to catch multer errors
+    const uploadMiddleware = upload.single('logo');
+    
+    uploadMiddleware(req, res, async (err) => {
+      console.log("Multer middleware executed");
+      
+      if (err) {
+        console.error("Multer error:", err);
+        return res.status(400).send(`File upload error: ${err.message}`);
+      }
+      
+      // Check authentication
+      if (!req.isAuthenticated()) {
+        console.log("Not authenticated");
+        return res.status(401).send("Not authenticated");
+      }
+      
+      try {
+        const userId = req.user?.id;
+        console.log("Processing logo upload for user:", userId);
+        
+        if (!req.file) {
+          console.error("No file received in request");
+          return res.status(400).send("No file uploaded");
+        }
+        
+        console.log("File received:", req.file);
+        const filename = path.basename(req.file.path);
+        console.log("Generated filename:", filename);
+        
+        // Update the business_info table with the logo filename
+        const updateQuery = `
+          UPDATE business_info
+          SET company_logo = $2
+          WHERE user_id = $1
+          RETURNING *
+        `;
+        
+        console.log("Executing update query");
+        const result = await pool.query(updateQuery, [userId, filename]);
+        console.log("Update query result rows:", result.rows.length);
+        
+        if (result.rows.length === 0) {
+          // If no business info exists, create one
+          console.log("No existing business info, creating new record");
+          const insertQuery = `
+            INSERT INTO business_info (user_id, company_logo, company_name)
+            VALUES ($1, $2, $3)
+            RETURNING *
+          `;
+          
+          await pool.query(insertQuery, [userId, filename, ""]);
+          console.log("New business info record created");
+        }
+        
+        console.log("Logo upload successful");
+        res.json({ 
+          filename,
+          path: `/api/business-logo/${filename}`,
+          success: true 
+        });
+      } catch (error) {
+        console.error("Error in logo upload handler:", error);
+        res.status(500).send(`Server error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    });
+  });
+  
+  // Serve business logo
+  app.get("/api/business-logo/:filename", (req, res) => {
+    const filename = req.params.filename;
+    const logoPath = path.join(UPLOADS_DIR, filename);
+    
+    // Check if file exists
+    if (!fs.existsSync(logoPath)) {
+      console.log(`❌ Logo not found: ${logoPath}`);
+      return res.status(404).json({ error: "Logo not found" });
+    }
+    
+    console.log(`✅ Serving logo: ${logoPath}`);
+    res.sendFile(logoPath);
+  });
+
+  // Create a new, simplified logo upload endpoint
+  app.post("/api/upload-logo", (req, res) => {
+    console.log("📤 NEW LOGO UPLOAD REQUEST RECEIVED");
+    
+    // Handle auth first to fail fast
+    if (!req.isAuthenticated()) {
+      console.log("❌ Upload rejected: Not authenticated");
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    
+    const userId = req.user ? (req.user as any).id : null;
+    console.log(`👤 Authenticated user: ${userId}`);
+    
+    if (!userId) {
+      console.log("❌ Upload rejected: Invalid user ID");
+      return res.status(401).json({ error: "Invalid user ID" });
+    }
+    
+    // Set up a simplified upload middleware for this endpoint
+    const simpleUpload = multer({
+      storage: multer.diskStorage({
+        destination: (req, file, cb) => {
+          console.log(`📁 Upload directory: ${UPLOADS_DIR}`);
+          cb(null, UPLOADS_DIR);
+        },
+        filename: (req, file, cb) => {
+          const safeFileName = `logo-${userId}-${Date.now()}${path.extname(file.originalname)}`;
+          console.log(`📄 Generated filename: ${safeFileName}`);
+          cb(null, safeFileName);
+        }
+      }),
+      fileFilter: (req, file, cb) => {
+        // Validate mime type
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(file.mimetype)) {
+          console.log(`❌ Rejected file type: ${file.mimetype}`);
+          return cb(new Error(`Invalid file type. Allowed: ${allowedTypes.join(', ')}`));
+        }
+        console.log(`✅ Accepted file type: ${file.mimetype}`);
+        cb(null, true);
+      },
+      limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB
+      }
+    }).single('logo');
+    
+    // Process the upload
+    simpleUpload(req, res, async (err) => {
+      // Handle multer errors
+      if (err) {
+        console.log(`❌ Upload error: ${err.message}`);
+        return res.status(400).json({ error: err.message });
+      }
+      
+      // Check if we have a file
+      if (!req.file) {
+        console.log("❌ No file received");
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      
+      try {
+        console.log(`✅ File received: ${req.file.originalname} (${req.file.size} bytes)`);
+        const filename = path.basename(req.file.path);
+        
+        // Update database with the new logo filename
+        console.log(`💾 Updating database for user ${userId} with logo: ${filename}`);
+        
+        // First check if user has a business info record
+        const checkQuery = `SELECT id FROM business_info WHERE user_id = $1`;
+        const existingRecord = await pool.query(checkQuery, [userId]);
+        
+        if (existingRecord.rows.length === 0) {
+          // Create new record
+          console.log(`📝 Creating new business info record for user ${userId}`);
+          const insertQuery = `
+            INSERT INTO business_info 
+            (user_id, company_logo, company_name) 
+            VALUES ($1, $2, 'Your Company') 
+            RETURNING id
+          `;
+          await pool.query(insertQuery, [userId, filename]);
+        } else {
+          // Update existing record
+          console.log(`📝 Updating existing business info for user ${userId}`);
+          const updateQuery = `
+            UPDATE business_info 
+            SET company_logo = $2 
+            WHERE user_id = $1
+          `;
+          await pool.query(updateQuery, [userId, filename]);
+        }
+        
+        console.log("✅ Logo upload completed successfully");
+        
+        // Return success with the file URL
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).json({
+          success: true,
+          filename,
+          path: `/api/business-logo/${filename}`,
+          message: "Logo uploaded successfully"
+        });
+      } catch (error) {
+        console.error("❌ Database error:", error);
+        res.setHeader('Content-Type', 'application/json');
+        res.status(500).json({
+          success: false, 
+          error: "Server error while saving logo",
+          details: error instanceof Error ? error.message : "Unknown error"
+        });
+      }
+    });
   });
 
   const httpServer = createServer(app);

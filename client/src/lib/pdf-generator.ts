@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { formatCurrency, formatHours } from './format-utils';
 import { formatDate } from './date-utils';
 import { type InvoiceWithLineItems } from '@shared/schema';
+import { BusinessInfoValues } from '@/hooks/use-business-info';
 
 // No need for declaration as we're properly importing autoTable
 // And will use it differently
@@ -39,6 +40,11 @@ interface InvoiceGeneratorOptions {
   companyPhone?: string;
   companyLogo?: string;
   footerText?: string;
+  businessInfo?: BusinessInfoValues;
+  logoDataUrl?: string | null;
+  userName?: string;
+  download?: boolean;
+  filename?: string;
 }
 
 export function generateInvoicePDF(
@@ -68,6 +74,32 @@ export function generateInvoicePDF(
 
   // Merge options
   const opts = { ...defaultOptions, ...options };
+  
+  // Use business info for defaults if available
+  const businessInfo = opts.businessInfo;
+  if (businessInfo) {
+    opts.companyName = businessInfo.companyName || opts.companyName;
+    
+    // Create multi-line address from business info components
+    const addressParts = [];
+    if (businessInfo.address) addressParts.push(businessInfo.address);
+    
+    // City, State ZIP
+    const cityStateZip = [
+      businessInfo.city,
+      businessInfo.state,
+      businessInfo.zip
+    ].filter(Boolean).join(", ");
+    
+    if (cityStateZip) addressParts.push(cityStateZip);
+    
+    if (addressParts.length > 0) {
+      opts.companyAddress = addressParts.join('\n');
+    }
+    
+    // Phone and Tax ID
+    opts.companyPhone = businessInfo.phoneNumber || '';
+  }
 
   // Create PDF document
   const doc = new jsPDF();
@@ -75,49 +107,115 @@ export function generateInvoicePDF(
   // Page width for alignment
   const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Company information (left side)
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text("INVOICE", 14, 20);
+  // Add company logo if available - centered at top
+  if (opts.logoDataUrl) {
+    try {
+      console.log('Adding logo from data URL');
+      
+      // Logo dimensions in mm
+      const logoWidth = 40; // mm
+      const logoHeight = 20; // mm
+      const logoY = 10; // 10mm from top
+      const logoX = (pageWidth - logoWidth) / 2; // Centered horizontally
+      
+      // Add image to PDF from the loaded data URL
+      doc.addImage(
+        opts.logoDataUrl,
+        'AUTO', // Auto-detect format from data URL
+        logoX, // X position - centered
+        logoY, // Y position from top
+        logoWidth, // Width in mm
+        logoHeight, // Height in mm
+        undefined, // Alias
+        'FAST' // Compression
+      );
+    } catch (error) {
+      console.error('Error adding logo to PDF:', error);
+      // If image loading fails, fall back to placeholder
+      if (businessInfo?.companyLogo) {
+        const logoWidth = 40;
+        const logoHeight = 20;
+        const logoY = 10;
+        const logoX = (pageWidth - logoWidth) / 2; // Centered
+        doc.setDrawColor(255, 255, 255); // White - invisible border
+        doc.rect(logoX, logoY, logoWidth, logoHeight, 'S');
+      }
+    }
+  } else if (businessInfo?.companyLogo) {
+    // If no data URL but a logo filename exists, add placeholder
+    const logoWidth = 40;
+    const logoHeight = 20;
+    const logoY = 10;
+    const logoX = (pageWidth - logoWidth) / 2; // Centered
+    doc.setDrawColor(255, 255, 255); // White - invisible border
+    doc.rect(logoX, logoY, logoWidth, logoHeight, 'S');
+  }
   
-  // Tagline in blue - commented out for now, will be configurable
-  // doc.setFontSize(12);
-  // doc.setFont('helvetica', 'italic');
-  // doc.setTextColor(0, 0, 255); // Blue color
-  // doc.text("Learning Through Experience", 14, 26);
-  
-  // Company details - commented out for now, will be configurable
-  // doc.setFont('helvetica', 'normal');
-  // doc.setFontSize(10);
-  // doc.setTextColor(0, 0, 0);
-  // doc.text("Agile Infusion, LLC", 14, 34);
-  // doc.text(opts.companyAddress!.split('\n'), 14, 39);
-  // doc.text(`Phone ${opts.companyPhone}`, 14, 49);
-  // doc.text(opts.companyEmail!, 14, 54);
-  // doc.text(`Federal Tax ID: 20-5199056`, 14, 59);
-
   // INVOICE on right side
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
   doc.text("INVOICE", pageWidth - 14, 20, { align: 'right' });
   
-  // Invoice details on right
+  // Invoice details on right (moved up)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`INVOICE #${invoice.invoiceNumber}`, pageWidth - 14, 30, { align: 'right' });
   doc.text(`DATE: ${formatDatePart(invoice.issueDate).toUpperCase()}`, pageWidth - 14, 35, { align: 'right' });
+  doc.text(`DUE DATE: ${formatDatePart(invoice.dueDate).toUpperCase()}`, pageWidth - 14, 40, { align: 'right' });
 
-  // Bill to section
+  // Company information (left side) - starts lower if logo is present
+  const contentStartY = businessInfo?.companyLogo ? 40 : 20;
+  
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  const displayName = opts.userName || 'INVOICE';
+  doc.text(displayName, 14, contentStartY);
+  
+  // Add company details if available
+  let yPosition = contentStartY + 5; // Reduced gap between username and company name (was +10)
+  
+  if (opts.companyName || opts.companyAddress || opts.companyPhone) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    
+    if (opts.companyName) {
+      doc.text(opts.companyName, 14, yPosition);
+      yPosition += 5;
+    }
+    
+    if (opts.companyAddress) {
+      // Handle multi-line address
+      const addressLines = opts.companyAddress.split('\n');
+      for (const line of addressLines) {
+        doc.text(line, 14, yPosition);
+        yPosition += 5;
+      }
+    }
+    
+    if (opts.companyPhone) {
+      doc.text(`Phone: ${opts.companyPhone}`, 14, yPosition);
+      yPosition += 5;
+    }
+    
+    if (businessInfo?.taxId) {
+      doc.text(`Tax ID: ${businessInfo.taxId}`, 14, yPosition);
+      yPosition += 5;
+    }
+  }
+
+  // Bill to section - with reduced gap between company details and TO section
+  const toSectionY = Math.max(yPosition + 8, 75); // Add 8mm gap (reduced from 15mm)
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text("TO:", 14, 75);
+  doc.text("TO:", 14, toSectionY);
   doc.setFont('helvetica', 'normal');
-  doc.text(invoice.clientName, 14, 80);
+  doc.text(invoice.clientName, 14, toSectionY + 5);
   
   // Add billing information if available
-  let billingY = 85;
+  let billingY = toSectionY + 10;
   if (invoice.billingContactName) {
     doc.text(`ATTN: ${invoice.billingContactName}`, 14, billingY);
     billingY += 5;
@@ -149,15 +247,8 @@ export function generateInvoicePDF(
     doc.text(invoice.billingContactEmail, 14, billingY);
   }
   
-  // For section - project details
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text("FOR:", pageWidth - 90, 75);
-  doc.setFont('helvetica', 'normal');
-  doc.text(invoice.projectName || "Consulting Services", pageWidth - 90, 80);
-  
   // Table for line items
-  const startY = 100;
+  const tableStartY = 100;
   
   // Define table headers
   doc.setFillColor(255, 255, 255); // White background
@@ -166,14 +257,14 @@ export function generateInvoicePDF(
   
   // Draw table header
   doc.setFont('helvetica', 'bold');
-  doc.rect(14, startY, pageWidth - 28, 10, 'S');
-  doc.text("DESCRIPTION", 24, startY + 7);
-  doc.text("HOURS", pageWidth - 95, startY + 7, { align: 'center' });
-  doc.text("RATE", pageWidth - 55, startY + 7, { align: 'center' });
-  doc.text("AMOUNT", pageWidth - 20, startY + 7, { align: 'right' });
+  doc.rect(14, tableStartY, pageWidth - 28, 10, 'S');
+  doc.text("DESCRIPTION", 24, tableStartY + 7);
+  doc.text("HOURS", pageWidth - 95, tableStartY + 7, { align: 'center' });
+  doc.text("RATE", pageWidth - 55, tableStartY + 7, { align: 'center' });
+  doc.text("AMOUNT", pageWidth - 20, tableStartY + 7, { align: 'right' });
   
   // Format line items
-  let currentY = startY + 10;
+  let currentY = tableStartY + 10;
   
   // If there are line items, display them
   if (invoice.lineItems && invoice.lineItems.length > 0) {
@@ -211,9 +302,9 @@ export function generateInvoicePDF(
         }
         
         // Add hours, rate and amount only to the first row
-        doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
-        doc.text(`${formatCurrency(Number(item.rate))}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
-        doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
+        doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, tableStartY + 17, { align: 'center' });
+        doc.text(`${formatCurrency(Number(item.rate))}/hr`, pageWidth - 55, tableStartY + 17, { align: 'center' });
+        doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, tableStartY + 17, { align: 'right' });
       }
     });
   } else {
@@ -232,17 +323,17 @@ export function generateInvoicePDF(
     doc.text(period, 24, currentY + 7);
     
     // Add hours, rate and amount
-    doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
+    doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, tableStartY + 17, { align: 'center' });
     
     // Calculate effective hourly rate if we have total hours and amount
     if (invoice.totalHours && invoice.totalAmount) {
       const effectiveRate = Number(invoice.totalAmount) / Number(invoice.totalHours);
-      doc.text(`${formatCurrency(effectiveRate)}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
+      doc.text(`${formatCurrency(effectiveRate)}/hr`, pageWidth - 55, tableStartY + 17, { align: 'center' });
     } else {
-      doc.text("N/A", pageWidth - 55, startY + 17, { align: 'center' });
+      doc.text("N/A", pageWidth - 55, tableStartY + 17, { align: 'center' });
     }
     
-    doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
+    doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, tableStartY + 17, { align: 'right' });
     
     currentY += 10;
   }
@@ -287,19 +378,25 @@ declare global {
 function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: InvoiceGeneratorOptions = {}): any {
   console.log('Using fallback PDF generator with global jsPDF instance');
   
-  // Check if the global jsPDF is available
-  if (typeof window === 'undefined' || !window.jspdf) {
-    throw new Error('jsPDF is not available globally. PDF generation failed.');
+  if (!window.jspdf) {
+    throw new Error('jsPDF is not available globally');
   }
   
-  // Access the global jsPDF constructor
   const { jsPDF } = window.jspdf;
   
-  if (!jsPDF) {
-    throw new Error('Global jsPDF constructor is not available. PDF generation failed.');
-  }
-  
-  // Default options 
+  // Debug client billing information
+  console.log('PDF Fallback - Invoice billing details:', {
+    clientName: invoice.clientName,
+    billingContactName: invoice.billingContactName,
+    billingContactEmail: invoice.billingContactEmail,
+    billingAddress: invoice.billingAddress,
+    billingCity: invoice.billingCity,
+    billingState: invoice.billingState,
+    billingZip: invoice.billingZip,
+    billingCountry: invoice.billingCountry
+  });
+
+  // Default options
   const defaultOptions: InvoiceGeneratorOptions = {
     companyName: '',
     companyAddress: '',
@@ -310,56 +407,148 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
 
   // Merge options
   const opts = { ...defaultOptions, ...options };
-
-  // Create PDF document using the global jsPDF
-  const doc = new jsPDF() as any;
   
+  // Use business info for defaults if available
+  const businessInfo = opts.businessInfo;
+  if (businessInfo) {
+    opts.companyName = businessInfo.companyName || opts.companyName;
+    
+    // Create multi-line address from business info components
+    const addressParts = [];
+    if (businessInfo.address) addressParts.push(businessInfo.address);
+    
+    // City, State ZIP
+    const cityStateZip = [
+      businessInfo.city,
+      businessInfo.state,
+      businessInfo.zip
+    ].filter(Boolean).join(", ");
+    
+    if (cityStateZip) addressParts.push(cityStateZip);
+    
+    if (addressParts.length > 0) {
+      opts.companyAddress = addressParts.join('\n');
+    }
+    
+    // Phone and Tax ID
+    opts.companyPhone = businessInfo.phoneNumber || '';
+  }
+
+  // Create PDF document
+  const doc = new jsPDF();
+
   // Page width for alignment
   const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Company information (left side)
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text("INVOICE", 14, 20);
+  // Add company logo if available - centered at top
+  if (opts.logoDataUrl) {
+    try {
+      console.log('Adding logo from data URL in fallback method');
+      
+      // Logo dimensions in mm
+      const logoWidth = 40; // mm
+      const logoHeight = 20; // mm
+      const logoY = 10; // 10mm from top
+      const logoX = (pageWidth - logoWidth) / 2; // Centered horizontally
+      
+      // Add image to PDF from the loaded data URL
+      doc.addImage(
+        opts.logoDataUrl,
+        'AUTO', // Auto-detect format from data URL
+        logoX, // X position - centered
+        logoY, // Y position from top
+        logoWidth, // Width in mm
+        logoHeight, // Height in mm
+        undefined, // Alias
+        'FAST' // Compression
+      );
+    } catch (error) {
+      console.error('Error adding logo to PDF in fallback method:', error);
+      // If image loading fails, fall back to placeholder
+      if (businessInfo?.companyLogo) {
+        const logoWidth = 40;
+        const logoHeight = 20;
+        const logoY = 10;
+        const logoX = (pageWidth - logoWidth) / 2; // Centered
+        doc.setDrawColor(255, 255, 255); // White - invisible border
+        doc.rect(logoX, logoY, logoWidth, logoHeight, 'S');
+      }
+    }
+  } else if (businessInfo?.companyLogo) {
+    // If no data URL but a logo filename exists, add placeholder
+    const logoWidth = 40;
+    const logoHeight = 20;
+    const logoY = 10;
+    const logoX = (pageWidth - logoWidth) / 2; // Centered
+    doc.setDrawColor(255, 255, 255); // White - invisible border
+    doc.rect(logoX, logoY, logoWidth, logoHeight, 'S');
+  }
   
-  // Tagline in blue - commented out for now, will be configurable
-  // doc.setFontSize(12);
-  // doc.setFont('helvetica', 'italic');
-  // doc.setTextColor(0, 0, 255); // Blue color
-  // doc.text("Learning Through Experience", 14, 26);
-  
-  // Company details - commented out for now, will be configurable
-  // doc.setFont('helvetica', 'normal');
-  // doc.setFontSize(10);
-  // doc.setTextColor(0, 0, 0);
-  // doc.text("Agile Infusion, LLC", 14, 34);
-  // doc.text(opts.companyAddress!.split('\n'), 14, 39);
-  // doc.text(`Phone ${opts.companyPhone}`, 14, 49);
-  // doc.text(opts.companyEmail!, 14, 54);
-  // doc.text(`Federal Tax ID: 20-5199056`, 14, 59);
-
   // INVOICE on right side
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
   doc.text("INVOICE", pageWidth - 14, 20, { align: 'right' });
   
-  // Invoice details on right
+  // Invoice details on right (moved up)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`INVOICE #${invoice.invoiceNumber}`, pageWidth - 14, 30, { align: 'right' });
   doc.text(`DATE: ${formatDatePart(invoice.issueDate).toUpperCase()}`, pageWidth - 14, 35, { align: 'right' });
+  doc.text(`DUE DATE: ${formatDatePart(invoice.dueDate).toUpperCase()}`, pageWidth - 14, 40, { align: 'right' });
 
-  // Bill to section
+  // Company information (left side) - starts lower if logo is present
+  const contentStartY = businessInfo?.companyLogo ? 40 : 20;
+  
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  const displayName = opts.userName || 'INVOICE';
+  doc.text(displayName, 14, contentStartY);
+  
+  // Add company details if available
+  let yPosition = contentStartY + 5; // Reduced gap between username and company name (was +10)
+  
+  if (opts.companyName || opts.companyAddress || opts.companyPhone) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    
+    if (opts.companyName) {
+      doc.text(opts.companyName, 14, yPosition);
+      yPosition += 5;
+    }
+    
+    if (opts.companyAddress) {
+      // Handle multi-line address
+      const addressLines = opts.companyAddress.split('\n');
+      for (const line of addressLines) {
+        doc.text(line, 14, yPosition);
+        yPosition += 5;
+      }
+    }
+    
+    if (opts.companyPhone) {
+      doc.text(`Phone: ${opts.companyPhone}`, 14, yPosition);
+      yPosition += 5;
+    }
+    
+    if (businessInfo?.taxId) {
+      doc.text(`Tax ID: ${businessInfo.taxId}`, 14, yPosition);
+      yPosition += 5;
+    }
+  }
+
+  // Bill to section - with reduced gap between company details and TO section
+  const toSectionY = Math.max(yPosition + 8, 75); // Add 8mm gap (reduced from 15mm)
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text("TO:", 14, 75);
+  doc.text("TO:", 14, toSectionY);
   doc.setFont('helvetica', 'normal');
-  doc.text(invoice.clientName, 14, 80);
+  doc.text(invoice.clientName, 14, toSectionY + 5);
   
   // Add billing information if available
-  let billingY = 85;
+  let billingY = toSectionY + 10;
   if (invoice.billingContactName) {
     doc.text(`ATTN: ${invoice.billingContactName}`, 14, billingY);
     billingY += 5;
@@ -391,15 +580,8 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
     doc.text(invoice.billingContactEmail, 14, billingY);
   }
   
-  // For section - project details
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text("FOR:", pageWidth - 90, 75);
-  doc.setFont('helvetica', 'normal');
-  doc.text(invoice.projectName || "Consulting Services", pageWidth - 90, 80);
-  
   // Table for line items
-  const startY = 100;
+  const tableStartY = 100;
   
   // Define table headers
   doc.setFillColor(255, 255, 255); // White background
@@ -408,14 +590,14 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   
   // Draw table header
   doc.setFont('helvetica', 'bold');
-  doc.rect(14, startY, pageWidth - 28, 10, 'S');
-  doc.text("DESCRIPTION", 24, startY + 7);
-  doc.text("HOURS", pageWidth - 95, startY + 7, { align: 'center' });
-  doc.text("RATE", pageWidth - 55, startY + 7, { align: 'center' });
-  doc.text("AMOUNT", pageWidth - 20, startY + 7, { align: 'right' });
+  doc.rect(14, tableStartY, pageWidth - 28, 10, 'S');
+  doc.text("DESCRIPTION", 24, tableStartY + 7);
+  doc.text("HOURS", pageWidth - 95, tableStartY + 7, { align: 'center' });
+  doc.text("RATE", pageWidth - 55, tableStartY + 7, { align: 'center' });
+  doc.text("AMOUNT", pageWidth - 20, tableStartY + 7, { align: 'right' });
   
   // Format line items
-  let currentY = startY + 10;
+  let currentY = tableStartY + 10;
   
   // If there are line items, display them
   if (invoice.lineItems && invoice.lineItems.length > 0) {
@@ -453,9 +635,9 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
         }
         
         // Add hours, rate and amount only to the first row
-        doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
-        doc.text(`${formatCurrency(Number(item.rate))}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
-        doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
+        doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, tableStartY + 17, { align: 'center' });
+        doc.text(`${formatCurrency(Number(item.rate))}/hr`, pageWidth - 55, tableStartY + 17, { align: 'center' });
+        doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, tableStartY + 17, { align: 'right' });
       }
     });
   } else {
@@ -474,17 +656,17 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
     doc.text(period, 24, currentY + 7);
     
     // Add hours, rate and amount
-    doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, startY + 17, { align: 'center' });
+    doc.text(formatHours(invoice.totalHours || 0), pageWidth - 95, tableStartY + 17, { align: 'center' });
     
     // Calculate effective hourly rate if we have total hours and amount
     if (invoice.totalHours && invoice.totalAmount) {
       const effectiveRate = Number(invoice.totalAmount) / Number(invoice.totalHours);
-      doc.text(`${formatCurrency(effectiveRate)}/hr`, pageWidth - 55, startY + 17, { align: 'center' });
+      doc.text(`${formatCurrency(effectiveRate)}/hr`, pageWidth - 55, tableStartY + 17, { align: 'center' });
     } else {
-      doc.text("N/A", pageWidth - 55, startY + 17, { align: 'center' });
+      doc.text("N/A", pageWidth - 55, tableStartY + 17, { align: 'center' });
     }
     
-    doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, startY + 17, { align: 'right' });
+    doc.text(formatCurrency(Number(invoice.totalAmount)), pageWidth - 20, tableStartY + 17, { align: 'right' });
     
     currentY += 10;
   }
@@ -516,7 +698,10 @@ function generateInvoicePDFFallback(invoice: InvoiceWithLineItems, options: Invo
   return doc;
 }
 
-export function downloadInvoice(invoice: InvoiceWithLineItems): void {
+export async function downloadInvoice(
+  invoice: InvoiceWithLineItems,
+  userName?: string
+): Promise<void> {
   try {
     console.log('Starting PDF generation for invoice:', invoice.invoiceNumber);
     
@@ -555,45 +740,6 @@ export function downloadInvoice(invoice: InvoiceWithLineItems): void {
       console.log('Invoice has no line items, will generate PDF with available data', invoice);
     }
     
-    // Only validate line items if they exist
-    if (invoice.lineItems.length > 0) {
-      // Check at least the first line item for valid data
-      const firstItem = invoice.lineItems[0];
-      if (!firstItem || typeof firstItem !== 'object') {
-        console.error('First line item is invalid', firstItem);
-        // Clear line items instead of throwing
-        invoice.lineItems = [];
-        console.log('Cleared invalid line items');
-      } else {
-        // Ensure each line item has proper hours and amount
-        for (let i = 0; i < invoice.lineItems.length; i++) {
-          const item = invoice.lineItems[i];
-          if (item.hours === undefined || item.hours === null || isNaN(Number(item.hours))) {
-            console.error(`Line item ${i} has invalid hours:`, item);
-            item.hours = 0 as any; // Fix the value rather than failing
-          }
-          
-          if (item.amount === undefined || item.amount === null || isNaN(Number(item.amount))) {
-            console.error(`Line item ${i} has invalid amount:`, item);
-            item.amount = '0'; // Fix the value rather than failing
-          }
-          
-          if (item.rate === undefined || item.rate === null || isNaN(Number(item.rate))) {
-            console.error(`Line item ${i} has invalid rate:`, item);
-            item.rate = '0'; // Fix the value rather than failing
-          }
-        }
-      }
-    }
-    
-    if (typeof invoice.totalHours !== 'number' || isNaN(invoice.totalHours)) {
-      console.log('Total hours is missing or not a number - calculating from line items');
-      // Set default if missing or calculate from line items
-      invoice.totalHours = invoice.lineItems.length > 0 
-        ? invoice.lineItems.reduce((sum, item) => sum + Number(item.hours || 0), 0)
-        : 0;
-    }
-    
     if (typeof invoice.totalAmount !== 'number' && typeof invoice.totalAmount !== 'string') {
       console.error('Invoice amount is missing or invalid', invoice);
       // Calculate from line items or use 0 as fallback
@@ -602,10 +748,61 @@ export function downloadInvoice(invoice: InvoiceWithLineItems): void {
         : "0";
     }
     
+    // Fetch business info
+    console.log('Fetching business information for invoice');
+    let businessInfo: BusinessInfoValues | undefined;
+    
+    try {
+      const res = await fetch('/api/business-info', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      
+      if (res.ok) {
+        businessInfo = await res.json();
+        console.log('Business info loaded for invoice:', businessInfo);
+      } else {
+        console.warn('Failed to load business info for invoice');
+      }
+    } catch (error) {
+      console.error('Error fetching business info for invoice:', error);
+      // Continue without business info
+    }
+    
+    // Load the logo image if available
+    let logoDataUrl: string | null = null;
+    if (businessInfo?.companyLogo) {
+      try {
+        const logoUrl = `/api/business-logo/${businessInfo.companyLogo}`;
+        console.log('Fetching logo image from:', logoUrl);
+        
+        // Fetch the image
+        const response = await fetch(logoUrl);
+        if (response.ok) {
+          // Convert to blob and then to data URL
+          const blob = await response.blob();
+          logoDataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          console.log('Logo successfully loaded as data URL');
+        } else {
+          console.warn('Failed to load logo image:', response.status, response.statusText);
+        }
+      } catch (error) {
+        console.error('Error loading logo image:', error);
+        // Continue without logo
+      }
+    }
+    
     console.log('Validated invoice data, generating PDF...');
     try {
       // Try the ESM import version first
-      const doc = generateInvoicePDF(invoice);
+      const doc = generateInvoicePDF(invoice, { businessInfo, logoDataUrl, userName });
       console.log('PDF generated successfully, saving file...');
       doc.save(`Invoice-${invoice.invoiceNumber}.pdf`);
       console.log('PDF saved successfully');
@@ -614,7 +811,7 @@ export function downloadInvoice(invoice: InvoiceWithLineItems): void {
       
       // Try the fallback method with global jsPDF
       try {
-        const doc = generateInvoicePDFFallback(invoice);
+        const doc = generateInvoicePDFFallback(invoice, { businessInfo, logoDataUrl, userName });
         console.log('PDF generated successfully using fallback method, saving file...');
         doc.save(`Invoice-${invoice.invoiceNumber}.pdf`);
         console.log('PDF saved successfully using fallback method');

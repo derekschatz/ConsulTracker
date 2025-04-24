@@ -9,7 +9,8 @@ import {
   Clock,
   FileText,
   X,
-  LogOut
+  LogOut,
+  Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -146,16 +147,27 @@ const MobileNav = ({ className }: MobileNavProps) => {
                 </div>
               </div>
               
-              <button 
-                onClick={() => {
-                  logoutMutation.mutate();
-                  closeMenu();
-                }} 
-                className="flex items-center justify-center text-slate-500 hover:text-slate-700 p-2"
-                disabled={logoutMutation.isPending}
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
+              <div className="flex items-center space-x-3">
+                <Link href="/account/settings" onClick={closeMenu}>
+                  <button 
+                    className="flex items-center justify-center text-slate-500 hover:text-slate-700 p-2"
+                    aria-label="Settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </Link>
+                <button 
+                  onClick={() => {
+                    logoutMutation.mutate();
+                    closeMenu();
+                  }} 
+                  className="flex items-center justify-center text-slate-500 hover:text-slate-700 p-2"
+                  disabled={logoutMutation.isPending}
+                  aria-label="Logout"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

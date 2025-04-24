@@ -15,6 +15,7 @@
   - [x] Engagement management endpoints
   - [x] Time log management endpoints
   - [x] Invoice management endpoints
+  - [x] User and business settings endpoints
 - [ ] Develop frontend components
   - [x] Dashboard layout
   - [x] Client management UI
@@ -26,6 +27,7 @@
   - [x] Reverse display focus to prioritize engagements over clients
   - [x] Add clickable client names with sliding details panel
   - [x] Automatically populate client billing details on invoices
+  - [x] User account settings page with personal info and business details
 - [x] Add PDF generation for invoices
 - [ ] Implement email notifications
 - [ ] Add data validation and error handling
@@ -45,6 +47,10 @@
 - Improve data table layout with separate columns for client and project information
 - Enhance UX by making project/engagement information more prominent than client information
 - Enhance client management workflow with inline editing capabilities
+- Need to implement APIs for managing user personal info and business details
+- Create backend endpoints for business logo upload and retrieval
+- Add error handling for the account settings forms
+- Modified business info form to use phone number instead of country field
 
 ## Notes
 - Using Drizzle ORM for database operations

@@ -1,11 +1,13 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { InvoiceWithLineItems } from "@shared/schema";
 import { generateInvoicePDF, downloadInvoice } from "@/lib/pdf-generator";
 import { formatCurrency, formatHours } from "@/lib/format-utils";
 import { Download, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useBusinessInfo } from "@/hooks/use-business-info";
+import { useAuth } from "@/hooks/use-auth";
 
 interface InvoicePreviewModalProps {
   invoice: InvoiceWithLineItems | null;
@@ -41,15 +43,10 @@ const InvoicePreviewModal = ({
   } | null>(null);
   
   const { toast } = useToast();
-
-  // Reset state when the modal closes
-  useEffect(() => {
-    if (!open) {
-      setPreviewData(null);
-    } else if (invoice) {
-      generatePreview();
-    }
-  }, [open, invoice]);
+  // Fetch business info for the invoice preview
+  const { data: businessInfo, isLoading: isLoadingBusinessInfo } = useBusinessInfo();
+  // Get the current user information
+  const { user } = useAuth();
 
   // Function to format a date for display
   const formatDate = (date: string | Date) => {
@@ -67,27 +64,16 @@ const InvoicePreviewModal = ({
   };
 
   // Generate a visual preview of the invoice instead of using PDF
-  const generatePreview = async () => {
+  // Using useCallback to memoize the function and avoid dependency cycles
+  const generatePreview = useCallback(async () => {
     if (!invoice) return;
 
     try {
       setIsLoading(true);
       
-      // Log the raw date values from the API
-      console.log('Raw invoice period dates:', {
-        periodStart: invoice.periodStart,
-        periodEnd: invoice.periodEnd
-      });
-      
       // Format dates
       const formattedPeriodStart = formatDate(invoice.periodStart);
       const formattedPeriodEnd = formatDate(invoice.periodEnd);
-      
-      // Log the formatted dates
-      console.log('Formatted invoice period dates:', {
-        periodStart: formattedPeriodStart,
-        periodEnd: formattedPeriodEnd
-      });
       
       // Get rate from the first line item if available
       let rate = '';
@@ -120,7 +106,6 @@ const InvoicePreviewModal = ({
         billingCountry: invoice.billingCountry || undefined
       });
     } catch (error: any) {
-      console.error("Error generating invoice preview:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to generate invoice preview",
@@ -130,24 +115,33 @@ const InvoicePreviewModal = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [invoice, toast, onOpenChange, formatDate]);
+
+  // Reset state when the modal closes
+  useEffect(() => {
+    if (!open) {
+      setPreviewData(null);
+    } else if (invoice) {
+      generatePreview();
+    }
+  }, [open, invoice, generatePreview]);
 
   const handleDownload = () => {
     if (!invoice) return;
     
     try {
       // Use the shared downloadInvoice function for consistency
-      downloadInvoice(invoice);
+      // Pass the user's name to the PDF generator
+      downloadInvoice(invoice, user?.name || undefined);
       
       toast({
         title: "Download started",
         description: "The invoice PDF download has started.",
       });
     } catch (error) {
-      console.error("Error downloading PDF:", error);
       toast({
         title: "Error",
-        description: "Failed to download the invoice",
+        description: error instanceof Error ? error.message : "Failed to download the invoice",
         variant: "destructive",
       });
     }
@@ -161,12 +155,15 @@ const InvoicePreviewModal = ({
       onOpenChange(false);
       
       // Notify the parent to open the email modal
-      // We'll need to implement this in the parent component
       window.dispatchEvent(new CustomEvent('openEmailModal', { 
         detail: { invoiceId: invoice.id }
       }));
     } catch (error) {
-      console.error("Error preparing email:", error);
+      toast({
+        title: "Error",
+        description: "Failed to prepare email",
+        variant: "destructive",
+      });
     }
   };
 
@@ -199,7 +196,7 @@ const InvoicePreviewModal = ({
         </DialogHeader>
         
         <div className="flex-1 overflow-auto bg-slate-100 rounded-md p-4">
-          {isLoading ? (
+          {isLoading || isLoadingBusinessInfo ? (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -210,14 +207,27 @@ const InvoicePreviewModal = ({
             <div className="max-w-3xl mx-auto bg-white shadow-md rounded-lg overflow-hidden">
               {/* Invoice Header */}
               <div className="p-6 bg-slate-50 border-b">
-                <div className="flex flex-col md:flex-row justify-between">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-800">INVOICE</h2>
-                    <div className="mt-2 text-gray-600">
-                      {/* Placeholder for company information that will be configurable */}
-                    </div>
+                <div className="flex justify-between items-start">
+                  {/* Company Logo - Centered at top */}
+                  <div className="w-1/3">
+                    {/* Placeholder for left side */}
                   </div>
-                  <div className="mt-4 md:mt-0 text-right">
+                  
+                  {/* Logo in center */}
+                  <div className="flex justify-center items-center w-1/3">
+                    {businessInfo?.companyLogo && (
+                      <div className="max-w-[160px] max-h-[80px]">
+                        <img 
+                          src={`/api/business-logo/${businessInfo.companyLogo}`}
+                          alt="Company logo" 
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Invoice details at top right */}
+                  <div className="text-right w-1/3">
                     <div className="text-gray-700">
                       <p className="font-semibold">Invoice #{previewData.invoiceNumber}</p>
                       <p>Date: {previewData.issueDate}</p>
@@ -225,13 +235,46 @@ const InvoicePreviewModal = ({
                     </div>
                   </div>
                 </div>
+                
+                <div className="mt-6">
+                  <div className="flex flex-col items-start">
+                    <h2 className="text-2xl font-bold text-gray-800">
+                      {user?.name || businessInfo?.companyName || "INVOICE"}
+                    </h2>
+                    {/* Company Information - Reduced spacing */}
+                    <div className="mt-1 text-gray-600 text-sm">
+                      {businessInfo?.companyName && (
+                        <p className="font-medium">{businessInfo.companyName}</p>
+                      )}
+                      {businessInfo?.address && (
+                        <p>{businessInfo.address}</p>
+                      )}
+                      {/* City, State ZIP on one line if available */}
+                      {(businessInfo?.city || businessInfo?.state || businessInfo?.zip) && (
+                        <p>
+                          {[
+                            businessInfo.city,
+                            businessInfo.state,
+                            businessInfo.zip
+                          ].filter(Boolean).join(", ")}
+                        </p>
+                      )}
+                      {businessInfo?.phoneNumber && (
+                        <p>Phone: {businessInfo.phoneNumber}</p>
+                      )}
+                      {businessInfo?.taxId && (
+                        <p>Tax ID: {businessInfo.taxId}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Bill To section */}
-              <div className="p-6 border-b">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Bill To section - Reduced spacing with company details */}
+              <div className="p-4 border-b">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500 mb-2">BILL TO:</h3>
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">BILL TO:</h3>
                     <p className="font-semibold text-gray-800">{previewData.clientName}</p>
                     {previewData.billingContactName && (
                       <p>ATTN: {previewData.billingContactName}</p>
@@ -256,11 +299,7 @@ const InvoicePreviewModal = ({
                       <p>{previewData.billingContactEmail}</p>
                     )}
                   </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 mb-2">FOR:</h3>
-                    <p className="font-semibold text-gray-800">{previewData.projectName}</p>
-                    <p>Period: {previewData.periodStart} - {previewData.periodEnd}</p>
-                  </div>
+                  {/* Period information will be shown in the invoice summary table */}
                 </div>
               </div>
 

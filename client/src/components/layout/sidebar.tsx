@@ -6,7 +6,8 @@ import {
   Building2,
   Clock,
   FileText,
-  LogOut
+  LogOut,
+  Settings
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -93,13 +94,24 @@ const Sidebar = ({ className }: SidebarProps) => {
                 <p className="text-xs text-slate-500">Consultant</p>
               </div>
             </div>
-            <button 
-              onClick={() => logoutMutation.mutate()} 
-              className="flex items-center text-slate-500 hover:text-slate-700"
-              disabled={logoutMutation.isPending}
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+            <div className="flex items-center space-x-2">
+              <Link href="/account/settings">
+                <button 
+                  className="flex items-center text-slate-500 hover:text-slate-700"
+                  aria-label="Settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              </Link>
+              <button 
+                onClick={() => logoutMutation.mutate()} 
+                className="flex items-center text-slate-500 hover:text-slate-700"
+                disabled={logoutMutation.isPending}
+                aria-label="Logout"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

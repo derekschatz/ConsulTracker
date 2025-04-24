@@ -9,6 +9,7 @@ import Engagements from "@/components/engagements/engagements";
 import TimeLogs from "@/components/time-logs/time-logs";
 import Invoices from "@/components/invoices/invoices";
 import AuthPage from "@/pages/auth-page";
+import AccountSettings from "@/components/account/account-settings";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 
@@ -19,6 +20,7 @@ function Router() {
       <ProtectedRoute path="/engagements" component={Engagements} />
       <ProtectedRoute path="/time-logs" component={TimeLogs} />
       <ProtectedRoute path="/invoices" component={Invoices} />
+      <ProtectedRoute path="/account/settings" component={AccountSettings} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
