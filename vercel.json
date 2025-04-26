@@ -1,11 +1,17 @@
 {
   "version": 2,
+  "buildCommand": "npm run vercel-build",
   "builds": [
     {
       "src": "api/**/*.ts",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["server/**", "shared/**", "dist/**", "client/**"]
+        "includeFiles": [
+          "server/**/*.{ts,js}",
+          "shared/**/*.{ts,js}",
+          "dist/**/*",
+          "client/**/*"
+        ]
       }
     },
     {
