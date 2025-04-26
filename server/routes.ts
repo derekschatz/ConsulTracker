@@ -349,86 +349,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/engagements", async (req, res) => {
     try {
-      console.log("Received engagement creation request:", req.body);
-      console.log("Request user:", req.user);
-      
-      // Check authentication
+      // Check if the user is authenticated
       if (!req.isAuthenticated()) {
-        console.log("User not authenticated");
-        return res.status(401).json({ message: "Not authenticated" });
+        return res.status(401).json({ message: "You must be logged in to create an engagement" });
       }
       
+      // Get the user ID from the session
       const userId = (req.user as any).id;
-      console.log("User ID:", userId);
-
-      // Ensure the body is a proper object
-      if (!req.body || typeof req.body !== 'object') {
-        console.log("Invalid request body format:", req.body);
-        return res.status(400).json({ message: "Invalid request format" });
-      }
-
-      // Process data to match expected types in schema
-      const processedData = {
-        ...req.body,
-        userId,
-        // Convert string dates to Date objects
-        startDate: new Date(req.body.startDate),
-        endDate: new Date(req.body.endDate),
-        // Convert hourlyRate to a number if it's a string
-        hourlyRate: typeof req.body.hourlyRate === 'string' 
-          ? Number(req.body.hourlyRate) 
-          : req.body.hourlyRate,
-        // Ensure status is a string
-        status: req.body.status?.toString() || 'active'
-      };
       
-      console.log("Processed data before validation:", processedData);
+      // Validate and parse the request body (using our schema)
+      const { 
+        clientId, 
+        projectName, 
+        startDate, 
+        endDate, 
+        hourlyRate, 
+        totalCost,
+        type,
+        description 
+      } = req.body;
 
-      // Parse and validate the engagement data
-      const result = insertEngagementSchema.safeParse(processedData);
-
-      if (!result.success) {
-        console.log("Validation failed:", result.error);
-        return res.status(400).json({ message: "Invalid engagement data", errors: result.error.errors });
-      }
-
-      console.log("Validated engagement data:", result.data);
-
-      // Verify client exists
-      if (result.data.clientId) {
-        try {
-          const client = await storage.getClient(result.data.clientId);
-          if (!client) {
-            return res.status(400).json({ message: "Client does not exist" });
-          }
-        } catch (error) {
-          console.error("Error checking client:", error);
-          return res.status(500).json({ message: "Error verifying client" });
-        }
-      }
-
-      // Calculate status based on dates
-      const status = calculateEngagementStatus(
-        new Date(result.data.startDate),
-        new Date(result.data.endDate)
-      );
-
-      console.log("Calculated status:", status);
-
-      // Create the engagement
-      try {
-        const engagement = await storage.createEngagement({
-          ...result.data,
-          status
-        });
-        console.log("Created engagement:", engagement);
-        res.json(engagement);
-      } catch (error) {
-        console.error("Error creating engagement:", error);
-        throw error;
-      }
+      // Create the engagement with the user ID and calculated status
+      const engagement = await storage.createEngagement({
+        userId,
+        clientId,
+        projectName,
+        startDate,
+        endDate,
+        hourlyRate,
+        totalCost,
+        type,
+        description,
+        status: calculateEngagementStatus(new Date(startDate), new Date(endDate))
+      });
+      
+      res.status(201).json(engagement);
     } catch (error) {
-      console.error("Error in POST /api/engagements:", error);
+      console.error("Error creating engagement:", error);
       res.status(500).json({ message: "Failed to create engagement" });
     }
   });
@@ -444,76 +401,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the user ID from the session
       const userId = (req.user as any).id;
       
-      // Process data to fix types before validation
-      const processedData: any = {...req.body};
+      // Validate and parse the request body
+      const { 
+        clientId, 
+        projectName, 
+        startDate, 
+        endDate, 
+        hourlyRate, 
+        totalCost,
+        type,
+        description 
+      } = req.body;
       
-      // Convert dates if present
-      if (processedData.startDate) {
-        processedData.startDate = new Date(processedData.startDate);
-      }
-      if (processedData.endDate) {
-        processedData.endDate = new Date(processedData.endDate);
-      }
+      // Calculate status based on dates
+      const status = calculateEngagementStatus(new Date(startDate), new Date(endDate));
       
-      // Convert hourlyRate if it's a string
-      if (processedData.hourlyRate && typeof processedData.hourlyRate === 'string') {
-        processedData.hourlyRate = Number(processedData.hourlyRate);
-      }
+      // Update the engagement
+      const updatedEngagement = await storage.updateEngagement(id, {
+        clientId,
+        projectName,
+        startDate,
+        endDate,
+        hourlyRate,
+        totalCost,
+        type,
+        description,
+        status
+      }, userId);
       
-      // Ensure status is a string if present
-      if (processedData.status !== undefined) {
-        processedData.status = processedData.status.toString();
-      }
-      
-      console.log("Processed data for update:", processedData);
-      
-      const validationResult = insertEngagementSchema.partial().safeParse(processedData);
-      if (!validationResult.success) {
-        return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
-      }
-      
-      // Get the input data
-      const inputData = validationResult.data;
-      
-      // Only calculate status if both dates are provided in this update
-      if (inputData.startDate !== undefined && inputData.endDate !== undefined) {
-        // Calculate the status based on start and end dates
-        const status = calculateEngagementStatus(
-          new Date(inputData.startDate), 
-          new Date(inputData.endDate)
-        );
-        
-        // Override the status in the input data
-        inputData.status = status;
-      } 
-      // If only one date is provided, we need to get the other one from the database
-      else if (inputData.startDate !== undefined || inputData.endDate !== undefined) {
-        // Get the current engagement
-        const currentEngagement = await storage.getEngagement(id, userId);
-        if (!currentEngagement) {
-          return res.status(404).json({ message: "Engagement not found" });
-        }
-        
-        // Get the dates (use the new one if provided, otherwise use the existing one)
-        const startDate = inputData.startDate ? new Date(inputData.startDate) : new Date(currentEngagement.startDate);
-        const endDate = inputData.endDate ? new Date(inputData.endDate) : new Date(currentEngagement.endDate);
-        
-        // Calculate the status based on the combined dates
-        const status = calculateEngagementStatus(startDate, endDate);
-        
-        // Override the status in the input data
-        inputData.status = status;
-      }
-
-      const updatedEngagement = await storage.updateEngagement(id, inputData, userId);
       if (!updatedEngagement) {
         return res.status(404).json({ message: "Engagement not found" });
       }
       
-      console.log("Updated engagement:", updatedEngagement);
       res.json(updatedEngagement);
     } catch (error) {
-      console.error("Failed to update engagement:", error);
+      console.error("Error updating engagement:", error);
       res.status(500).json({ message: "Failed to update engagement" });
     }
   });

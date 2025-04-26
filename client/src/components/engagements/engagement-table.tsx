@@ -31,74 +31,80 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
   const columns: Column<any>[] = [
     {
       accessor: 'projectName',
-      header: 'Engagement',
+      header: 'Project Name',
       cell: (engagement) => (
-        <div>
-          <div className="font-medium text-slate-900">
-            {engagement.projectName}
-          </div>
+        <div className="truncate max-w-[200px]">
+          <span className="font-medium text-slate-800">{engagement.projectName}</span>
           <div className="text-xs text-slate-500 mt-1">
-            {engagement.description}
+            <span className="inline-block mr-2">
+              {engagement.clientName}
+            </span>
           </div>
         </div>
       ),
-    },
-    {
-      accessor: 'clientName',
-      header: 'Client',
-      cell: (engagement) => (
-        <div>
-          <div 
-            className="font-medium text-slate-700 hover:text-blue-600 hover:underline cursor-pointer"
-            onClick={() => handleClientClick(engagement.clientId)}
-          >
-            {engagement.clientName}
-          </div>
-          {engagement.clientEmail && (
-            <div className="text-xs text-slate-500 mt-1 flex items-center">
-              <Mail className="h-3 w-3 mr-1.5 text-slate-400" />
-              {engagement.clientEmail}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      accessor: 'startDate',
-      header: 'Start Date',
-      cell: (engagement) => (
-        <div className="flex items-center">
-          <Calendar className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
-          {formatDate(engagement.startDate)}
-        </div>
-      ),
-      hidden: () => isMobile,
-    },
-    {
-      accessor: 'endDate',
-      header: 'End Date',
-      cell: (engagement) => (
-        <div className="flex items-center">
-          <Calendar className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
-          {formatDate(engagement.endDate)}
-        </div>
-      ),
-      hidden: () => isMobile,
-    },
-    {
-      accessor: 'hourlyRate',
-      header: 'Rate',
-      cell: (engagement) => formatCurrency(engagement.hourlyRate) + '/hr',
     },
     {
       accessor: 'status',
       header: 'Status',
       cell: (engagement) => {
-        const { bg, text } = getStatusClasses(engagement.status);
+        const status = engagement.status;
+        const { bg, text } = getStatusClasses(status);
+        
         return (
-          <span className={`inline-flex rounded-full ${bg} ${text} px-2 py-1 text-xs font-medium`}>
-            {engagement.status.charAt(0).toUpperCase() + engagement.status.slice(1)}
-          </span>
+          <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </div>
+        );
+      },
+    },
+    {
+      accessor: 'type',
+      header: 'Type',
+      cell: (engagement) => {
+        const type = engagement.type || 'hourly';
+        
+        return (
+          <div className="text-sm">
+            {type.charAt(0).toUpperCase() + type.slice(1)}
+          </div>
+        );
+      },
+    },
+    {
+      accessor: 'duration',
+      header: 'Duration',
+      cell: (engagement) => {
+        const startDate = formatDate(engagement.startDate);
+        const endDate = formatDate(engagement.endDate);
+        
+        return (
+          <div className="text-sm">
+            <div>{startDate}</div>
+            <div className="text-slate-500">to {endDate}</div>
+          </div>
+        );
+      },
+    },
+    {
+      accessor: 'cost',
+      header: 'Cost',
+      cell: (engagement) => {
+        const type = engagement.type || 'hourly';
+        
+        return (
+          <div className="text-sm">
+            {type === 'hourly' ? (
+              <div>
+                {formatCurrency(engagement.hourlyRate || 0)}
+                <span className="text-slate-500">/hr</span>
+              </div>
+            ) : (
+              <div>
+                {formatCurrency(engagement.totalCost || 0)}
+                <span className="text-slate-500"> total</span>
+              </div>
+            )}
+          </div>
         );
       },
     },
@@ -106,30 +112,28 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
       accessor: 'actions',
       header: 'Actions',
       cell: (engagement) => (
-        <div className="flex justify-end items-center space-x-3">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => onViewInvoiceHistory(engagement.clientName)} 
-            className="h-8 w-8 text-slate-600 hover:text-blue-600"
+        <div className="flex space-x-2 justify-end">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onViewInvoiceHistory(engagement.clientName)}
             title="View Invoice History"
           >
-            <ReceiptIcon size={16} className="text-current" />
+            <ReceiptIcon className="h-4 w-4" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => onEdit(engagement)} 
-            className="h-8 w-8 text-slate-600 hover:text-blue-600"
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(engagement)}
             title="Edit Engagement"
           >
             <Edit className="h-4 w-4" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => onDelete(engagement.id)} 
-            className="h-8 w-8 text-slate-600 hover:text-red-600"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+            onClick={() => onDelete(engagement.id)}
             title="Delete Engagement"
           >
             <Trash2 className="h-4 w-4" />

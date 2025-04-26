@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, Users } from 'lucide-react';
 import EngagementFilters from './engagement-filters';
 import EngagementTable from './engagement-table';
 import EngagementModal from '@/components/modals/engagement-modal';
 import { DeleteConfirmationModal } from '@/components/modals/delete-confirmation-modal';
 import InvoiceHistoryModal from '@/components/modals/invoice-history-modal';
+import ClientsManagementModal from '@/components/modals/clients-management-modal';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -25,6 +26,7 @@ const Engagements = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInvoiceHistoryModalOpen, setIsInvoiceHistoryModalOpen] = useState(false);
+  const [isClientsManagementModalOpen, setIsClientsManagementModalOpen] = useState(false);
   const [currentEngagement, setCurrentEngagement] = useState<any>(null);
   const [engagementToDelete, setEngagementToDelete] = useState<number | null>(null);
   const [selectedClient, setSelectedClient] = useState<string>('');
@@ -104,6 +106,14 @@ const Engagements = () => {
 
   const handleCloseCreateModal = (open: boolean) => {
     if (!open) setIsCreateModalOpen(false);
+  };
+
+  const handleOpenClientsManagementModal = () => {
+    setIsClientsManagementModalOpen(true);
+  };
+
+  const handleCloseClientsManagementModal = (open: boolean) => {
+    if (!open) setIsClientsManagementModalOpen(false);
   };
 
   const handleOpenEditModal = (engagement: any) => {
@@ -206,14 +216,23 @@ const Engagements = () => {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Engagements</h1>
           </div>
-          <Button 
-            onClick={handleOpenCreateModal} 
-            className="mt-3 sm:mt-0"
-            size="sm"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Engagement
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
+            <Button 
+              onClick={handleOpenClientsManagementModal} 
+              size="sm"
+              variant="outline"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Manage Clients
+            </Button>
+            <Button 
+              onClick={handleOpenCreateModal} 
+              size="sm"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Engagement
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -262,6 +281,13 @@ const Engagements = () => {
         open={isInvoiceHistoryModalOpen}
         onOpenChange={handleCloseInvoiceHistoryModal}
         clientName={selectedClient}
+      />
+
+      {/* Clients Management Modal */}
+      <ClientsManagementModal
+        open={isClientsManagementModalOpen}
+        onOpenChange={handleCloseClientsManagementModal}
+        onSuccess={handleSuccess}
       />
     </div>
   );

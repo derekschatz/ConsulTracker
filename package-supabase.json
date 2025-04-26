@@ -1,0 +1,16 @@
+{
+  "name": "consultracker-supabase-migration",
+  "version": "1.0.0",
+  "description": "Migration tools for ConsulTracker to Supabase",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "prepare-sql": "node setup_supabase_migration.js",
+    "migrate-users": "node migrate_users_to_supabase.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.42.0",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3"
+  }
+} 

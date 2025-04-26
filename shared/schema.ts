@@ -7,6 +7,10 @@ import { relations } from "drizzle-orm";
 export const engagementStatusEnum = z.enum(['active', 'completed', 'upcoming']);
 export type EngagementStatus = z.infer<typeof engagementStatusEnum>;
 
+// Define engagement type enum
+export const engagementTypeEnum = z.enum(['hourly', 'project']);
+export type EngagementType = z.infer<typeof engagementTypeEnum>;
+
 /**
  * Calculate the engagement status based on start and end dates
  * @param startDate The engagement start date
@@ -70,7 +74,9 @@ export const engagements = pgTable("engagements", {
   projectName: text("project_name").notNull(),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
-  hourlyRate: numeric("hourly_rate").notNull(),
+  hourlyRate: numeric("hourly_rate"),
+  totalCost: numeric("total_cost"),
+  type: text("type").notNull().default('hourly'),
   description: text("description"),
   status: text("status").notNull().default('active')
 });
@@ -90,9 +96,22 @@ export const insertEngagementSchema = z.object({
   projectName: z.string(),
   startDate: z.date(),
   endDate: z.date(),
-  hourlyRate: z.number().positive('Hourly rate must be positive'),
+  hourlyRate: z.number().positive('Hourly rate must be positive').optional(),
+  totalCost: z.number().positive('Total cost must be positive').optional(),
+  type: engagementTypeEnum.default('hourly'),
   description: z.string().optional(),
   status: z.string().default('active')
+}).refine(data => {
+  if (data.type === 'hourly') {
+    return data.hourlyRate !== undefined;
+  }
+  if (data.type === 'project') {
+    return data.totalCost !== undefined;
+  }
+  return true;
+}, {
+  message: "Hourly rate is required for hourly engagements. Total cost is required for project engagements.",
+  path: ['type'],
 });
 
 // Time logs table
@@ -136,9 +155,11 @@ export const invoices = pgTable("invoices", {
   totalHours: doublePrecision("total_hours").notNull(),
   status: text("status").notNull().default('submitted'),
   notes: text("notes"),
-  periodStart: timestamp("period_start").notNull(),
-  periodEnd: timestamp("period_end").notNull(),
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
   projectName: text("project_name"),
+  milestoneName: text("milestone_name"),
+  amountDue: numeric("amount_due"),
   billingContactName: text("billing_contact_name"),
   billingContactEmail: text("billing_contact_email"),
   billingAddress: text("billing_address"),
@@ -169,6 +190,8 @@ export const insertInvoiceSchema = createInsertSchema(invoices).pick({
   periodStart: true,
   periodEnd: true,
   projectName: true,
+  milestoneName: true,
+  amountDue: true,
   billingContactName: true,
   billingContactEmail: true,
   billingAddress: true,

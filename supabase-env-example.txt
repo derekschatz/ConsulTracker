@@ -1,0 +1,10 @@
+# Original database connection (your current database)
+ORIGINAL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/consultracker
+
+# Supabase configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_KEY=your-service-key
+
+# New database connection (for Supabase)
+DATABASE_URL=postgresql://postgres:your-password@db.your-project-id.supabase.co:5432/postgres 

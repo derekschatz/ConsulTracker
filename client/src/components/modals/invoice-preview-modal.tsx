@@ -8,6 +8,7 @@ import { Download, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useBusinessInfo } from "@/hooks/use-business-info";
 import { useAuth } from "@/hooks/use-auth";
+import { Badge } from "@/components/ui/badge";
 
 interface InvoicePreviewModalProps {
   invoice: InvoiceWithLineItems | null;
@@ -32,6 +33,7 @@ const InvoicePreviewModal = ({
     totalHours: number;
     periodStart: string;
     periodEnd: string;
+    status: string;
     rate?: string;
     billingContactName?: string;
     billingContactEmail?: string;
@@ -47,6 +49,22 @@ const InvoicePreviewModal = ({
   const { data: businessInfo, isLoading: isLoadingBusinessInfo } = useBusinessInfo();
   // Get the current user information
   const { user } = useAuth();
+
+  // Function to get status badge variant based on invoice status
+  const getStatusVariant = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'draft':
+        return 'outline';
+      case 'pending':
+        return 'secondary';
+      case 'paid':
+        return 'default';
+      case 'overdue':
+        return 'destructive';
+      default:
+        return 'default';
+    }
+  };
 
   // Function to format a date for display
   const formatDate = (date: string | Date) => {
@@ -96,6 +114,7 @@ const InvoicePreviewModal = ({
         totalHours: invoice.totalHours || 0,
         periodStart: formattedPeriodStart,
         periodEnd: formattedPeriodEnd,
+        status: invoice.status || 'Draft',
         rate,
         billingContactName: invoice.billingContactName || undefined,
         billingContactEmail: invoice.billingContactEmail || undefined,
@@ -229,7 +248,12 @@ const InvoicePreviewModal = ({
                   {/* Invoice details at top right */}
                   <div className="text-right w-1/3">
                     <div className="text-gray-700">
-                      <p className="font-semibold">Invoice #{previewData.invoiceNumber}</p>
+                      <div className="flex justify-end items-center gap-2 mb-1">
+                        <p className="font-semibold">Invoice #{previewData.invoiceNumber}</p>
+                        <Badge variant={getStatusVariant(previewData.status)} className="ml-2">
+                          {previewData.status}
+                        </Badge>
+                      </div>
                       <p>Date: {previewData.issueDate}</p>
                       <p>Due Date: {previewData.dueDate}</p>
                     </div>

@@ -59,6 +59,8 @@ interface Engagement {
   endDate: string;
   status: string;
   userId: number;
+  type: 'hourly' | 'project';
+  totalCost?: number;
 }
 
 // Extend the invoice schema with additional validation
@@ -70,10 +72,29 @@ const formSchema = z.object({
     .refine((val) => Number(val) > 0, {
       message: "Engagement is required",
     }),
-  periodStart: z.string().min(1, "Billing start is required"),
-  periodEnd: z.string().min(1, "Billing end is required"),
+  periodStart: z.string().optional(),
+  periodEnd: z.string().optional(),
+  milestoneName: z.string().optional(),
+  amountDue: z.number().optional(),
   notes: z.string().optional(),
   netTerms: z.string().min(1, "Net terms are required"),
+}).superRefine((data, ctx) => {
+  // For hourly engagements, require start and end dates
+  if (data.periodStart === undefined || data.periodStart === "") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Start date is required for hourly engagements",
+      path: ["periodStart"],
+    });
+  }
+  
+  if (data.periodEnd === undefined || data.periodEnd === "") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End date is required for hourly engagements",
+      path: ["periodEnd"],
+    });
+  }
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -105,6 +126,8 @@ interface TimeLog {
     endDate: string;
     status: string;
     userId: number;
+    type: 'hourly' | 'project';
+    totalCost?: number;
   };
   billableAmount: number;
 }
@@ -142,6 +165,9 @@ const InvoiceModal = ({
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [clientBillingDetails, setClientBillingDetails] = useState<any>(null);
+  const [engagementType, setEngagementType] = useState<'hourly' | 'project'>('hourly');
+  const [milestoneName, setMilestoneName] = useState("");
+  const [amountDue, setAmountDue] = useState(0);
   const router = useRouter();
 
   // Fetch all active engagements
@@ -198,6 +224,8 @@ const InvoiceModal = ({
       engagementId: invoice?.engagementId?.toString() || engagementId || "",
       periodStart: invoice?.periodStart ? toStorageDate(new Date(invoice.periodStart)) : (periodStart ? toStorageDate(periodStart) : ""),
       periodEnd: invoice?.periodEnd ? toStorageDate(new Date(invoice.periodEnd)) : (periodEnd ? toStorageDate(periodEnd) : ""),
+      milestoneName: invoice?.milestoneName || "",
+      amountDue: invoice?.amountDue || 0,
       netTerms: "30",
       notes: invoice?.notes || "",
     },
@@ -215,6 +243,8 @@ const InvoiceModal = ({
   const watchEngagementId = watch("engagementId");
   const watchPeriodStart = watch("periodStart");
   const watchPeriodEnd = watch("periodEnd");
+  const watchAmountDue = watch("amountDue");
+  const watchMilestoneName = watch("milestoneName");
 
   // Update selectedClientName when client changes in form
   useEffect(() => {
@@ -281,21 +311,48 @@ const InvoiceModal = ({
       const clientNameValue = invoice.clientName || invoice.client_name;
       const totalAmountValue = invoice.totalAmount || invoice.total_amount;
       const totalHoursValue = invoice.totalHours || invoice.total_hours;
+      const milestoneNameValue = invoice.milestoneName || invoice.milestone_name;
       
       console.log("Setting edit mode with values:", {
         clientName: clientNameValue,
         totalAmount: Number(totalAmountValue),
-        totalHours: Number(totalHoursValue)
+        totalHours: Number(totalHoursValue),
+        milestoneName: milestoneNameValue
       });
       
       setIsEditMode(true);
       setSelectedClientName(clientNameValue);
       setInvoiceTotal(Number(totalAmountValue));
       setTotalHours(Number(totalHoursValue));
+      setMilestoneName(milestoneNameValue || "");
+      
+      if (invoice.amountDue) {
+        setAmountDue(Number(invoice.amountDue));
+      }
     } else {
       setIsEditMode(false);
     }
   }, [invoice]);
+
+  // Update engagement type when selected engagement changes
+  useEffect(() => {
+    if (watchEngagementId && filteredEngagements.length > 0) {
+      const selectedEngagement = filteredEngagements.find(
+        (e) => e.id.toString() === watchEngagementId.toString()
+      );
+      
+      if (selectedEngagement) {
+        setEngagementType(selectedEngagement.type || 'hourly');
+        
+        // If project-based and this is a new invoice, update amount due from engagement total cost
+        if (selectedEngagement.type === 'project' && !isEditMode && selectedEngagement.totalCost) {
+          form.setValue("amountDue", selectedEngagement.totalCost);
+          setAmountDue(selectedEngagement.totalCost);
+          setInvoiceTotal(selectedEngagement.totalCost);
+        }
+      }
+    }
+  }, [watchEngagementId, filteredEngagements, form, isEditMode]);
 
   // Calculate total from time logs
   const calculateTotal = (logs: TimeLog[]): number => {
@@ -481,14 +538,33 @@ const InvoiceModal = ({
         return;
       }
 
-      const lineItems = timeLogs.map((log) => ({
-        description: log.description,
-        hours: log.hours,
-        rate: parseFloat(selectedEngagement.hourlyRate),
-        amount: log.hours * parseFloat(selectedEngagement.hourlyRate),
-      }));
+      let lineItems = [];
+      let totalAmount = 0;
+      let hours = 0;
 
-      const total = lineItems.reduce((sum, item) => sum + item.amount, 0);
+      if (selectedEngagement.type === 'hourly') {
+        lineItems = timeLogs.map((log) => ({
+          description: log.description,
+          hours: log.hours,
+          rate: parseFloat(selectedEngagement.hourlyRate),
+          amount: log.hours * parseFloat(selectedEngagement.hourlyRate),
+        }));
+
+        totalAmount = lineItems.reduce((sum, item) => sum + item.amount, 0);
+        hours = timeLogs.reduce((sum, log) => sum + log.hours, 0);
+      } else {
+        // Project-based invoice with a single line item
+        lineItems = [{
+          description: data.milestoneName || "Project milestone",
+          hours: 0,
+          rate: 0,
+          amount: data.amountDue || 0,
+        }];
+        
+        totalAmount = data.amountDue || 0;
+        hours = 0;
+      }
+
       const issueDate = isEditMode ? new Date(invoice.issueDate) : new Date();
       const dueDate = isEditMode ? new Date(invoice.dueDate) : addDays(issueDate, parseInt(data.netTerms));
 
@@ -500,12 +576,15 @@ const InvoiceModal = ({
         invoiceNumber: isEditMode ? invoice.invoiceNumber : nextInvoiceNumber,
         issueDate: toStorageDate(issueDate),
         dueDate: toStorageDate(dueDate),
-        totalAmount: invoiceTotal,
-        totalHours: totalHours,
+        totalAmount: totalAmount,
+        totalHours: hours,
         status: isEditMode ? invoice.status : "submitted" as const,
-        periodStart: data.periodStart,
-        periodEnd: data.periodEnd,
+        periodStart: selectedEngagement.type === 'hourly' ? data.periodStart : undefined,
+        periodEnd: selectedEngagement.type === 'hourly' ? data.periodEnd : undefined,
         notes: data.notes || undefined,
+        milestoneName: selectedEngagement.type === 'project' ? data.milestoneName : undefined,
+        amountDue: selectedEngagement.type === 'project' ? data.amountDue : undefined,
+        lineItems: lineItems,
         // Include client billing details if available
         ...(clientBillingDetails && {
           billingContactName: clientBillingDetails.billingContactName,
@@ -592,7 +671,12 @@ const InvoiceModal = ({
         <DialogHeader>
           <DialogTitle>{isEditMode ? "Edit Invoice" : "Create New Invoice"}</DialogTitle>
           <DialogDescription>
-            {isEditMode ? "Update invoice details" : "Generate an invoice for billable hours"}
+            {isEditMode 
+              ? "Update invoice details" 
+              : engagementType === 'hourly' 
+                ? "Generate an invoice for billable hours" 
+                : "Create a project milestone invoice"
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -649,7 +733,7 @@ const InvoiceModal = ({
                                   key={engagement.id}
                                   value={engagement.id.toString()}
                                 >
-                                  {engagement.projectName}
+                                  {engagement.projectName} ({engagement.type})
                                 </SelectItem>
                               ),
                             )}
@@ -660,107 +744,203 @@ const InvoiceModal = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="grid grid-cols-1 gap-2">
-                    <Label htmlFor="periodStart">Start Date</Label>
-                    <Controller
-                      name="periodStart"
-                      control={form.control}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input
-                              type="date"
-                              {...field}
-                              value={field.value || ""}
-                              onChange={(e) => field.onChange(e.target.value)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                {/* Conditional rendering based on engagement type */}
+                {engagementType === 'hourly' ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-2">
+                        <Label htmlFor="periodStart">Start Date</Label>
+                        <Controller
+                          name="periodStart"
+                          control={form.control}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  type="date"
+                                  {...field}
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
 
-                  <div className="grid grid-cols-1 gap-2">
-                    <Label htmlFor="periodEnd">End Date</Label>
-                    <Controller
-                      name="periodEnd"
-                      control={form.control}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input
-                              type="date"
-                              {...field}
-                              value={field.value || ""}
-                              onChange={(e) => field.onChange(e.target.value)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
+                      <div className="grid grid-cols-1 gap-2">
+                        <Label htmlFor="periodEnd">End Date</Label>
+                        <Controller
+                          name="periodEnd"
+                          control={form.control}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  type="date"
+                                  {...field}
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-2">
+                        <Label htmlFor="milestoneName">Milestone Name</Label>
+                        <Controller
+                          name="milestoneName"
+                          control={form.control}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  type="text"
+                                  placeholder="e.g., Project Completion, Phase 1, etc."
+                                  {...field}
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2">
+                        <Label htmlFor="amountDue">Amount Due ($)</Label>
+                        <Controller
+                          name="amountDue"
+                          control={form.control}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  {...field}
+                                  value={field.value || ""}
+                                  onChange={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    field.onChange(value);
+                                    setAmountDue(value);
+                                    setInvoiceTotal(value);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* Time Logs Table */}
-              <div className="mt-6">
-                <h3 className="text-lg font-semibold mb-2">Time Logs</h3>
-                {timeLogs.length === 0 ? (
-                  <p className="text-gray-500 italic">
-                    No time logs found for the selected period.
-                  </p>
-                ) : (
+              {/* Time Logs Table - Only show for hourly engagements */}
+              {engagementType === 'hourly' && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-2">Time Logs</h3>
+                  {timeLogs.length === 0 ? (
+                    <p className="text-gray-500 italic">
+                      No time logs found for the selected period.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50">
+                            <th className="px-4 py-2 text-left">Date</th>
+                            <th className="px-4 py-2 text-left">Description</th>
+                            <th className="px-4 py-2 text-right">Hours</th>
+                            <th className="px-4 py-2 text-right">Rate</th>
+                            <th className="px-4 py-2 text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timeLogs.map((log) => (
+                            <tr key={log.id} className="border-t">
+                              <td className="px-4 py-2">
+                                {formatLocalDate(new Date(log.date))}
+                              </td>
+                              <td className="px-4 py-2">{log.description}</td>
+                              <td className="px-4 py-2 text-right">
+                                {formatHours(log.hours)}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {formatCurrency(
+                                  Number(log.engagement.hourlyRate),
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {formatCurrency(log.billableAmount)}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="border-t font-semibold">
+                            <td colSpan={2} className="px-4 py-2 text-right">
+                              Total:
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              {formatHours(totalHours)}
+                            </td>
+                            <td className="px-4 py-2"></td>
+                            <td className="px-4 py-2 text-right">
+                              {formatCurrency(invoiceTotal)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Project-based invoice summary */}
+              {engagementType === 'project' && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-2">Invoice Summary</h3>
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="px-4 py-2 text-left">Date</th>
                           <th className="px-4 py-2 text-left">Description</th>
-                          <th className="px-4 py-2 text-right">Hours</th>
-                          <th className="px-4 py-2 text-right">Rate</th>
                           <th className="px-4 py-2 text-right">Amount</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {timeLogs.map((log) => (
-                          <tr key={log.id} className="border-t">
-                            <td className="px-4 py-2">
-                              {formatLocalDate(new Date(log.date))}
-                            </td>
-                            <td className="px-4 py-2">{log.description}</td>
-                            <td className="px-4 py-2 text-right">
-                              {formatHours(log.hours)}
-                            </td>
-                            <td className="px-4 py-2 text-right">
-                              {formatCurrency(
-                                Number(log.engagement.hourlyRate),
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-right">
-                              {formatCurrency(log.billableAmount)}
-                            </td>
-                          </tr>
-                        ))}
+                        <tr className="border-t">
+                          <td className="px-4 py-2">
+                            {watchMilestoneName || "Project milestone"}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            {formatCurrency(amountDue)}
+                          </td>
+                        </tr>
                         <tr className="border-t font-semibold">
-                          <td colSpan={2} className="px-4 py-2 text-right">
+                          <td className="px-4 py-2 text-right">
                             Total:
                           </td>
                           <td className="px-4 py-2 text-right">
-                            {formatHours(totalHours)}
-                          </td>
-                          <td className="px-4 py-2"></td>
-                          <td className="px-4 py-2 text-right">
-                            {formatCurrency(invoiceTotal)}
+                            {formatCurrency(amountDue)}
                           </td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Additional Notes */}
               <div className="space-y-2">
