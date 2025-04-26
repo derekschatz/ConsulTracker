@@ -108,14 +108,14 @@ const createServer = async () => {
   }
 };
 
-// Determine if we're running in Vercel (serverless) or traditional environment
-if (process.env.VERCEL) {
-  // Export the Express app as a module for Vercel
-  export default createServerlessApp();
-} else {
+// Initialize the app based on environment
+if (!process.env.VERCEL) {
   // Start a traditional server for local development
   createServer().catch(err => {
     console.error('Failed to start server:', err);
     process.exit(1);
   });
 }
+
+// Export for Vercel - this needs to be outside any conditional
+export default createServerlessApp();

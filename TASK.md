@@ -35,6 +35,10 @@
 - [ ] Deploy application
   - [x] Migrate database to Supabase
   - [ ] Migrate application to Vercel (in progress - 2023-10-20)
+    - [x] Remove Replit-specific dependencies
+    - [x] Configure vercel.json
+    - [x] Fix server/index.ts export for serverless environment
+    - [x] Update build scripts for Vercel
 
 ## Completed Tasks
 - [x] Project setup and configuration
@@ -57,6 +61,7 @@
   - Remove Replit-specific dependencies and plugins
   - Update server configuration for serverless environment
   - Configure proper routing in vercel.json
+  - Fix TypeScript compilation issues with esbuild for Vercel
 
 ## Notes
 - Using Drizzle ORM for database operations
