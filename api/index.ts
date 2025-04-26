@@ -43,7 +43,8 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
 
   // Register Express routes
   try {
-    const server = await registerRoutes(app);
+    // Initialize routes but we don't need to use the server object in serverless context
+    await registerRoutes(app);
     
     // Error handling middleware
     app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
