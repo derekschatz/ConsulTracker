@@ -7,13 +7,13 @@ This document explains how the application is structured for Vercel deployment.
 The application is deployed as a combination of:
 
 1. **Static Frontend**: Built with Vite and served from the `dist/public` directory
-2. **API Handler**: A serverless Express application in `api/handler.js`
+2. **API Handler**: A serverless Express application in `api/handler.js` using ES modules
 
 ## Files
 
-- `api/handler.js`: The main serverless handler that serves both the API and static content
+- `api/handler.js`: The main serverless handler that serves both the API and static content (ES module)
 - `vercel.json`: Configuration for routing and builds
-- `package.json`: NPM scripts and dependencies
+- `package.json`: NPM scripts and dependencies (has "type": "module")
 
 ## Environment Variables
 
@@ -36,6 +36,13 @@ If you encounter issues:
 1. Check the Function Logs in the Vercel dashboard
 2. Verify that environment variables are set correctly
 3. Check if the database connection is working
+
+## JavaScript Module System
+
+This project uses ES modules (ESM) rather than CommonJS:
+- All `.js` files are treated as ES modules because `package.json` has `"type": "module"`
+- We use `import` and `export` syntax instead of `require` and `module.exports`
+- Path resolution is handled with `import.meta.url` and `fileURLToPath`
 
 ## Future Improvements
 
