@@ -33,6 +33,8 @@
 - [ ] Add data validation and error handling
 - [ ] Set up automated testing
 - [ ] Deploy application
+  - [x] Migrate database to Supabase
+  - [ ] Migrate application to Vercel (in progress - 2023-10-20)
 
 ## Completed Tasks
 - [x] Project setup and configuration
@@ -51,6 +53,10 @@
 - Create backend endpoints for business logo upload and retrieval
 - Add error handling for the account settings forms
 - Modified business info form to use phone number instead of country field
+- Need to refactor application for Vercel deployment from Replit
+  - Remove Replit-specific dependencies and plugins
+  - Update server configuration for serverless environment
+  - Configure proper routing in vercel.json
 
 ## Notes
 - Using Drizzle ORM for database operations

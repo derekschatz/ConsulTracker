@@ -1,6 +1,6 @@
-# Consulting Time Tracker
+# ConsulTracker
 
-A full-stack web application for consultants to manage client engagements, track billable hours, and generate invoices.
+A comprehensive consulting time tracking and invoicing application.
 
 ## 📋 Overview
 
@@ -108,4 +108,69 @@ docker-compose up -d
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Setup for Vercel Deployment
+
+### Prerequisites
+- A Vercel account
+- A PostgreSQL database (Supabase recommended)
+- Node.js and npm installed locally for development
+
+### Environment Variables
+The following environment variables should be set in your Vercel project:
+
+- `DATABASE_URL`: Your PostgreSQL connection string (required)
+- `NODE_ENV`: Set to "production" for deployment
+- Add any other required env variables for your app's functionality
+
+### Deployment Steps
+
+1. **Connect to GitHub Repository**
+   - Connect your Vercel account to the GitHub repository containing your code.
+
+2. **Configure Build Settings**
+   - Framework Preset: Other
+   - Build Command: `npm run vercel-build`
+   - Output Directory: `dist/public`
+   - Install Command: `npm install`
+
+3. **Set Environment Variables**
+   - Add all required environment variables in the Vercel project settings.
+
+4. **Deploy**
+   - Click "Deploy" and Vercel will build and deploy your application.
+
+### Local Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm run start
+```
+
+## Project Structure
+- `/client`: Frontend React application
+- `/server`: Backend Express API
+- `/shared`: Shared code between frontend and backend
+- `/dist`: Built files (generated)
+
+## Database
+This project uses Drizzle ORM with PostgreSQL. Database schema is defined in `shared/schema.ts`.
+
+## Testing
+Run tests with:
+```bash
+npm test
+```
+
+## License
+MIT 
