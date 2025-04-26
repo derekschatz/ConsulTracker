@@ -39,6 +39,8 @@
     - [x] Configure vercel.json
     - [x] Fix server/index.ts export for serverless environment
     - [x] Update build scripts for Vercel
+    - [x] Refactor to serverless architecture with api directory
+    - [x] Fix path resolution issues for Vercel
 
 ## Completed Tasks
 - [x] Project setup and configuration
@@ -62,6 +64,9 @@
   - Update server configuration for serverless environment
   - Configure proper routing in vercel.json
   - Fix TypeScript compilation issues with esbuild for Vercel
+  - Create serverless-compatible API structure
+  - Use process.cwd() instead of import.meta.dirname
+  - Add error handling for static file serving
 
 ## Notes
 - Using Drizzle ORM for database operations
