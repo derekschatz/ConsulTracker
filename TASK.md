@@ -37,14 +37,9 @@
   - [ ] Migrate application to Vercel (in progress - 2023-10-20)
     - [x] Remove Replit-specific dependencies
     - [x] Configure vercel.json
-    - [x] Fix server/index.ts export for serverless environment
-    - [x] Update build scripts for Vercel
-    - [x] Refactor to serverless architecture with api directory
-    - [x] Fix path resolution issues for Vercel
-    - [x] Address TypeScript compilation errors for deployment
-    - [x] Switch to esbuild for serverless compilation
-    - [x] Fix module resolution issues with explicit file extensions
-    - [x] Create bundle-based deployment approach
+    - [x] Create simplified API handlers for serverless deployment
+    - [x] Set up database connection for Vercel environment
+    - [x] Build static frontend with Vite
 
 ## Completed Tasks
 - [x] Project setup and configuration
@@ -66,18 +61,14 @@
 - Need to refactor application for Vercel deployment from Replit
   - Remove Replit-specific dependencies and plugins
   - Update server configuration for serverless environment
-  - Configure proper routing in vercel.json
-  - Fix TypeScript compilation issues with esbuild for Vercel
-  - Create serverless-compatible API structure
-  - Use process.cwd() instead of import.meta.dirname
-  - Add error handling for static file serving
-  - Bypass TypeScript strict checking in favor of direct esbuild compilation
-  - Use explicit file extensions for ESM compatibility
-  - Use a single-bundle approach for serverless deployment
+  - Create simple vanilla Node.js handlers instead of trying to bundle TypeScript
+  - Separate frontend and backend concerns for serverless deployment
+  - Focus on a minimal viable deployment first, then incrementally add features
 
 ## Notes
 - Using Drizzle ORM for database operations
 - Schema includes support for multiple clients and engagements
 - Time logs are linked to engagements for proper tracking
 - Invoice system supports line items and different statuses 
-- Client billing details are automatically pulled when creating invoices 
+- Client billing details are automatically pulled when creating invoices
+- For Vercel deployment, using vanilla Node.js approach with direct database access instead of ORM 

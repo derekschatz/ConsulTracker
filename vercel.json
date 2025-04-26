@@ -1,16 +1,11 @@
 {
   "version": 2,
   "buildCommand": "npm run vercel-build",
+  "framework": "vite",
   "builds": [
     {
-      "src": "dist/api/index.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "dist/**/*",
-          "client/**/*"
-        ]
-      }
+      "src": "api/handler.js",
+      "use": "@vercel/node"
     },
     {
       "src": "package.json",
@@ -23,7 +18,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/dist/api/index.js"
+      "dest": "/api/handler.js"
     },
     {
       "src": "/(.*\\.(js|css|png|jpg|gif|svg|ico|json))",
@@ -31,7 +26,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/dist/api/index.js"
+      "dest": "/api/handler.js"
     }
   ],
   "env": {
