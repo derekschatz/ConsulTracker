@@ -55,11 +55,11 @@ server/public
 .stylelintcache
 .npm
 
-# # Generated files
-# .vercel
-# .turbo
-# tsconfig.tsbuildinfo
-# vite.config.ts.*
+# Generated files
+.vercel
+.turbo
+tsconfig.tsbuildinfo
+vite.config.ts.*
 
 # Uploads folder (if not needed in version control)
 /uploads
