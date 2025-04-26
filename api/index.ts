@@ -1,6 +1,7 @@
 import express from 'express';
-import { registerRoutes } from '../server/routes';
-import { serveStatic } from '../server/vite';
+// Use explicit file extension for ESM imports
+import { registerRoutes } from '../server/routes.ts';
+import { serveStatic } from '../server/vite.ts';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Initialize Express app

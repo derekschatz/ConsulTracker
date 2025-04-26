@@ -43,6 +43,8 @@
     - [x] Fix path resolution issues for Vercel
     - [x] Address TypeScript compilation errors for deployment
     - [x] Switch to esbuild for serverless compilation
+    - [x] Fix module resolution issues with explicit file extensions
+    - [x] Create bundle-based deployment approach
 
 ## Completed Tasks
 - [x] Project setup and configuration
@@ -70,6 +72,8 @@
   - Use process.cwd() instead of import.meta.dirname
   - Add error handling for static file serving
   - Bypass TypeScript strict checking in favor of direct esbuild compilation
+  - Use explicit file extensions for ESM compatibility
+  - Use a single-bundle approach for serverless deployment
 
 ## Notes
 - Using Drizzle ORM for database operations
