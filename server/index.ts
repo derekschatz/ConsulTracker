@@ -1,121 +1,66 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+/**
+ * Server Entry Point
+ */
 
-// Global error handler for uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('UNCAUGHT EXCEPTION:');
-  console.error(error);
-});
+import express from 'express';
+import cors from 'cors';
+import morgan from 'morgan';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import session from 'express-session';
+import { setupAuth } from './auth';
+import { createRouter } from './router';
+import { storage } from './storage';
+import { config } from 'dotenv';
 
-// Global error handler for unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('UNHANDLED REJECTION:');
-  console.error('Reason:', reason);
-  console.error('Promise:', promise);
-});
+// Load environment variables
+config();
 
+// Create Express app
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Fix for __dirname in ES modules
+const __filename = fileURLToPath(import.meta.url || '');
+const __dirname = dirname(__filename);
+
+// Middleware
+app.use(morgan('dev'));
+app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: true }));
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
-
-// Vercel serverless setup
-const createServerlessApp = async () => {
-  const server = await registerRoutes(app);
-
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    console.error(err);
-  });
-
-  // Setup static files for production or development
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    await setupVite(app, server);
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'development-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
+}));
 
-  return app;
-};
+// Set up authentication
+setupAuth(app);
 
-// Create the server for traditional hosting (local development)
-const createServer = async () => {
-  const app = await createServerlessApp();
+// API routes
+app.use('/api', createRouter(storage));
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from the client build directory
+  app.use(express.static(path.join(__dirname, '../client/dist')));
   
-  // Try ports in sequence until one works
-  const tryPort = async (port: number): Promise<number> => {
-    try {
-      await new Promise((resolve, reject) => {
-        const server = app.listen({
-          port,
-          host: "0.0.0.0",
-        }, () => {
-          log(`serving on port ${port}`);
-          resolve(port);
-        });
-        server.once('error', reject);
-      });
-      return port;
-    } catch (err: any) {
-      if (err.code === 'EADDRINUSE') {
-        log(`Port ${port} in use, trying ${port + 1}`);
-        return tryPort(port + 1);
-      }
-      throw err;
-    }
-  };
-
-  // Start with preferred port (from env or 5000)
-  const startPort = process.env.PORT ? parseInt(process.env.PORT) : 5000;
-  try {
-    await tryPort(startPort);
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  }
-};
-
-// Initialize the app based on environment
-if (!process.env.VERCEL) {
-  // Start a traditional server for local development
-  createServer().catch(err => {
-    console.error('Failed to start server:', err);
-    process.exit(1);
+  // All other requests should be directed to the client app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
   });
 }
 
-// Export for Vercel - this needs to be outside any conditional
-export default createServerlessApp();
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`API available at http://localhost:${PORT}/api`);
+});
