@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import TimeLogFilters from './time-log-filters';
 import TimeLogSummary from './time-log-summary';
 import TimeLogTable from './time-log-table';
@@ -55,7 +55,12 @@ const TimeLogs = () => {
 
   // Add search term if present
   if (filters.search) {
-    queryParams.append('search', filters.search);
+    // Trim the search term to avoid whitespace issues
+    const trimmedSearch = filters.search.trim();
+    if (trimmedSearch) {
+      queryParams.append('search', trimmedSearch);
+      console.log(`Adding search parameter: "${trimmedSearch}"`);
+    }
   }
 
   // Fetch time logs with filters
@@ -70,12 +75,26 @@ const TimeLogs = () => {
       }
       const data = await response.json();
       console.log('Time logs data received:', data);
+      
+      // Log a sample time log client name to debug
+      if (data && data.length > 0) {
+        console.log('First time log client data:', {
+          id: data[0].id,
+          clientNameProperty: data[0].clientName,
+          engagementClientName: data[0].engagement?.clientName,
+          hourlyRate: data[0].engagement?.hourlyRate,
+          billableAmount: data[0].billableAmount
+        });
+      }
+      
       return data;
     },
     // Ensure we always get fresh data
     refetchOnWindowFocus: true,
     staleTime: 0,
     gcTime: 0, // Don't keep old data in cache
+    retry: 3, // Retry failed requests 3 times
+    retryDelay: 1000, // Wait 1 second between retries
   });
 
   // Fetch engagements for client filter dropdown and the editing form
@@ -83,10 +102,14 @@ const TimeLogs = () => {
     queryKey: ['/api/engagements'],
   });
   
-  // Extract unique client names for filter dropdown
+  // Extract unique client names for filter dropdown - get from time logs instead of engagements
+  // This uses the correct clientName property location
   const clientOptions: string[] = Array.from(
-    new Set(engagements.map((engagement: any) => engagement.clientName))
-  );
+    new Set([
+      ...timeLogs.map((log: any) => log.clientName).filter(Boolean),
+      ...engagements.map((engagement: any) => engagement.clientName).filter(Boolean)
+    ])
+  ).sort();
 
   const handleOpenCreateModal = () => {
     setIsCreateModalOpen(true);
@@ -217,14 +240,24 @@ const TimeLogs = () => {
       <header className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-semibold text-slate-900">Time Logs</h1>
-          <Button 
-            onClick={handleOpenCreateModal} 
-            className="mt-3 sm:mt-0"
-            size="sm"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Time Log
-          </Button>
+          <div className="flex items-center gap-2 mt-3 sm:mt-0">
+            <Button 
+              onClick={() => queryClient.invalidateQueries({queryKey: ['/api/time-logs']})}
+              variant="outline"
+              size="sm"
+              className="text-xs"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Refresh
+            </Button>
+            <Button 
+              onClick={handleOpenCreateModal} 
+              size="sm"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Time Log
+            </Button>
+          </div>
         </div>
       </header>
 

@@ -13,6 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { insertTimeLogSchema } from '@shared/schema';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getISODate } from '@/lib/date-utils';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
 // Define engagement interface
 interface Engagement {
@@ -69,11 +71,74 @@ const TimeLogModal = ({
 
   const isEditMode = !!timeLog;
 
-  // Fetch only active engagements
-  const { data: engagements = [], isLoading: isLoadingEngagements } = useQuery<Engagement[]>({
+  // Get the fetch status
+  const { data: engagements = [], isLoading: isLoadingEngagements, isError: isEngagementsError } = useQuery<Engagement[]>({
     queryKey: ['/api/engagements/active'],
+    queryFn: async () => {
+      console.log('Fetching active engagements for time log modal');
+      try {
+        // Add authentication debugging
+        const authCheckResponse = await fetch('/api/user');
+        const isAuthenticated = authCheckResponse.ok;
+        console.log('Authentication check:', isAuthenticated);
+        if (!isAuthenticated) {
+          console.warn('User not authenticated when trying to fetch engagements');
+        }
+
+        const response = await fetch('/api/engagements/active', {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        console.log('Active engagements API response status:', response.status);
+        
+        if (!response.ok) {
+          console.error('Failed to fetch active engagements:', response.status);
+          const errorText = await response.text().catch(() => 'No error text available');
+          console.error('Error response:', errorText);
+          return [];
+        }
+        
+        const data = await response.json();
+        console.log('Received active engagements data:', data);
+        
+        if (!Array.isArray(data)) {
+          console.error('Expected array of engagements but received:', typeof data);
+          return [];
+        }
+        
+        if (data.length === 0) {
+          console.warn('Received empty array of engagements');
+          
+          // For debugging, try fetching all engagements to see if any exist
+          const allEngagementsResponse = await fetch('/api/engagements');
+          if (allEngagementsResponse.ok) {
+            const allEngagements = await allEngagementsResponse.json();
+            console.log(`All engagements endpoint returned ${allEngagements.length} engagements`);
+          }
+        }
+        
+        return data;
+      } catch (error) {
+        console.error('Error fetching engagements:', error);
+        return []; // Return empty array instead of throwing
+      }
+    },
     enabled: open,
   });
+
+  // Check if we have no engagements after loading completed
+  const noEngagements = !isLoadingEngagements && engagements.length === 0;
+
+  // Debug log to check engagements data
+  useEffect(() => {
+    if (engagements) {
+      console.log(`TimeLogModal: Received ${engagements.length} active engagements`);
+      console.log('Engagements data:', engagements);
+    }
+  }, [engagements]);
 
   // Get engagement ID from either direct property or nested engagement object
   const getEngagementId = () => {
@@ -348,6 +413,38 @@ const TimeLogModal = ({
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Edit Time Log' : 'New Time Log'}</DialogTitle>
         </DialogHeader>
+        
+        {/* Show warning alert when no engagements are found */}
+        {noEngagements && (
+          <Alert variant="warning" className="mb-4 bg-amber-50 border-amber-300">
+            <AlertCircle className="h-4 w-4 text-amber-700" />
+            <AlertTitle className="text-amber-800">No active engagements found</AlertTitle>
+            <AlertDescription className="text-amber-700">
+              You need an active engagement to log time. 
+              <Button
+                variant="link"
+                className="p-0 h-auto ml-1 text-amber-800 font-medium underline hover:text-amber-900"
+                onClick={() => {
+                  onOpenChange(false);
+                  window.location.href = '/engagements/new';
+                }}
+              >
+                Create a new engagement
+              </Button>.
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {isEngagementsError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              There was an error loading your engagements. Please try again later.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-1 gap-2">
@@ -360,6 +457,7 @@ const TimeLogModal = ({
                 render={({ field }) => {
                   // Add additional debugging
                   console.log('Field value in Select:', field.value);
+                  console.log('Engagements available for dropdown:', engagements.length);
                   
                   // Convert to string for Select component, handling null/undefined case
                   const fieldValue = field.value ? field.value.toString() : '';
@@ -375,11 +473,21 @@ const TimeLogModal = ({
                         <SelectValue placeholder="Select an engagement" />
                       </SelectTrigger>
                       <SelectContent>
-                        {engagements.map((engagement) => (
-                          <SelectItem key={engagement.id} value={engagement.id.toString()}>
-                            {engagement.clientName} - {engagement.projectName}
+                        {isLoadingEngagements ? (
+                          <SelectItem value="loading" disabled>
+                            Loading engagements...
                           </SelectItem>
-                        ))}
+                        ) : engagements.length === 0 ? (
+                          <SelectItem value="no-engagements" disabled>
+                            No active engagements found. Please create an active engagement first.
+                          </SelectItem>
+                        ) : (
+                          engagements.map((engagement) => (
+                            <SelectItem key={engagement.id} value={engagement.id.toString()}>
+                              {engagement.clientName} - {engagement.projectName}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   );
@@ -478,7 +586,7 @@ const TimeLogModal = ({
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || isLoadingEngagements}
+              disabled={isSubmitting || isLoadingEngagements || noEngagements}
             >
               {isSubmitting 
                 ? 'Saving...' 

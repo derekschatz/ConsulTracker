@@ -7,6 +7,7 @@ import {
 import { insertUserSchema, User, InsertUser } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 type AuthContextType = {
   user: User | null;
@@ -23,6 +24,8 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
+  
   const {
     data: user,
     error,
@@ -92,10 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/user"], null);
+      queryClient.clear();
       toast({
         title: "Success",
         description: "Logged out successfully",
       });
+      setLocation("/login");
     },
     onError: (error: Error) => {
       toast({

@@ -5,15 +5,18 @@ import {
   type Invoice, type InsertInvoice, type InvoiceWithLineItems,
   type TimeLogWithEngagement,
   type User, type InsertUser,
-  engagements, timeLogs, invoices, users, clients
+  engagements, timeLogs, invoices, users, clients,
+  passwordResetTokens,
+  type PasswordResetToken,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte, desc, sql, SQL } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql, SQL, gt } from "drizzle-orm";
 import * as expressSession from "express-session";
 import pgSimpleModule from "connect-pg-simple";
 import { pool } from "./db";
 import { type PgColumn } from "drizzle-orm/pg-core";
 import fs from 'fs';
+import { Pool } from "pg";
 
 // Create connect-pg-simple after import
 const connectPgSimple = pgSimpleModule(expressSession);
@@ -35,7 +38,7 @@ export interface IStorage {
   // Engagements
   getEngagements(userId?: number): Promise<Engagement[]>;
   getEngagement(id: number, userId?: number): Promise<Engagement | undefined>;
-  getEngagementWithClient(id: number, userId?: number): Promise<(Engagement & { client?: any }) | undefined>;
+  getEngagementWithClient(id: number, userId?: number): Promise<Engagement | undefined>;
   getActiveEngagements(userId?: number): Promise<Engagement[]>;
   createEngagement(engagement: InsertEngagement): Promise<Engagement>;
   updateEngagement(id: number, engagement: Partial<InsertEngagement>, userId?: number): Promise<Engagement | undefined>;
@@ -67,6 +70,13 @@ export interface IStorage {
   
   // Session Store
   sessionStore: expressSession.Store;
+
+  // Password reset methods
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<string>;
+  getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined>;
+  markPasswordResetTokenAsUsed(token: string): Promise<boolean>;
+  updateUserPassword(userId: number, hashedPassword: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -192,7 +202,7 @@ billingContactEmail type: ${typeof client.billingContactEmail}
             billing_state = $7,
             billing_zip = $8,
             billing_country = $9
-          WHERE id = $1 AND user_id = $10
+          WHERE id = $10 AND user_id = $11
           RETURNING *
         `;
         values = [
@@ -219,7 +229,7 @@ billingContactEmail type: ${typeof client.billingContactEmail}
             billing_state = $7,
             billing_zip = $8,
             billing_country = $9
-          WHERE id = $1
+          WHERE id = $1 AND user_id = $10
           RETURNING *
         `;
         values = [
@@ -231,7 +241,8 @@ billingContactEmail type: ${typeof client.billingContactEmail}
           processValue(client.billingCity),
           processValue(client.billingState),
           processValue(client.billingZip),
-          processValue(client.billingCountry)
+          processValue(client.billingCountry),
+          userId
         ];
       }
       
@@ -304,253 +315,264 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
   // Engagement methods
   async getEngagements(userId?: number): Promise<Engagement[]> {
     try {
-      let query;
+      console.log('Storage.getEngagements called with userId:', userId);
       
-      // Build a query with a join to clients table
-      if (userId) {
-        query = db.select({
-          id: engagements.id,
-          userId: engagements.userId,
-          clientId: engagements.clientId,
-          projectName: engagements.projectName,
-          startDate: engagements.startDate,
-          endDate: engagements.endDate,
-          hourlyRate: engagements.hourlyRate,
-          description: engagements.description,
-          status: engagements.status,
-          clientName: clients.name,
-          clientEmail: clients.billingContactEmail
-        })
-        .from(engagements)
-        .leftJoin(clients, eq(engagements.clientId, clients.id))
-        .where(eq(engagements.userId, userId))
-        .orderBy(desc(engagements.startDate));
-      } else {
-        query = db.select({
-          id: engagements.id,
-          userId: engagements.userId,
-          clientId: engagements.clientId,
-          projectName: engagements.projectName,
-          startDate: engagements.startDate,
-          endDate: engagements.endDate,
-          hourlyRate: engagements.hourlyRate,
-          description: engagements.description,
-          status: engagements.status,
-          clientName: clients.name,
-          clientEmail: clients.billingContactEmail
-        })
-        .from(engagements)
-        .leftJoin(clients, eq(engagements.clientId, clients.id))
-        .orderBy(desc(engagements.startDate));
-      }
+      // Add explicit query debugging
+      const queryCondition = userId 
+        ? `with userId=${userId} filter` 
+        : 'without userId filter (should return all engagements)';
+      console.log(`Building query ${queryCondition}`);
       
-      const results = await query;
-      
-      // Add debug logging
-      console.log(`Retrieved ${results.length} engagements with client data via join`);
-      console.log('Sample engagement data:', results.length > 0 ? results[0] : 'No results');
-      
-      return results as Engagement[];
-    } catch (error) {
-      console.error('Error fetching engagements with join:', error);
-      
-      // Fall back to the previous implementation if the join approach fails
-      let engagementResults;
-      
-      if (userId) {
-        engagementResults = await db.select().from(engagements)
+      const query = userId !== undefined
+        ? db.select({
+            id: engagements.id,
+            userId: engagements.userId,
+            clientId: engagements.clientId,
+            projectName: engagements.projectName,
+            startDate: engagements.startDate,
+            endDate: engagements.endDate,
+            hourlyRate: engagements.hourlyRate,
+            projectAmount: engagements.projectAmount,
+            engagementType: engagements.engagementType,
+            description: engagements.description,
+            status: engagements.status,
+            clientName: clients.name,
+            clientEmail: clients.billingContactEmail,
+            netTerms: engagements.netTerms,
+          })
+          .from(engagements)
+          .leftJoin(clients, eq(engagements.clientId, clients.id))
           .where(eq(engagements.userId, userId))
-          .orderBy(desc(engagements.startDate));
+        : db.select({
+            id: engagements.id,
+            userId: engagements.userId,
+            clientId: engagements.clientId,
+            projectName: engagements.projectName,
+            startDate: engagements.startDate,
+            endDate: engagements.endDate,
+            hourlyRate: engagements.hourlyRate,
+            projectAmount: engagements.projectAmount,
+            engagementType: engagements.engagementType,
+            description: engagements.description,
+            status: engagements.status,
+            clientName: clients.name,
+            clientEmail: clients.billingContactEmail,
+            netTerms: engagements.netTerms,
+          })
+          .from(engagements)
+          .leftJoin(clients, eq(engagements.clientId, clients.id));
+
+      // Execute the ORM query
+      const result = await query;
+      console.log(`ORM query returned ${result.length} engagements`);
+      
+      // Log some sample data if available
+      if (result.length > 0) {
+        console.log('First engagement sample:', {
+          id: result[0].id,
+          projectName: result[0].projectName,
+          clientName: result[0].clientName,
+          userId: result[0].userId
+        });
       } else {
-        engagementResults = await db.select().from(engagements).orderBy(desc(engagements.startDate));
+        console.log('No engagements found in database query.');
+        
+        // Try to determine why no engagements were found
+        if (userId) {
+          console.log(`Check if user ID ${userId} has any engagements in the database.`);
+          console.log('Possible issues:');
+          console.log('1. User has no engagements created yet');
+          console.log('2. Engagements exist but have a different userId');
+          console.log('3. Database connection issue');
+        } else {
+          console.log('Querying without userId filter but still found no engagements.');
+          console.log('Database might be empty or there could be a connection issue.');
+        }
       }
       
-      // Fetch client details for each engagement
-      const enhancedEngagements = await Promise.all(engagementResults.map(async (engagement) => {
-        try {
-          if (engagement.clientId) {
-            const clientResults = await db
-              .select()
-              .from(clients)
-              .where(eq(clients.id, engagement.clientId));
-              
-            if (clientResults.length > 0) {
-              const client = clientResults[0];
-              // Add client details to the engagement
-              return { 
-                ...engagement,
-                clientName: client.name,
-                clientEmail: client.billingContactEmail || null
-              };
-            }
-          }
-          return engagement;
-        } catch (error) {
-          console.error('Error fetching client details for engagement:', error);
-          return engagement;
-        }
-      }));
-      
-      return enhancedEngagements;
+      return result;
+    } catch (error) {
+      console.error("Error fetching engagements:", error);
+      return [];
     }
   }
 
   async getEngagement(id: number, userId?: number): Promise<Engagement | undefined> {
     try {
-      let query;
-      
-      // Build a query with a join to clients table
-      if (userId) {
-        query = db.select({
-          id: engagements.id,
-          userId: engagements.userId,
-          clientId: engagements.clientId,
-          projectName: engagements.projectName,
-          startDate: engagements.startDate,
-          endDate: engagements.endDate,
-          hourlyRate: engagements.hourlyRate,
-          description: engagements.description,
-          status: engagements.status,
-          clientName: clients.name,
-          clientEmail: clients.billingContactEmail
-        })
+      // If userId is provided, only fetch engagements belonging to that user for security
+      const baseQuery = {
+        id: engagements.id,
+        userId: engagements.userId,
+        clientId: engagements.clientId,
+        projectName: engagements.projectName,
+        startDate: engagements.startDate,
+        endDate: engagements.endDate,
+        hourlyRate: engagements.hourlyRate,
+        projectAmount: engagements.projectAmount,
+        engagementType: engagements.engagementType,
+        description: engagements.description,
+        status: engagements.status,
+        netTerms: engagements.netTerms
+      };
+
+      // Create query condition based on whether userId is provided
+      const whereCondition = userId !== undefined
+        ? and(eq(engagements.id, id), eq(engagements.userId, userId))
+        : eq(engagements.id, id);
+
+      const query = db
+        .select(baseQuery)
         .from(engagements)
-        .leftJoin(clients, eq(engagements.clientId, clients.id))
-        .where(and(
-          eq(engagements.id, id),
-          eq(engagements.userId, userId)
-        ));
-      } else {
-        query = db.select({
-          id: engagements.id,
-          userId: engagements.userId,
-          clientId: engagements.clientId,
-          projectName: engagements.projectName,
-          startDate: engagements.startDate,
-          endDate: engagements.endDate,
-          hourlyRate: engagements.hourlyRate,
-          description: engagements.description,
-          status: engagements.status,
-          clientName: clients.name,
-          clientEmail: clients.billingContactEmail
-        })
-        .from(engagements)
-        .leftJoin(clients, eq(engagements.clientId, clients.id))
-        .where(eq(engagements.id, id));
-      }
-      
+        .where(whereCondition);
+
       const results = await query;
       
       if (results.length === 0) {
         return undefined;
       }
-      
-      console.log(`Retrieved engagement with client data via join:`, results[0]);
       
       return results[0] as Engagement;
     } catch (error) {
-      console.error('Error fetching engagement with join:', error);
-      
-      // Fallback to basic query if join fails
-      const query = userId
-        ? db.select().from(engagements).where(and(eq(engagements.id, id), eq(engagements.userId, userId)))
-        : db.select().from(engagements).where(eq(engagements.id, id));
-      
-      const results = await query;
-      
-      if (results.length === 0) {
-        return undefined;
-      }
-      
-      return results[0];
+      console.error(`Error fetching engagement with id ${id}:`, error);
+      return undefined;
     }
   }
 
   async getActiveEngagements(userId?: number): Promise<Engagement[]> {
     try {
-      let query;
-      
-      // Build a query with a join to clients table
-      if (userId) {
-        query = db.select({
-          id: engagements.id,
-          userId: engagements.userId,
-          clientId: engagements.clientId,
-          projectName: engagements.projectName,
-          startDate: engagements.startDate,
-          endDate: engagements.endDate,
-          hourlyRate: engagements.hourlyRate,
-          description: engagements.description,
-          status: engagements.status,
-          clientName: clients.name,
-          clientEmail: clients.billingContactEmail
-        })
-        .from(engagements)
-        .leftJoin(clients, eq(engagements.clientId, clients.id))
-        .where(and(
-          eq(engagements.status, 'active'),
-          eq(engagements.userId, userId)
-        ))
-        .orderBy(desc(engagements.startDate));
-      } else {
-        query = db.select({
-          id: engagements.id,
-          userId: engagements.userId,
-          clientId: engagements.clientId,
-          projectName: engagements.projectName,
-          startDate: engagements.startDate,
-          endDate: engagements.endDate,
-          hourlyRate: engagements.hourlyRate,
-          description: engagements.description,
-          status: engagements.status,
-          clientName: clients.name,
-          clientEmail: clients.billingContactEmail
-        })
-        .from(engagements)
-        .leftJoin(clients, eq(engagements.clientId, clients.id))
-        .where(eq(engagements.status, 'active'))
-        .orderBy(desc(engagements.startDate));
-      }
-      
-      const results = await query;
-      console.log(`Retrieved ${results.length} active engagements with client data via join`);
-      
-      return results as Engagement[];
-    } catch (error) {
-      console.error('Error fetching active engagements with join:', error);
-      
-      // Fallback to basic query if join fails
-      if (userId) {
-        return await db.select().from(engagements)
+      const query = userId
+        ? db.select({
+            id: engagements.id,
+            userId: engagements.userId,
+            clientId: engagements.clientId,
+            projectName: engagements.projectName,
+            startDate: engagements.startDate,
+            endDate: engagements.endDate,
+            hourlyRate: engagements.hourlyRate,
+            projectAmount: engagements.projectAmount,
+            engagementType: engagements.engagementType,
+            description: engagements.description,
+            status: engagements.status,
+            clientName: clients.name,
+            clientEmail: clients.billingContactEmail,
+            netTerms: engagements.netTerms,
+          })
+          .from(engagements)
+          .leftJoin(clients, eq(engagements.clientId, clients.id))
           .where(and(
-            eq(engagements.status, 'active'),
-            eq(engagements.userId, userId)
+            eq(engagements.userId, userId),
+            eq(engagements.status, "active")
           ))
-          .orderBy(desc(engagements.startDate));
-      }
-      
-      return await db.select().from(engagements)
-        .where(eq(engagements.status, 'active'))
-        .orderBy(desc(engagements.startDate));
+        : db.select({
+            id: engagements.id,
+            userId: engagements.userId,
+            clientId: engagements.clientId,
+            projectName: engagements.projectName,
+            startDate: engagements.startDate,
+            endDate: engagements.endDate,
+            hourlyRate: engagements.hourlyRate,
+            projectAmount: engagements.projectAmount,
+            engagementType: engagements.engagementType,
+            description: engagements.description,
+            status: engagements.status,
+            clientName: clients.name,
+            clientEmail: clients.billingContactEmail,
+            netTerms: engagements.netTerms,
+          })
+          .from(engagements)
+          .leftJoin(clients, eq(engagements.clientId, clients.id))
+          .where(eq(engagements.status, "active"));
+
+      const result = await query;
+      return result;
+    } catch (error) {
+      console.error("Error fetching active engagements:", error);
+      return [];
     }
   }
 
   async createEngagement(engagement: InsertEngagement): Promise<Engagement> {
     // Convert the engagement data to match DB schema
-    const dbEngagement = {
+    const dbEngagement: any = {
       userId: engagement.userId,
       clientId: engagement.clientId,
       projectName: engagement.projectName,
       startDate: engagement.startDate,
       endDate: engagement.endDate,
-      hourlyRate: String(engagement.hourlyRate), // Convert to string for numeric column
-      description: engagement.description,
-      status: engagement.status
+      description: engagement.description || '',
+      status: engagement.status || 'active',
+      engagementType: engagement.engagementType || 'hourly'
     };
     
-    // @ts-ignore - Ignore TypeScript error for hourlyRate type mismatch
-    const [newEngagement] = await db.insert(engagements).values(dbEngagement).returning();
-    return newEngagement;
+    // Add hourlyRate or projectAmount based on engagement type
+    if (engagement.engagementType === 'project') {
+      dbEngagement.projectAmount = engagement.projectAmount;
+      // Set hourlyRate to null for project-based engagements
+      dbEngagement.hourlyRate = null;
+    } else {
+      // For hourly engagements, convert hourlyRate to string for numeric column
+      dbEngagement.hourlyRate = engagement.hourlyRate !== null ? String(engagement.hourlyRate) : null;
+      dbEngagement.projectAmount = null;
+    }
+    
+    console.log('Preparing to insert engagement with data:', dbEngagement);
+    
+    try {
+      // Use raw SQL to avoid ORM issues with null values
+      const query = `
+        SELECT insert_engagement(
+          $1, -- user_id
+          $2, -- client_id
+          $3, -- project_name
+          $4, -- start_date
+          $5, -- end_date
+          $6, -- engagement_type
+          $7, -- hourly_rate
+          $8, -- project_amount
+          $9, -- description
+          $10 -- status
+        ) as result
+      `;
+      
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL
+      });
+      
+      const values = [
+        dbEngagement.userId,
+        dbEngagement.clientId,
+        dbEngagement.projectName,
+        dbEngagement.startDate,
+        dbEngagement.endDate,
+        dbEngagement.engagementType,
+        dbEngagement.hourlyRate,
+        dbEngagement.projectAmount,
+        dbEngagement.description,
+        dbEngagement.status
+      ];
+      
+      console.log('Executing SQL with values:', values);
+      const result = await pool.query(query, values);
+      
+      // Close the connection
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        throw new Error('Failed to create engagement - no result returned');
+      }
+      
+      console.log('Engagement created successfully:', result.rows[0].result);
+      return result.rows[0].result;
+    } catch (error) {
+      console.error('Failed to create engagement with custom function:', error);
+      
+      // Fall back to the ORM method if custom function fails
+      console.log('Falling back to ORM insert method');
+      
+      // @ts-ignore - Ignore TypeScript error for type mismatches
+      const [newEngagement] = await db.insert(engagements).values(dbEngagement).returning();
+      return newEngagement;
+    }
   }
 
   async updateEngagement(id: number, engagement: Partial<InsertEngagement>, userId?: number): Promise<Engagement | undefined> {
@@ -562,9 +584,29 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
     if (engagement.projectName !== undefined) updateData.projectName = engagement.projectName;
     if (engagement.startDate !== undefined) updateData.startDate = engagement.startDate;
     if (engagement.endDate !== undefined) updateData.endDate = engagement.endDate;
-    if (engagement.hourlyRate !== undefined) updateData.hourlyRate = String(engagement.hourlyRate);
     if (engagement.description !== undefined) updateData.description = engagement.description;
     if (engagement.status !== undefined) updateData.status = engagement.status;
+    if (engagement.netTerms !== undefined) updateData.netTerms = engagement.netTerms;
+    if (engagement.engagementType !== undefined) updateData.engagementType = engagement.engagementType;
+    
+    // Handle rate fields based on engagement type
+    if (engagement.engagementType === 'project') {
+      if (engagement.projectAmount !== undefined) updateData.projectAmount = engagement.projectAmount;
+      updateData.hourlyRate = null; // Set hourlyRate to null for project-based engagements
+    } else if (engagement.engagementType === 'hourly') {
+      if (engagement.hourlyRate !== undefined) updateData.hourlyRate = String(engagement.hourlyRate);
+      updateData.projectAmount = null; // Set projectAmount to null for hourly engagements
+    } else {
+      // If no engagement type specified but rates are updated
+      if (engagement.hourlyRate !== undefined) updateData.hourlyRate = String(engagement.hourlyRate);
+      if (engagement.projectAmount !== undefined) updateData.projectAmount = engagement.projectAmount;
+    }
+    
+    console.log('Updating engagement with data:', {
+      id,
+      userId,
+      updateData
+    });
     
     // @ts-ignore - Ignore condition type errors
     const [updatedEngagement] = await db.update(engagements)
@@ -596,78 +638,145 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
 
   // Time Logs methods
   async getTimeLogs(userId?: number): Promise<TimeLogWithEngagement[]> {
-    let logs;
-    
-    if (userId !== undefined) {
-      logs = await db.select().from(timeLogs)
-        .where(eq(timeLogs.userId, userId))
-        .orderBy(desc(timeLogs.date));
-    } else {
-      logs = await db.select().from(timeLogs)
-        .orderBy(desc(timeLogs.date));
+    try {
+      // Create base condition that's always valid
+      let conditions = sql`1=1`; // Always true condition as a starting point
+      
+      // Add user ID condition if provided
+      if (userId !== undefined) {
+        conditions = sql`${conditions} AND ${timeLogs.userId} = ${userId}`;
+      }
+      
+      // Execute query with proper conditions
+      const logs = await db.select({
+        id: timeLogs.id,
+        userId: timeLogs.userId,
+        engagementId: timeLogs.engagementId,
+        date: timeLogs.date,
+        hours: timeLogs.hours,
+        description: timeLogs.description,
+        createdAt: timeLogs.createdAt
+      })
+      .from(timeLogs)
+      .where(conditions);
+      
+      console.log(`Retrieved ${logs.length} time logs (all engagement types)`);
+      
+      // Add diagnostic logging
+      if (logs.length > 0) {
+        console.log(`Sample time log:`, logs[0]);
+      } else {
+        console.log(`No time logs found for conditions:`, conditions);
+      }
+      
+      return Promise.all(logs.map(log => this.enrichTimeLog(log)));
+    } catch (error) {
+      console.error('Error in getTimeLogs:', error);
+      return [];
     }
-    
-    return Promise.all(logs.map(log => this.enrichTimeLog(log)));
   }
 
   async getTimeLogsByEngagement(engagementId: number, userId?: number): Promise<TimeLogWithEngagement[]> {
-    let logs;
-    
-    if (userId !== undefined) {
-      logs = await db.select().from(timeLogs)
-        .where(and(
-          eq(timeLogs.engagementId, engagementId),
-          eq(timeLogs.userId, userId)
-        ))
-        .orderBy(desc(timeLogs.date));
-    } else {
-      logs = await db.select().from(timeLogs)
-        .where(eq(timeLogs.engagementId, engagementId))
-        .orderBy(desc(timeLogs.date));
+    try {
+      // Create base conditions for the engagement ID
+      let conditions = eq(timeLogs.engagementId, engagementId);
+      
+      // Add user ID condition if provided
+      if (userId !== undefined) {
+        conditions = sql`${conditions} AND ${timeLogs.userId} = ${userId}`;
+      }
+      
+      // Execute query with proper conditions
+      const logs = await db.select({
+        id: timeLogs.id,
+        userId: timeLogs.userId,
+        engagementId: timeLogs.engagementId,
+        date: timeLogs.date,
+        hours: timeLogs.hours,
+        description: timeLogs.description,
+        createdAt: timeLogs.createdAt
+      })
+      .from(timeLogs)
+      .where(conditions);
+      
+      console.log(`Retrieved ${logs.length} time logs for engagement ID ${engagementId}`);
+      
+      return Promise.all(logs.map(log => this.enrichTimeLog(log)));
+    } catch (error) {
+      console.error(`Error in getTimeLogsByEngagement for engagement ${engagementId}:`, error);
+      return [];
     }
-    
-    return Promise.all(logs.map(log => this.enrichTimeLog(log)));
   }
 
   async getTimeLogsByDateRange(startDate: Date, endDate: Date, userId?: number): Promise<TimeLogWithEngagement[]> {
-    let logs;
-    
-    if (userId !== undefined) {
-      logs = await db.select().from(timeLogs)
-        .where(and(
-          gte(timeLogs.date, startDate),
-          lte(timeLogs.date, endDate),
-          eq(timeLogs.userId, userId)
-        ))
-        .orderBy(desc(timeLogs.date));
-    } else {
-      logs = await db.select().from(timeLogs)
-        .where(and(
-          gte(timeLogs.date, startDate),
-          lte(timeLogs.date, endDate)
-        ))
-        .orderBy(desc(timeLogs.date));
+    try {
+      // Create base conditions for date range
+      let conditions = and(
+        gte(timeLogs.date, startDate),
+        lte(timeLogs.date, endDate)
+      );
+      
+      // Add user ID condition if provided
+      if (userId !== undefined) {
+        conditions = sql`${conditions} AND ${timeLogs.userId} = ${userId}`;
+      }
+      
+      // Execute query with proper conditions
+      const logs = await db.select({
+        id: timeLogs.id,
+        userId: timeLogs.userId,
+        engagementId: timeLogs.engagementId,
+        date: timeLogs.date,
+        hours: timeLogs.hours,
+        description: timeLogs.description,
+        createdAt: timeLogs.createdAt
+      })
+      .from(timeLogs)
+      .where(conditions);
+      
+      console.log(`Retrieved ${logs.length} time logs in date range ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      
+      return Promise.all(logs.map(log => this.enrichTimeLog(log)));
+    } catch (error) {
+      console.error(`Error in getTimeLogsByDateRange:`, error);
+      return [];
     }
-    
-    return Promise.all(logs.map(log => this.enrichTimeLog(log)));
   }
 
   async getTimeLog(id: number, userId?: number): Promise<TimeLogWithEngagement | undefined> {
-    let results;
-    
-    if (userId !== undefined) {
-      results = await db.select().from(timeLogs)
-        .where(and(
-          eq(timeLogs.id, id),
-          eq(timeLogs.userId, userId)
-        ));
-    } else {
-      results = await db.select().from(timeLogs)
-        .where(eq(timeLogs.id, id));
+    try {
+      // Create base conditions for time log ID
+      let conditions = eq(timeLogs.id, id);
+      
+      // Add user ID condition if provided
+      if (userId !== undefined) {
+        conditions = sql`${conditions} AND ${timeLogs.userId} = ${userId}`;
+      }
+      
+      // Execute query with proper conditions
+      const results = await db.select({
+        id: timeLogs.id,
+        userId: timeLogs.userId,
+        engagementId: timeLogs.engagementId,
+        date: timeLogs.date,
+        hours: timeLogs.hours,
+        description: timeLogs.description,
+        createdAt: timeLogs.createdAt
+      })
+      .from(timeLogs)
+      .where(conditions);
+      
+      if (results.length === 0) {
+        console.log(`No time log found with ID ${id}`);
+        return undefined;
+      }
+      
+      console.log(`Retrieved time log with ID ${id}`);
+      return this.enrichTimeLog(results[0]);
+    } catch (error) {
+      console.error(`Error in getTimeLog for time log ID ${id}:`, error);
+      return undefined;
     }
-    
-    if (results.length === 0) return undefined;
-    return this.enrichTimeLog(results[0]);
   }
 
   async createTimeLog(timeLog: InsertTimeLog): Promise<TimeLog> {
@@ -1047,101 +1156,310 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
 
   // Helper methods
   private async enrichTimeLog(timeLog: TimeLog): Promise<TimeLogWithEngagement> {
-    // Get the engagement for this time log
-    const engagementResults = await db
-      .select()
-      .from(engagements)
-      .where(eq(engagements.id, timeLog.engagementId));
-    
-    let engagement: Engagement;
-    
-    if (engagementResults.length > 0) {
-      engagement = engagementResults[0];
+    try {
+      console.log(`Enriching time log ${timeLog.id} with engagement ID ${timeLog.engagementId}`);
       
-      // Fetch client name if needed
-      if (engagement.clientId) {
-        const clientResults = await db
-          .select()
-          .from(clients)
-          .where(eq(clients.id, engagement.clientId));
-          
-        if (clientResults.length > 0) {
-          const client = clientResults[0];
-          // Add client name to the engagement
-          engagement = { 
-            ...engagement,
-            clientName: client.name
-          } as Engagement;
+      // Get the engagement for this time log with an improved SQL query that ensures we get client data
+      const engagementQuery = `
+        SELECT 
+          e.id, e.user_id, e.client_id, e.project_name, e.hourly_rate,
+          e.start_date, e.end_date, e.description, e.status, e.engagement_type,
+          c.name as client_name
+        FROM engagements e
+        LEFT JOIN clients c ON e.client_id = c.id
+        WHERE e.id = $1
+      `;
+      
+      console.log(`Executing SQL query for engagement ${timeLog.engagementId}`);
+      const result = await pool.query(engagementQuery, [timeLog.engagementId]);
+      
+      if (result.rows.length > 0) {
+        console.log(`Found engagement data: ${JSON.stringify(result.rows[0])}`);
+        const row = result.rows[0];
+        
+        // Direct check if client_name is present and valid
+        let clientName = "Unknown Client";
+        if (row.client_name) {
+          clientName = row.client_name;
+        } else if (row.client_id) {
+          console.log(`Client name missing but client_id exists: ${row.client_id}, fetching client separately`);
+          try {
+            const clientQuery = `SELECT name FROM clients WHERE id = $1`;
+            const clientResult = await pool.query(clientQuery, [row.client_id]);
+            if (clientResult.rows.length > 0) {
+              clientName = clientResult.rows[0].name;
+              console.log(`Retrieved client name separately: ${clientName}`);
+            }
+          } catch (clientErr) {
+            console.error(`Error fetching client name separately: ${clientErr}`);
+          }
         }
-      }
-    } else {
-      // Fallback if engagement doesn't exist
-      // Create a compatible object that matches the Engagement type with the new clientId field
-      engagement = {
-        id: timeLog.engagementId,
-        userId: timeLog.userId,
-        clientId: 0, // Use 0 instead of null for clientId
-        projectName: "Unknown Project",
-        hourlyRate: "0", // Keep as string since that's what Drizzle expects for numeric type
-        startDate: new Date(),
-        endDate: new Date(),
-        description: null,
-        status: "unknown"
-      } as unknown as Engagement;
-    }
+        
+        const engagement = {
+          id: row.id,
+          userId: row.user_id,
+          clientId: row.client_id,
+          projectName: row.project_name,
+          hourlyRate: row.hourly_rate,
+          projectAmount: null, // Set to null since it's not in database
+          startDate: new Date(row.start_date),
+          endDate: new Date(row.end_date),
+          description: row.description,
+          status: row.status,
+          engagementType: row.engagement_type || 'hourly', // Default to hourly if not in DB
+        } as Engagement;
+        
+        console.log(`Constructed engagement for time log ${timeLog.id}:`, {
+          id: engagement.id,
+          projectName: engagement.projectName,
+          engagementType: engagement.engagementType,
+          hourlyRate: engagement.hourlyRate,
+          clientName: clientName
+        });
 
-    // Convert both hourlyRate and hours to numbers for calculation
-    const hourlyRate = Number(engagement.hourlyRate);
-    const hours = Number(timeLog.hours);
-    const billableAmount = hours * hourlyRate;
-    
-    return {
-      ...timeLog,
-      engagement,
-      billableAmount
-    };
+        // Convert both hourlyRate and hours to numbers for calculation
+        const hourlyRate = Number(engagement.hourlyRate || 0);
+        const hours = Number(timeLog.hours);
+        const billableAmount = hours * hourlyRate;
+        
+        console.log(`Calculated billable amount for time log ${timeLog.id}:`, {
+          hours,
+          hourlyRate,
+          billableAmount
+        });
+        
+        // Explicitly ensure description is null if it's empty or undefined
+        const sanitizedDescription = 
+          timeLog.description === "" || 
+          timeLog.description === undefined || 
+          (typeof timeLog.description === 'string' && timeLog.description.trim() === "") 
+            ? null 
+            : timeLog.description;
+        
+        return {
+          ...timeLog,
+          description: sanitizedDescription,
+          engagement,
+          billableAmount,
+          clientName
+        };
+      } else {
+        console.warn(`No engagement found for time log ${timeLog.id} with engagement ID ${timeLog.engagementId}`);
+        // Fallback if engagement doesn't exist
+        const engagement = {
+          id: timeLog.engagementId,
+          userId: timeLog.userId,
+          clientId: 0,
+          projectName: "Unknown Project",
+          hourlyRate: "0",
+          projectAmount: "0",
+          startDate: new Date(),
+          endDate: new Date(),
+          description: null,
+          status: "unknown",
+          engagementType: "hourly",
+        } as unknown as Engagement;
+        
+        // Get the hours from the time log for billable amount calculation
+        const hours = Number(timeLog.hours || 0);
+        const billableAmount = hours * Number(engagement.hourlyRate || 0);
+        
+        console.log(`Recovered engagement and client data in error handler: 
+          billableAmount: ${billableAmount} (hours: ${hours}, rate: ${engagement.hourlyRate})
+          projectName: ${engagement.projectName}
+          clientName: "Unknown Client"`);
+        
+        return {
+          ...timeLog,
+          description: null,
+          engagement,
+          billableAmount,
+          clientName: "Unknown Client"
+        };
+      }
+    } catch (error) {
+      console.error('Error in enrichTimeLog:', error);
+      
+      // Get the hours from the time log for billable amount calculation
+      const hours = Number(timeLog.hours || 0);
+      
+      // Try to find the engagement directly from the database to get hourly rate
+      let billableAmount = 0;
+      let clientName = "Unknown Client";
+      let projectName = "Error Loading Project";
+      
+      try {
+        // First, try to get the engagement directly from the database using a different approach
+        console.log(`Attempting to recover engagement data for time log ${timeLog.id} using direct query`);
+        const query = `
+          SELECT e.id, e.user_id, e.client_id, e.project_name, e.hourly_rate, 
+          e.start_date, e.end_date, e.description, e.status, e.engagement_type,
+          c.name as client_name 
+          FROM engagements e 
+          LEFT JOIN clients c ON e.client_id = c.id 
+          WHERE e.id = $1
+        `;
+        const engResult = await pool.query(query, [timeLog.engagementId]);
+        
+        if (engResult.rows.length > 0) {
+          const engagement = engResult.rows[0];
+          const hourlyRate = Number(engagement.hourly_rate || 0);
+          billableAmount = hours * hourlyRate;
+          projectName = engagement.project_name || "Unknown Project";
+          clientName = engagement.client_name || "Unknown Client";
+          
+          console.log(`Recovered engagement and client data in error handler: 
+            billableAmount: ${billableAmount} (hours: ${hours}, rate: ${hourlyRate})
+            projectName: ${projectName}
+            clientName: ${clientName}`);
+        } else if (timeLog.engagementId) {
+          // If we couldn't get data with the join, try direct database queries with Drizzle
+          console.log(`Attempting to recover engagement data using Drizzle ORM`);
+          
+          const engagementData = await db.select().from(engagements).where(eq(engagements.id, timeLog.engagementId));
+          
+          if (engagementData.length > 0) {
+            const engagement = engagementData[0];
+            const hourlyRate = Number(engagement.hourlyRate || 0);
+            billableAmount = hours * hourlyRate;
+            projectName = engagement.projectName || "Unknown Project";
+            
+            // Attempt to get client directly
+            if (engagement.clientId) {
+              const clientData = await db.select().from(clients).where(eq(clients.id, engagement.clientId));
+              if (clientData.length > 0) {
+                clientName = clientData[0].name || "Unknown Client";
+              }
+            }
+          }
+        }
+      } catch (secondaryError) {
+        console.error('Error recovering engagement and client data in secondary attempt:', secondaryError);
+      }
+      
+      // Create a minimal valid response in case of error
+      return {
+        ...timeLog,
+        description: null,
+        engagement: {
+          id: timeLog.engagementId,
+          userId: timeLog.userId,
+          clientId: 0,
+          projectName: projectName,
+          hourlyRate: "0",
+          projectAmount: "0", 
+          startDate: new Date(),
+          endDate: new Date(),
+          description: null,
+          status: "unknown",
+          engagementType: "hourly"
+        } as unknown as Engagement, 
+        billableAmount: billableAmount,
+        clientName: clientName
+      };
+    }
   }
 
   // Get engagement with client details
-  async getEngagementWithClient(id: number, userId?: number): Promise<(Engagement & { client?: any }) | undefined> {
+  async getEngagementWithClient(id: number, userId?: number): Promise<Engagement | undefined> {
     try {
-      // First, get the engagement
-      let query = db.select().from(engagements).where(eq(engagements.id, id));
-      
-      if (userId !== undefined) {
-        query = db.select().from(engagements)
-          .where(and(
-            eq(engagements.id, id),
-            eq(engagements.userId, userId)
-          ));
-      }
-      
-      const engagementResults = await query;
-      
-      if (engagementResults.length === 0) return undefined;
-      
-      const engagement = engagementResults[0];
-      
-      // If there's a clientId, fetch the client
-      let client = undefined;
-      if (engagement.clientId) {
-        const clientResults = await db.select().from(clients)
-          .where(eq(clients.id, engagement.clientId));
-        
-        if (clientResults.length > 0) {
-          client = clientResults[0];
-        }
-      }
-      
-      // Return the combined result
-      return {
-        ...engagement,
-        client
+      const baseQuery = {
+        id: engagements.id,
+        userId: engagements.userId,
+        clientId: engagements.clientId,
+        projectName: engagements.projectName,
+        startDate: engagements.startDate,
+        endDate: engagements.endDate,
+        hourlyRate: engagements.hourlyRate,
+        projectAmount: engagements.projectAmount,
+        engagementType: engagements.engagementType,
+        description: engagements.description,
+        status: engagements.status,
+        clientName: clients.name,
+        clientEmail: clients.billingContactEmail,
+        netTerms: engagements.netTerms,
       };
+
+      // Create query condition based on whether userId is provided
+      const whereCondition = userId !== undefined
+        ? and(eq(engagements.id, id), eq(engagements.userId, userId))
+        : eq(engagements.id, id);
+
+      const query = db
+        .select(baseQuery)
+        .from(engagements)
+        .leftJoin(clients, eq(engagements.clientId, clients.id))
+        .where(whereCondition);
+
+      const results = await query;
+      
+      if (results.length === 0) {
+        return undefined;
+      }
+      
+      return results[0] as Engagement;
     } catch (error) {
-      console.error("Error fetching engagement with client:", error);
+      console.error(`Error fetching engagement with client for id ${id}:`, error);
       return undefined;
     }
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
+  }
+
+  async createPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<string> {
+    // First, invalidate any existing tokens
+    await db.update(passwordResetTokens)
+      .set({ used: true })
+      .where(eq(passwordResetTokens.userId, userId));
+    
+    // Create a new token
+    const [result] = await db.insert(passwordResetTokens)
+      .values({
+        userId,
+        token,
+        expiresAt,
+        createdAt: new Date(),
+        used: false
+      })
+      .returning({ token: passwordResetTokens.token });
+
+    return result.token;
+  }
+
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined> {
+    const [result] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.token, token),
+          eq(passwordResetTokens.used, false),
+          gt(passwordResetTokens.expiresAt, new Date())
+        )
+      );
+    
+    return result;
+  }
+
+  async markPasswordResetTokenAsUsed(token: string): Promise<boolean> {
+    const result = await db
+      .update(passwordResetTokens)
+      .set({ used: true })
+      .where(eq(passwordResetTokens.token, token));
+    
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async updateUserPassword(userId: number, hashedPassword: string): Promise<boolean> {
+    const result = await db
+      .update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, userId));
+    
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 }
 

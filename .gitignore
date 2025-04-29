@@ -5,3 +5,45 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env*
+
+# Build files
+.cache
+.upm
+
+# Test files
+tests/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+vitest.config.ts
+coverage/
+
+# Debug files
+*.log
+*.debug.log
+
+# Development scripts
+*.seed.js
+*.seed.ts
+check-*.js
+check-*.ts
+fix-*.js
+fix-*.ts
+test-*.js
+test-*.ts
+*-migration.js
+*-migration.ts
+*-migration.sh
+*-seed.js
+*-seed.ts
+run-migration*.js
+
+# Local configuration
+.replit
+.config/
+.local/
+
+# Temporary files
+cookies.txt
+tatus

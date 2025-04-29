@@ -42,6 +42,12 @@ const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersPr
     setFilters(prev => ({ ...prev, search: e.target.value }));
   };
 
+  const handleSearchBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    // Trim whitespace when the user finishes typing
+    const trimmedValue = e.target.value.trim();
+    setFilters(prev => ({ ...prev, search: trimmedValue }));
+  };
+
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFilters(prev => ({ ...prev, startDate: e.target.value }));
   };
@@ -94,6 +100,7 @@ const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersPr
                 placeholder="Search descriptions..."
                 value={filters.search}
                 onChange={handleSearchChange}
+                onBlur={handleSearchBlur}
                 className="pl-9"
               />
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

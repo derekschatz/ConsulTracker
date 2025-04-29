@@ -28,11 +28,19 @@
   - [x] Add clickable client names with sliding details panel
   - [x] Automatically populate client billing details on invoices
   - [x] User account settings page with personal info and business details
+  - [x] Add client management button and modal to Engagements page
+  - [x] Prevent deletion of clients with active engagements
+  - [x] Add support for project-based engagements alongside hourly engagements
+  - [x] Integrate HeroSection component with responsive design and animations
 - [x] Add PDF generation for invoices
 - [ ] Implement email notifications
 - [ ] Add data validation and error handling
 - [ ] Set up automated testing
-- [ ] Deploy application
+- [x] Deploy application
+  - [x] Clean up unnecessary files for deployment
+  - [x] Update .gitignore to exclude test and debug files
+  - [ ] Configure production environment
+  - [ ] Set up CI/CD pipeline
 
 ## Completed Tasks
 - [x] Project setup and configuration
@@ -51,6 +59,7 @@
 - Create backend endpoints for business logo upload and retrieval
 - Add error handling for the account settings forms
 - Modified business info form to use phone number instead of country field
+- Added reusable HeroSection component with animations and theme support for landing pages
 
 ## Notes
 - Using Drizzle ORM for database operations

@@ -167,6 +167,16 @@ const InvoicePreviewModal = ({
     }
   };
 
+  // Check if this is a project-based engagement - check both camelCase and snake_case properties
+  const isProjectEngagement = (invoice as any)?.engagementType === 'project' || 
+                             (invoice as any)?.engagement_type === 'project'; 
+  console.log('Invoice preview - Project check:', { 
+    camelCase: (invoice as any)?.engagementType,
+    snakeCase: (invoice as any)?.engagement_type,
+    projectName: invoice?.projectName,
+    isProject: isProjectEngagement
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col overflow-hidden">
@@ -311,8 +321,12 @@ const InvoicePreviewModal = ({
                     <thead>
                       <tr className="bg-gray-50">
                         <th className="py-2 px-4 font-semibold text-gray-600">Description</th>
+                        {!isProjectEngagement && (
+                          <>
                         <th className="py-2 px-4 font-semibold text-gray-600 text-right">Hours</th>
                         <th className="py-2 px-4 font-semibold text-gray-600 text-right">Rate</th>
+                          </>
+                        )}
                         <th className="py-2 px-4 font-semibold text-gray-600 text-right">Amount</th>
                       </tr>
                     </thead>
@@ -324,12 +338,16 @@ const InvoicePreviewModal = ({
                             Period: {previewData.periodStart} - {previewData.periodEnd}
                           </span>
                         </td>
+                        {!isProjectEngagement && (
+                          <>
                         <td className="py-4 px-4 border-t text-right">
                           {formatHours(previewData.totalHours)}
                         </td>
                         <td className="py-4 px-4 border-t text-right">
                           {previewData.rate || 'N/A'}
                         </td>
+                          </>
+                        )}
                         <td className="py-4 px-4 border-t text-right">
                           {previewData.amount}
                         </td>
@@ -338,8 +356,15 @@ const InvoicePreviewModal = ({
                     <tfoot>
                       <tr>
                         <td className="py-4 px-4 border-t"></td>
+                        {!isProjectEngagement && (
+                          <>
                         <td className="py-4 px-4 border-t"></td>
                         <td className="py-4 px-4 border-t text-right font-semibold">Total:</td>
+                          </>
+                        )}
+                        {isProjectEngagement && (
+                          <td className="py-4 px-4 border-t text-right font-semibold">Total:</td>
+                        )}
                         <td className="py-4 px-4 border-t text-right font-bold">
                           {previewData.amount}
                         </td>

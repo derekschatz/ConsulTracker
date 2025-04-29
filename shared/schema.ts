@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, numeric, doublePrecision, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, numeric, doublePrecision, varchar, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -16,9 +16,21 @@ export type EngagementStatus = z.infer<typeof engagementStatusEnum>;
 export function calculateEngagementStatus(startDate: Date, endDate: Date): EngagementStatus {
   const today = new Date();
   
-  if (today > endDate) {
+  // Normalize all dates to midnight to avoid time-of-day comparisons
+  const normalizedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const normalizedStart = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const normalizedEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  
+  // For debugging
+  console.log('Status check:', {
+    today: normalizedToday.toISOString().split('T')[0],
+    start: normalizedStart.toISOString().split('T')[0],
+    end: normalizedEnd.toISOString().split('T')[0]
+  });
+  
+  if (normalizedToday > normalizedEnd) {
     return 'completed';
-  } else if (today < startDate) {
+  } else if (normalizedToday < normalizedStart) {
     return 'upcoming';
   } else {
     return 'active';
@@ -31,6 +43,10 @@ export function calculateEngagementStatus(startDate: Date, endDate: Date): Engag
 // overdue: automatically set when due date passes (for submitted invoices)
 export const invoiceStatusEnum = z.enum(['submitted', 'paid', 'overdue']);
 export type InvoiceStatus = z.infer<typeof invoiceStatusEnum>;
+
+// Define engagement type enum
+export const engagementTypeEnum = z.enum(['hourly', 'project']);
+export type EngagementType = z.infer<typeof engagementTypeEnum>;
 
 // Client table
 export const clients = pgTable("clients", {
@@ -70,9 +86,12 @@ export const engagements = pgTable("engagements", {
   projectName: text("project_name").notNull(),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
-  hourlyRate: numeric("hourly_rate").notNull(),
+  engagementType: text("engagement_type").notNull().default('hourly'),
+  hourlyRate: numeric("hourly_rate"),
+  projectAmount: numeric("project_amount"),
   description: text("description"),
-  status: text("status").notNull().default('active')
+  status: text("status").notNull().default('active'),
+  netTerms: integer("net_terms").default(30),
 });
 
 export const engagementsRelations = relations(engagements, ({ many, one }) => ({
@@ -90,10 +109,26 @@ export const insertEngagementSchema = z.object({
   projectName: z.string(),
   startDate: z.date(),
   endDate: z.date(),
-  hourlyRate: z.number().positive('Hourly rate must be positive'),
+  engagementType: engagementTypeEnum.default('hourly'),
+  hourlyRate: z.number().positive('Hourly rate must be positive').optional().nullable(),
+  projectAmount: z.number().positive('Project amount must be positive').optional().nullable(),
   description: z.string().optional(),
-  status: z.string().default('active')
-});
+  status: z.string().default('active'),
+  netTerms: z.number().int().min(1).default(30)
+}).refine(
+  (data) => {
+    if (data.engagementType === 'hourly') {
+      return data.hourlyRate !== undefined && data.hourlyRate !== null;
+    } else if (data.engagementType === 'project') {
+      return data.projectAmount !== undefined && data.projectAmount !== null;
+    }
+    return false;
+  },
+  {
+    message: "Hourly rate is required for hourly engagements, or project amount is required for project engagements",
+    path: ['engagementType'],
+  }
+);
 
 // Time logs table
 export const timeLogs = pgTable("time_logs", {
@@ -188,6 +223,23 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Password reset tokens table
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  used: boolean("used").notNull().default(false),
+});
+
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [passwordResetTokens.userId],
+    references: [users.id]
+  })
+}));
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -211,12 +263,13 @@ export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
 // Extended types with computed fields
 export type TimeLogWithEngagement = TimeLog & {
-  engagement: Engagement & {
-    clientName?: string; // Add clientName for backward compatibility
-  };
+  engagement: Engagement;
   billableAmount: number;
+  clientName?: string;
 };
 
 // Add interface for line items

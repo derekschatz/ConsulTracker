@@ -15,13 +15,13 @@ declare global {
 
 const scryptAsync = promisify(scrypt);
 
-async function hashPassword(password: string) {
+export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
 }
 
-async function comparePasswords(supplied: string, stored: string) {
+export async function comparePasswords(supplied: string, stored: string) {
   const [hashed, salt] = stored.split(".");
   const hashedBuf = Buffer.from(hashed, "hex");
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
@@ -138,5 +138,110 @@ export function setupAuth(app: Express) {
       return res.status(401).send("Not authenticated");
     }
     res.json(req.user);
+  });
+  
+  // Forgot password route
+  app.post("/api/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      
+      // Always return success even if user not found for security
+      if (!user) {
+        return res.status(200).json({ 
+          message: "If an account with that email exists, a password reset link has been sent." 
+        });
+      }
+      
+      // Generate a secure random token
+      const resetToken = randomBytes(32).toString('hex');
+      
+      // Set expiration to 1 hour from now
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+      
+      // Save token to database
+      await storage.createPasswordResetToken(user.id, resetToken, expiresAt);
+      
+      // Import email service
+      const { emailService } = await import('./services/email-service');
+      
+      // Send password reset email
+      await emailService.sendPasswordResetEmail({
+        to: user.email || "",
+        resetToken: resetToken,
+        userName: user.name || user.username,
+      });
+      
+      res.status(200).json({ 
+        message: "If an account with that email exists, a password reset link has been sent." 
+      });
+    } catch (error) {
+      console.error("Error in forgot password:", error);
+      res.status(500).json({ message: "An error occurred while processing your request." });
+    }
+  });
+  
+  // Reset password route - Verify token
+  app.get("/api/reset-password/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      // Verify token
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.status(400).json({ 
+          message: "Password reset link is invalid or has expired." 
+        });
+      }
+      
+      // Return success
+      res.status(200).json({ message: "Token is valid" });
+    } catch (error) {
+      console.error("Error verifying reset token:", error);
+      res.status(500).json({ message: "An error occurred while processing your request." });
+    }
+  });
+  
+  // Reset password route - Process password change
+  app.post("/api/reset-password/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body;
+      
+      if (!password || password.length < 8) {
+        return res.status(400).json({ message: "Please provide a password with at least 8 characters." });
+      }
+      
+      // Verify token
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.status(400).json({ 
+          message: "Password reset link is invalid or has expired." 
+        });
+      }
+      
+      // Hash new password
+      const hashedPassword = await hashPassword(password);
+      
+      // Update user password
+      await storage.updateUserPassword(resetToken.userId, hashedPassword);
+      
+      // Mark token as used
+      await storage.markPasswordResetTokenAsUsed(token);
+      
+      res.status(200).json({ message: "Password has been reset successfully." });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ message: "An error occurred while processing your request." });
+    }
   });
 }

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
-import { Edit, Trash2, Calendar, Mail } from 'lucide-react';
+import { Edit, Trash2, Calendar, Mail, DollarSign } from 'lucide-react';
 import ReceiptIcon from '@/components/icons/receipt-icon';
 import { formatDate } from '@/lib/date-utils';
 import { formatCurrency } from '@/lib/format-utils';
@@ -86,9 +86,41 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
       hidden: () => isMobile,
     },
     {
-      accessor: 'hourlyRate',
-      header: 'Rate',
-      cell: (engagement) => formatCurrency(engagement.hourlyRate) + '/hr',
+      accessor: 'engagementType',
+      header: 'Type',
+      cell: (engagement) => {
+        const isProjectBased = engagement.engagementType === 'project';
+        
+        return (
+          <div className="text-sm">
+            {isProjectBased ? 'Project-Based' : 'Hourly'}
+          </div>
+        );
+      },
+    },
+    {
+      accessor: 'rate',
+      header: 'Rate/Amount',
+      cell: (engagement) => {
+        const isProjectBased = engagement.engagementType === 'project';
+        
+        // Get project amount if available
+        const projectAmount = engagement.projectAmount || 0;
+        
+        if (isProjectBased) {
+          return (
+            <div>
+              {formatCurrency(projectAmount)}
+            </div>
+          );
+        } else {
+          return (
+            <div>
+              {formatCurrency(engagement.hourlyRate) + '/hr'}
+            </div>
+          );
+        }
+      },
     },
     {
       accessor: 'status',

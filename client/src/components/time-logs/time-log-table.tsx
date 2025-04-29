@@ -5,6 +5,7 @@ import { Edit, Trash2 } from 'lucide-react';
 import { formatDate } from '@/lib/date-utils';
 import { formatCurrency, formatHours } from '@/lib/format-utils';
 import { useMobile } from '@/hooks/use-mobile';
+import { useEffect } from 'react';
 
 interface TimeLogTableProps {
   timeLogs: any[];
@@ -15,6 +16,17 @@ interface TimeLogTableProps {
 
 const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTableProps) => {
   const isMobile = useMobile();
+  
+  // Debug the time logs data
+  useEffect(() => {
+    if (timeLogs && timeLogs.length > 0) {
+      console.log('Time logs in table component:', timeLogs.length);
+      console.log('Sample time log:', timeLogs[0]);
+      if (timeLogs[0].engagement) {
+        console.log('Sample engagement data:', timeLogs[0].engagement);
+      }
+    }
+  }, [timeLogs]);
   
   const columns: Column<any>[] = [
     {
@@ -34,7 +46,6 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
             dateObj.getDate() + 1  // Add one day to compensate for timezone shift
           );
           
-          console.log('Original date:', timeLog.date, 'Corrected date:', localDate);
           return formatDate(localDate);
         } catch (e) {
           console.error("Error formatting date:", e, timeLog.date);
@@ -46,17 +57,45 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
     {
       accessor: 'engagement',
       header: 'Client',
-      cell: (timeLog) => (
-        <div>
-          <div className="font-medium text-slate-900">{timeLog.engagement.clientName}</div>
-          <div className="text-xs text-slate-500 mt-1 md:hidden">{timeLog.description}</div>
-        </div>
-      ),
+      cell: (timeLog) => {
+        // Perform thorough validation checks
+        if (!timeLog) {
+          console.error('Missing timeLog data');
+          return <div className="text-red-500">Missing data</div>;
+        }
+        
+        // Access clientName from the top level property, not from engagement
+        // This reflects our schema change where clientName was moved out of engagement
+        const clientName = timeLog.clientName || 'Unknown Client';
+        
+        // Debug which client name is being used
+        console.log(`Time log ${timeLog.id} client name:`, {
+          clientNameDirect: timeLog.clientName,
+          engagementData: timeLog.engagement ? {
+            projectName: timeLog.engagement.projectName,
+            hourlyRate: timeLog.engagement.hourlyRate
+          } : 'No engagement data'
+        });
+        
+        return (
+          <div>
+            <div className="font-medium text-slate-900">
+              {clientName}
+            </div>
+            <div className="text-xs text-slate-500 mt-1 md:hidden">
+              {timeLog.description || ''}
+            </div>
+          </div>
+        );
+      },
     },
     {
       accessor: 'description',
       header: 'Description',
-      cell: (timeLog) => timeLog.description,
+      cell: (timeLog) => {
+        if (!timeLog) return null;
+        return timeLog.description || '';
+      },
       hidden: () => isMobile,
     },
     {
@@ -69,7 +108,21 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
     {
       accessor: 'billableAmount',
       header: 'Billable Amount',
-      cell: (timeLog) => formatCurrency(timeLog.billableAmount),
+      cell: (timeLog) => {
+        // Ensure we have a valid billable amount
+        let amount = 0;
+        
+        // First try to use the timeLog.billableAmount if it exists
+        if (typeof timeLog.billableAmount === 'number') {
+          amount = timeLog.billableAmount;
+        } 
+        // If not, try to calculate it from hours and hourly rate
+        else if (timeLog.hours && timeLog.engagement?.hourlyRate) {
+          amount = timeLog.hours * Number(timeLog.engagement.hourlyRate);
+        }
+        
+        return formatCurrency(amount);
+      },
       hidden: () => isMobile,
     },
     {
