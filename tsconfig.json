@@ -19,14 +19,16 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["client/src/*"],
-      "@shared/*": ["shared/*"]
+      "@shared/*": ["shared/*"],
+      "@tests/*": ["scripts/tests/*"]
     }
   },
   "include": [
     "client/src",
     "shared",
+    "scripts/tests/**/*",
     "client/src/__tests__/**/*",
-    "vitest.setup.ts",
+    "scripts/tests/setup/vitest.setup.ts",
     "vitest.config.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]

@@ -9,10 +9,10 @@
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand --watch"
+    "test": "jest --config scripts/tests/config/jest.config.js",
+    "test:watch": "jest --config scripts/tests/config/jest.config.js --watch",
+    "test:coverage": "jest --config scripts/tests/config/jest.config.js --coverage",
+    "test:debug": "node --inspect-brk node_modules/.bin/jest --config scripts/tests/config/jest.config.js --runInBand --watch"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

@@ -15,8 +15,7 @@ interface TimeLogTableProps {
 }
 
 const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTableProps) => {
-  const isMobile = useMobile();
-  
+  const isMobile = useMobile();  
   // Debug the time logs data
   useEffect(() => {
     if (timeLogs && timeLogs.length > 0) {

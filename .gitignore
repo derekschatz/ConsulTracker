@@ -47,3 +47,6 @@ run-migration*.js
 # Temporary files
 cookies.txt
 tatus
+
+#scripts
+scripts/
