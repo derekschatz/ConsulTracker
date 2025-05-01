@@ -4,7 +4,7 @@ const { Pool } = pg;
 // Create a new pool using DATABASE_URL environment variable
 // or a default connection string
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/consultracker'
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/contraq'
 });
 
 async function main() {

@@ -128,24 +128,23 @@ export const ClientDetailsPanel = ({
     setSubmitError(null);
     
     try {
-      // Use the actual form data instead of test values
+      // Create a new object without userId and id fields
+      const { userId, id, ...updateData } = data;
+      
+      // Format the data, ensuring empty strings for null/undefined values
       const formattedData = {
-        ...data,
-        // Ensure empty strings are sent as empty strings, not null
-        billingContactName: data.billingContactName || '',
-        billingContactEmail: data.billingContactEmail || '',
-        billingAddress: data.billingAddress || '',
-        billingCity: data.billingCity || '',
-        billingState: data.billingState || '',
-        billingZip: data.billingZip || '',
-        billingCountry: data.billingCountry || ''
+        ...updateData,
+        billingContactName: updateData.billingContactName || '',
+        billingContactEmail: updateData.billingContactEmail || '',
+        billingAddress: updateData.billingAddress || '',
+        billingCity: updateData.billingCity || '',
+        billingState: updateData.billingState || '',
+        billingZip: updateData.billingZip || '',
+        billingCountry: updateData.billingCountry || ''
       };
       
       // Add more detailed logging of the data being sent
-      console.log('⭐⭐⭐ ORIGINAL form data:', data);
-      console.log('⭐⭐⭐ FORMATTED data being sent:', formattedData);
-      console.log('⭐⭐⭐ billingContactName type:', typeof formattedData.billingContactName, 'value:', JSON.stringify(formattedData.billingContactName));
-      console.log('⭐⭐⭐ billingContactEmail type:', typeof formattedData.billingContactEmail, 'value:', JSON.stringify(formattedData.billingContactEmail));
+      console.log('⭐⭐⭐ Data to be sent:', formattedData);
       
       const response = await apiRequest(
         'PUT',
@@ -161,18 +160,15 @@ export const ClientDetailsPanel = ({
         throw new Error(errorData.message || 'Failed to update client');
       }
 
-      // Get the updated client data (clone the response before using it)
-      const clonedResponse = response.clone();
-      const updatedClient = await clonedResponse.json().catch(() => null);
+      // Get the updated client data
+      const updatedClient = await response.json();
       console.log('💥 Updated client data received:', updatedClient);
       
       if (updatedClient) {
         setClient(updatedClient);
         
         // Verify the returned data has the billing details
-        console.log('💥 Billing contact name from response:', updatedClient.billingContactName);
-        console.log('💥 Billing contact email from response:', updatedClient.billingContactEmail);
-        console.log('💥 Billing fields received:', {
+        console.log('💥 Updated billing fields:', {
           billingContactName: updatedClient.billingContactName,
           billingContactEmail: updatedClient.billingContactEmail,
           billingAddress: updatedClient.billingAddress,
@@ -233,15 +229,8 @@ export const ClientDetailsPanel = ({
                   <FormItem>
                     <FormLabel>Client Name</FormLabel>
                     <FormControl>
-                      <Input 
-                        {...field} 
-                        readOnly 
-                        className="bg-slate-50 cursor-not-allowed" 
-                      />
+                      <Input {...field} />
                     </FormControl>
-                    <FormDescription>
-                      Client name cannot be changed here
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

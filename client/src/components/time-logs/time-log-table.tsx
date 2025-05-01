@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import { Edit, Trash2 } from 'lucide-react';
-import { formatDate } from '@/lib/date-utils';
+import { formatDateNoTZ } from '@/lib/date-utils';
 import { formatCurrency, formatHours } from '@/lib/format-utils';
 import { useMobile } from '@/hooks/use-mobile';
 import { useEffect } from 'react';
@@ -33,25 +33,7 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
       accessor: 'date',
       header: 'Date',
       cell: (timeLog) => {
-        try {
-          // Issue: Dates are being converted to the day before due to timezone handling
-          // Solution: Handle timezone by forcing the date to be interpreted in local timezone
-          const dateObj = new Date(timeLog.date);
-          
-          // Create a new date with just the year, month, and day values
-          // This forces the date to be interpreted in the local timezone
-          const localDate = new Date(
-            dateObj.getFullYear(),
-            dateObj.getMonth(),
-            dateObj.getDate() + 1  // Add one day to compensate for timezone shift
-          );
-          
-          return formatDate(localDate);
-        } catch (e) {
-          console.error("Error formatting date:", e, timeLog.date);
-          // Fallback to direct string if there's an error
-          return typeof timeLog.date === 'string' ? timeLog.date : 'Invalid date';
-        }
+        return formatDateNoTZ(timeLog.date);
       },
     },
     {

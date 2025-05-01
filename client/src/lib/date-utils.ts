@@ -10,19 +10,14 @@ export interface DateRange {
 
 // Format a date to a string with specified format
 export function formatDate(date: Date | string): string {
-  if (!date) return '';
-  const dateObj = typeof date === 'string' ? parseISO(date) : date;
-  return format(dateObj, 'MM/dd/yyyy');
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return dateObj.toISOString().split('T')[0];
 }
 
 // Parse a string to a Date object
-export function parseDate(dateStr: string, formatStr = 'yyyy-MM-dd'): Date | null {
-  try {
-    const parsed = parse(dateStr, formatStr, new Date());
-    return isValid(parsed) ? parsed : null;
-  } catch (error) {
-    return null;
-  }
+export function parseDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day); // month is 0-indexed in Date constructor
 }
 
 // Get date range based on predefined ranges
@@ -169,9 +164,16 @@ export function parseISODate(dateString: string): Date {
   return parse(dateString, 'yyyy-MM-dd', new Date());
 }
 
-export function formatDateForDisplay(date: Date | string): string {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date;
-  return format(dateObj, 'MMMM d, yyyy');
+// Format a date for display in the UI
+export function formatDateForDisplay(date: Date | string | null): string {
+  if (!date) {
+    return '';
+  }
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+    return '';
+  }
+  return dateObj.toLocaleDateString();
 }
 
 export function formatDateTimeForDisplay(date: Date): string {
@@ -183,59 +185,80 @@ export function isValidDateString(dateString: string): boolean {
   return !isNaN(date.getTime());
 }
 
-export function getStartOfDay(date: Date): Date {
-  const newDate = new Date(date);
-  newDate.setHours(0, 0, 0, 0);
-  return newDate;
+// Get start of day without timezone adjustment
+export function startOfDay(date: Date): Date {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    throw new Error('Invalid date provided to startOfDay');
+  }
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  return start;
 }
 
-export function getEndOfDay(date: Date): Date {
-  const newDate = new Date(date);
-  newDate.setHours(23, 59, 59, 999);
-  return newDate;
+// Get end of day without timezone adjustment
+export function endOfDay(date: Date): Date {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    throw new Error('Invalid date provided to endOfDay');
+  }
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return end;
 }
 
-/**
- * Adjusts a date for timezone differences by adding one day
- * @param date The date to adjust
- * @returns Adjusted Date object
- */
-export function adjustDateForTimezone(date: Date | string): Date {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return new Date(
-    dateObj.getFullYear(),
-    dateObj.getMonth(),
-    dateObj.getDate() + 1  // Add one day to compensate for timezone shift
-  );
+// Convert a date to storage format (YYYY-MM-DD)
+export function toStorageDate(date: Date): string {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    return '';
+  }
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
-// Convert a date to local timezone without adding extra days
-export function toLocalDate(date: Date | string): Date {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date;
-  return new Date(
-    dateObj.getFullYear(),
-    dateObj.getMonth(),
-    dateObj.getDate()
-  );
+// Add days to a date without timezone issues
+export function addDays(date: Date, days: number): Date {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    throw new Error('Invalid date provided to addDays');
+  }
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
 }
 
-/**
- * Converts a date to a storage-friendly format (YYYY-MM-DD)
- * @param date The date to convert
- * @returns Date string in YYYY-MM-DD format
- */
-export function toStorageDate(date: Date | string): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return format(dateObj, 'yyyy-MM-dd');
+// Parse a date string in YYYY-MM-DD format to a local Date object at midnight
+export function parseLocalDate(str: string): Date | null {
+  if (!str || typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return null;
+  }
+  const [year, month, day] = str.split('-').map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+  const date = new Date(year, month - 1, day);
+  return isNaN(date.getTime()) ? null : date;
 }
 
-/**
- * Adds days to a date
- * @param date The date to add days to
- * @param days Number of days to add
- * @returns New Date object
- */
-export function addDays(date: Date | string, days: number): Date {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return dateFnsAddDays(dateObj, days);
+// Convert a storage date (YYYY-MM-DD) to a local Date object
+export function fromStorageDate(dateStr: string): Date | null {
+  if (!dateStr) {
+    return null;
+  }
+  return parseLocalDate(dateStr);
+}
+
+// Format a date string as MM/DD/YYYY without timezone conversion
+export function formatDateNoTZ(dateStr: string | undefined | null): string {
+  if (!dateStr) return '';
+  // If already in YYYY-MM-DD, use it directly
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [year, month, day] = dateStr.split('-');
+    return `${month}/${day}/${year}`;
+  }
+  // If ISO string, extract date part
+  if (typeof dateStr === 'string' && dateStr.includes('T')) {
+    const [year, month, day] = dateStr.split('T')[0].split('-');
+    return `${month}/${day}/${year}`;
+  }
+  return dateStr;
 }

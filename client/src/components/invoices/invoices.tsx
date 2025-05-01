@@ -182,7 +182,8 @@ const Invoices = () => {
         engagementId: completeInvoice.engagement_id || completeInvoice.engagementId,
         lineItems: completeInvoice.lineItems || completeInvoice.line_items || [],
         totalHours: completeInvoice.total_hours || completeInvoice.totalHours,
-        userId: completeInvoice.user_id || completeInvoice.userId
+        userId: completeInvoice.user_id || completeInvoice.userId,
+        invoice_type: completeInvoice.invoice_type || completeInvoice.invoiceType,
       };
       
       console.log("Setting formatted invoice for edit mode:", formattedInvoice);
@@ -292,6 +293,7 @@ const Invoices = () => {
         lineItems: completeInvoice.lineItems || completeInvoice.line_items || [],
         totalHours: Number(completeInvoice.total_hours || completeInvoice.totalHours || 0),
         userId: completeInvoice.user_id || completeInvoice.userId,
+        invoice_type: completeInvoice.invoice_type || completeInvoice.invoiceType,
         // Add billing details
         billingContactName: completeInvoice.billing_contact_name || completeInvoice.billingContactName,
         billingContactEmail: completeInvoice.billing_contact_email || completeInvoice.billingContactEmail,

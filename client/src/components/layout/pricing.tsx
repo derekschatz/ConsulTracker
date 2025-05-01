@@ -6,11 +6,12 @@ import { Link } from "wouter";
 import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import NumberFlow from "@number-flow/react";
+import React from "react";
 
 interface PricingPlan {
   name: string;
@@ -20,8 +21,10 @@ interface PricingPlan {
   features: string[];
   description: string;
   buttonText: string;
-  href: string;
+  monthlyPriceId: string;
+  yearlyPriceId: string;
   isPopular: boolean;
+  isComingSoon?: boolean;
 }
 
 const plans: PricingPlan[] = [
@@ -38,7 +41,8 @@ const plans: PricingPlan[] = [
     ],
     description: "Everything you need to get started",
     buttonText: "Start trial",
-    href: "/login?tab=register",
+    monthlyPriceId: "price_1RJ46xKC0x0Qg4vJ9gU5pGSE",
+    yearlyPriceId: "price_1RJ46xKC0x0Qg4vJ99veggx9",
     isPopular: false,
   },
   {
@@ -54,7 +58,8 @@ const plans: PricingPlan[] = [
     ],
     description: "Perfect for growing businesses",
     buttonText: "Start trial",
-    href: "/login?tab=register",
+    monthlyPriceId: "price_1RJIy0KC0x0Qg4vJqwpLtIjT",
+    yearlyPriceId: "price_1RJDPtKC0x0Qg4vJiLu33TUe",
     isPopular: true,
   },
   {
@@ -71,10 +76,24 @@ const plans: PricingPlan[] = [
     ],
     description: "For larger consulting teams",
     buttonText: "Coming Soon",
-    href: "#",
+    monthlyPriceId: "",
+    yearlyPriceId: "",
     isPopular: false,
+    isComingSoon: true,
   },
 ];
+
+// Declare the custom element for TypeScript
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'stripe-buy-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & {
+        'buy-button-id'?: string;
+        'publishable-key'?: string;
+      }, HTMLElement>;
+    }
+  }
+}
 
 const Pricing = () => {
   const [isMonthly, setIsMonthly] = useState(true);
@@ -83,6 +102,32 @@ const Pricing = () => {
 
   const handleToggle = (checked: boolean) => {
     setIsMonthly(!checked);
+  };
+
+  // Create a better implementation for the Stripe checkout
+  const redirectToStripe = (priceId: string) => {
+    // Use Stripe's recommended approach - redirect to their dashboard checkout page
+    // This is a temporary solution - ideally should be handled server-side
+    
+    // Map price IDs to their corresponding checkout URLs from Stripe Dashboard
+    const checkoutUrls: Record<string, string> = {
+      'price_1RJ46xKC0x0Qg4vJ9gU5pGSE': 'https://buy.stripe.com/4gwg234e13LO6go4gg', // Solo Monthly
+      'price_1RJ46xKC0x0Qg4vJ99veggx9': 'https://buy.stripe.com/7sIcPRcKx8247ks6op', // Solo Yearly
+      'price_1RJIy0KC0x0Qg4vJqwpLtIjT': 'https://buy.stripe.com/bIY3fh11P5TWeMUcMQ', // Pro Monthly
+      'price_1RJDPtKC0x0Qg4vJiLu33TUe': 'https://buy.stripe.com/aEU9DF4e1beg5ck28a', // Pro Yearly
+    };
+    
+    // Get the checkout URL for the selected price
+    const checkoutUrl = checkoutUrls[priceId];
+    
+    if (checkoutUrl) {
+      console.log(`Redirecting to Stripe Dashboard checkout: ${checkoutUrl}`);
+      window.location.href = checkoutUrl;
+    } else {
+      // Fallback to Stripe's product page if we don't have a direct link
+      console.log(`No direct checkout URL for price ID: ${priceId}, redirecting to Stripe`);
+      window.location.href = 'https://stripe.com/payments';
+    }
   };
 
   return (
@@ -99,18 +144,17 @@ const Pricing = () => {
 
         <div className="flex justify-center mb-10">
           <label className="relative inline-flex items-center cursor-pointer">
-            <Label>
-              <Switch
-                ref={switchRef as any}
-                checked={!isMonthly}
-                onCheckedChange={handleToggle}
-                className="relative"
-              />
-            </Label>
+            <span className="mr-2 font-semibold">Monthly</span>
+            <Switch
+              ref={switchRef as any}
+              checked={!isMonthly}
+              onCheckedChange={handleToggle}
+              className="relative"
+            />
+            <span className="ml-2 font-semibold">
+              Annual <span className="text-primary-600">(Save 20%)</span>
+            </span>
           </label>
-          <span className="ml-2 font-semibold">
-            Annual billing <span className="text-primary-600">(Save 20%)</span>
-          </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 sm:2 gap-4 max-w-5xl mx-auto">
@@ -201,22 +245,32 @@ const Pricing = () => {
 
                 <hr className="w-full my-6" />
 
-                <Link
-                  href={plan.href}
-                  className={cn(
-                    buttonVariants({
-                      variant: "outline",
-                    }),
-                    "group relative w-full gap-2 overflow-hidden text-lg font-semibold tracking-tighter",
-                    "transform-gpu ring-offset-current transition-all duration-300 ease-out hover:ring-2 hover:ring-primary-600 hover:ring-offset-1 hover:bg-primary-600 hover:text-white",
-                    plan.isPopular
-                      ? "bg-primary-600 text-white"
-                      : "bg-white text-gray-900 border-primary-600 text-primary-600",
-                    plan.name === "Team" && "opacity-70 cursor-not-allowed pointer-events-none"
-                  )}
-                >
-                  {plan.buttonText}
-                </Link>
+                {plan.isComingSoon ? (
+                  <Button 
+                    variant="outline"
+                    className={cn(
+                      "group relative w-full gap-2 overflow-hidden text-lg font-semibold tracking-tighter opacity-70 cursor-not-allowed",
+                      "bg-white text-gray-900 border-primary-600 text-primary-600"
+                    )}
+                    disabled
+                  >
+                    {plan.buttonText}
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="outline"
+                    className={cn(
+                      "group relative w-full gap-2 overflow-hidden text-lg font-semibold tracking-tighter",
+                      "transform-gpu ring-offset-current transition-all duration-300 ease-out hover:ring-2 hover:ring-primary-600 hover:ring-offset-1 hover:bg-primary-600 hover:text-white",
+                      plan.isPopular
+                        ? "bg-primary-600 text-white"
+                        : "bg-white text-gray-900 border-primary-600 text-primary-600"
+                    )}
+                    onClick={() => redirectToStripe(isMonthly ? plan.monthlyPriceId : plan.yearlyPriceId)}
+                  >
+                    {plan.buttonText}
+                  </Button>
+                )}
                 <p className="mt-4 text-sm leading-5 text-gray-500">
                   {plan.description}
                 </p>

@@ -1,6 +1,4 @@
 {
-  "include": ["client/src/**/*", "shared/**/*", "server/**/*", "tests"],
-  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
@@ -17,12 +15,19 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./client/src/*"],
-      "@shared/*": ["./shared/*"]
-    },
-    "types": ["vitest/globals", "supertest"]
+      "@/*": ["client/src/*"],
+      "@shared/*": ["shared/*"]
+    }
   },
+  "include": [
+    "client/src",
+    "shared",
+    "client/src/__tests__/**/*",
+    "vitest.setup.ts",
+    "vitest.config.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

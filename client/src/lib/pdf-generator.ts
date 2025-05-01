@@ -296,7 +296,7 @@ export function generateInvoicePDF(
       }
       
       // For the example format, we'll create a period/date range description
-      const projectDesc = `Consultant ${invoice.projectName || "Services"} Activities`;
+      const projectDesc = `${invoice.projectName || "Consulting Services"} Activities`;
       
       // Format period dates - directly extract from the date strings without timezone conversion
       const period = `Period: ${formatDatePart(invoice.periodStart)} - ${formatDatePart(invoice.periodEnd)}`;
@@ -332,7 +332,7 @@ export function generateInvoicePDF(
     });
   } else {
     // If no line items, show consistent description with preview
-    const projectDesc = `Consultant ${invoice.projectName || "Services"} Activities`;
+    const projectDesc = `${invoice.projectName || "Consulting Services"} Activities`;
     const period = `Period: ${formatDatePart(invoice.periodStart)} - ${formatDatePart(invoice.periodEnd)}`;
 
     // Draw first row with description

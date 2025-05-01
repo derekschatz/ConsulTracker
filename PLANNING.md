@@ -1,7 +1,7 @@
-# ConsulTracker Project Planning
+# Contraq Project Planning
 
 ## Project Overview
-ConsulTracker is a comprehensive consulting time tracking and invoicing application designed to help consultants manage their clients, engagements, time logs, and invoicing in one place.
+Contraq is a comprehensive consulting time tracking and invoicing application designed to help consultants manage their clients, engagements, time logs, and invoicing in one place.
 
 ## Architecture
 

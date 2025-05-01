@@ -333,7 +333,7 @@ const InvoicePreviewModal = ({
                     <tbody>
                       <tr>
                         <td className="py-4 px-4 border-t">
-                          Consultant {previewData.projectName} Activities<br />
+                           {previewData.projectName} Consultant Activities<br />
                           <span className="text-sm text-gray-500">
                             Period: {previewData.periodStart} - {previewData.periodEnd}
                           </span>

@@ -89,7 +89,7 @@ const Features = () => {
     <section id="features" className="py-24 bg-white">
       <div className="container mx-auto px-4">
         <div className="flex flex-col items-center gap-4 text-center">
-          <Badge variant="outline" className="bg-white">ConsulTracker</Badge>
+          <Badge variant="outline" className="bg-white">Contraq</Badge>
           <h2 className="max-w-2xl text-3xl font-bold text-gray-900 md:text-4xl">
             Everything consultants need
           </h2>

@@ -314,4 +314,38 @@ describe('InvoiceModal', () => {
       expect(screen.getByLabelText('Engagement')).toHaveValue('');
     });
   });
+
+  it('shows correct fields for hourly invoice in edit mode', async () => {
+    const hourlyInvoice = {
+      id: 1,
+      invoiceNumber: 'INV-001',
+      clientName: 'Hourly Client',
+      projectName: 'Hourly Project',
+      issueDate: '2024-03-01',
+      dueDate: '2024-03-31',
+      totalAmount: 500,
+      status: 'submitted',
+      notes: 'Hourly invoice notes',
+      periodStart: '2024-03-01',
+      periodEnd: '2024-03-31',
+      engagementId: 123,
+      lineItems: [],
+      totalHours: 5,
+      userId: 1,
+      invoice_type: 'hourly',
+    };
+
+    renderWithProviders(
+      <InvoiceModal open={true} onOpenChange={vi.fn()} onSuccess={vi.fn()} invoice={hourlyInvoice} />
+    );
+
+    // Check for all required fields
+    expect(screen.getByLabelText(/client/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/engagement/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/from date|period start|billing start/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/to date|period end|billing end/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/notes/i)).toBeInTheDocument();
+    // Time logs table header
+    expect(screen.getByText(/time logs/i)).toBeInTheDocument();
+  });
 }); 

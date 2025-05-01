@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 interface MetricCardProps {
   title: string;
@@ -9,6 +10,7 @@ interface MetricCardProps {
   trend?: number;
   trendLabel?: string;
   loading?: boolean;
+  className?: string;
 }
 
 const MetricCard = ({
@@ -17,10 +19,11 @@ const MetricCard = ({
   subtitle,
   trend,
   trendLabel,
-  loading = false
+  loading = false,
+  className
 }: MetricCardProps) => {
   return (
-    <Card>
+    <Card className={className}>
       <CardContent className="pt-5">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-slate-500">{title}</h3>
@@ -34,10 +37,10 @@ const MetricCard = ({
         {loading ? (
           <Skeleton className="h-8 w-32 mb-1" />
         ) : (
-          <div className="text-2xl md:text-3xl font-semibold">{value}</div>
+          <div className="text-2xl md:text-3xl font-semibold text-[#0D2B47]">{value}</div>
         )}
         {subtitle && (
-          <div className="mt-1 text-xs text-slate-500">{subtitle}</div>
+          <div className="mt-1 text-sm text-slate-500">{subtitle}</div>
         )}
       </CardContent>
     </Card>

@@ -6,7 +6,7 @@ const { Pool } = require('pg');
 const {
   PGHOST = 'localhost',
   PGUSER = 'postgres',
-  PGDATABASE = 'consultracker',
+  PGDATABASE = 'contraq',
   PGPASSWORD = '',
   PGPORT = 5432,
 } = process.env;

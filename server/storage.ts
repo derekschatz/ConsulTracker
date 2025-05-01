@@ -8,7 +8,7 @@ import {
   engagements, timeLogs, invoices, users, clients,
   passwordResetTokens,
   type PasswordResetToken,
-} from "@shared/schema";
+} from "../shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, sql, SQL, gt } from "drizzle-orm";
 import * as expressSession from "express-session";
@@ -151,37 +151,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateClient(id: number, client: Partial<InsertClient>, userId?: number): Promise<Client | undefined> {
-    // Log to file for debugging
-    const logData = `
-[${new Date().toISOString()}] UPDATE CLIENT CALLED
-ID: ${id}
-User ID: ${userId}
-Client data: ${JSON.stringify(client, null, 2)}
-billingContactName value: ${client.billingContactName}
-billingContactName type: ${typeof client.billingContactName}
-billingContactEmail value: ${client.billingContactEmail}
-billingContactEmail type: ${typeof client.billingContactEmail}
-    `;
-    
-    fs.appendFileSync('client-update-debug.log', logData);
-    
-    console.log('DIRECT SQL: Updating client with ID:', id);
-    console.log('DIRECT SQL: Update data RAW:', client);
-    console.log('DIRECT SQL: Update data as JSON:', JSON.stringify(client));
-    console.log('DIRECT SQL: User ID filter:', userId);
-    
-    // Detailed logging of specific fields
-    console.log('DIRECT SQL: Detail check of billing fields:');
-    console.log('billingContactName:', client.billingContactName, 'type:', typeof client.billingContactName);
-    console.log('billingContactEmail:', client.billingContactEmail, 'type:', typeof client.billingContactEmail);
-    console.log('billingAddress:', client.billingAddress, 'type:', typeof client.billingAddress);
-    
     try {
-      // Always update all billing fields with whatever values we have
-      // Fix the PostgreSQL empty string to NULL conversion issue
-      let query: string;
-      let values: any[];
-      
       // Process values to prevent NULL conversion
       const processValue = (value: string | null | undefined): string => {
         // Convert null or undefined to empty string
@@ -189,94 +159,50 @@ billingContactEmail type: ${typeof client.billingContactEmail}
         // Return the value as is (already a string)
         return value;
       };
-      
+
+      // Get the current client name if not provided
+      const currentName = client.name || (await this.getClient(id, userId))?.name || '';
+
+      // Build query and values based on whether userId is provided
+      const query = `
+        UPDATE clients 
+        SET 
+          name = $1,
+          billing_contact_name = $2,
+          billing_contact_email = $3,
+          billing_address = $4,
+          billing_city = $5,
+          billing_state = $6,
+          billing_zip = $7,
+          billing_country = $8
+        WHERE id = $9 ${userId !== undefined ? 'AND user_id = $10' : ''}
+        RETURNING *
+      `;
+
+      const values = [
+        currentName,
+        processValue(client.billingContactName),
+        processValue(client.billingContactEmail),
+        processValue(client.billingAddress),
+        processValue(client.billingCity),
+        processValue(client.billingState),
+        processValue(client.billingZip),
+        processValue(client.billingCountry),
+        id
+      ];
+
+      // Add userId to values if provided
       if (userId !== undefined) {
-        query = `
-          UPDATE clients 
-          SET 
-            name = $2,
-            billing_contact_name = $3,
-            billing_contact_email = $4,
-            billing_address = $5,
-            billing_city = $6,
-            billing_state = $7,
-            billing_zip = $8,
-            billing_country = $9
-          WHERE id = $10 AND user_id = $11
-          RETURNING *
-        `;
-        values = [
-          id,
-          client.name || (await this.getClient(id, userId))?.name || '',
-          processValue(client.billingContactName),
-          processValue(client.billingContactEmail),
-          processValue(client.billingAddress),
-          processValue(client.billingCity),
-          processValue(client.billingState),
-          processValue(client.billingZip),
-          processValue(client.billingCountry),
-          userId
-        ];
-      } else {
-        query = `
-          UPDATE clients 
-          SET 
-            name = $2,
-            billing_contact_name = $3,
-            billing_contact_email = $4,
-            billing_address = $5,
-            billing_city = $6,
-            billing_state = $7,
-            billing_zip = $8,
-            billing_country = $9
-          WHERE id = $1 AND user_id = $10
-          RETURNING *
-        `;
-        values = [
-          id,
-          client.name || (await this.getClient(id))?.name || '',
-          processValue(client.billingContactName),
-          processValue(client.billingContactEmail),
-          processValue(client.billingAddress),
-          processValue(client.billingCity),
-          processValue(client.billingState),
-          processValue(client.billingZip),
-          processValue(client.billingCountry),
-          userId
-        ];
+        values.push(userId);
       }
-      
-      // Log to file for debugging
-      fs.appendFileSync('client-update-debug.log', `
-Query: ${query}
-Values: ${JSON.stringify(values, null, 2)}
-      `);
-      
-      console.log('DIRECT SQL: Executing query:', query);
-      console.log('DIRECT SQL: With values:', values);
-      
-      // Detailed logging of prepared values
-      console.log('DIRECT SQL: Prepared values detail check:');
-      console.log('Value for billing_contact_name:', values[2], 'type:', typeof values[2]);
-      console.log('Value for billing_contact_email:', values[3], 'type:', typeof values[3]);
-      console.log('Value for billing_address:', values[4], 'type:', typeof values[4]);
-      
-      // Execute the query directly using pool
+
+      // Execute the query
       const result = await pool.query(query, values);
-      
+
       if (result.rows.length === 0) {
-        console.log('DIRECT SQL: No rows updated');
-        fs.appendFileSync('client-update-debug.log', `No rows updated\n`);
         return undefined;
       }
-      
-      // Log result to file
-      fs.appendFileSync('client-update-debug.log', `
-Result: ${JSON.stringify(result.rows[0], null, 2)}
-      `);
-      
-      console.log('DIRECT SQL: Update successful, result:', result.rows[0]);
-      
+
       // Convert the returned data to our Client type
       const updatedClient: Client = {
         id: result.rows[0].id,
@@ -290,10 +216,10 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
         billingZip: result.rows[0].billing_zip || '',
         billingCountry: result.rows[0].billing_country || ''
       };
-      
+
       return updatedClient;
     } catch (error) {
-      console.error('DIRECT SQL: Error updating client:', error);
+      console.error('Error updating client:', error);
       throw error;
     }
   }
@@ -317,7 +243,6 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
     try {
       console.log('Storage.getEngagements called with userId:', userId);
       
-      // Add explicit query debugging
       const queryCondition = userId 
         ? `with userId=${userId} filter` 
         : 'without userId filter (should return all engagements)';
@@ -362,22 +287,28 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
           .from(engagements)
           .leftJoin(clients, eq(engagements.clientId, clients.id));
 
-      // Execute the ORM query
       const result = await query;
       console.log(`ORM query returned ${result.length} engagements`);
       
-      // Log some sample data if available
-      if (result.length > 0) {
+      // Convert numeric strings to numbers
+      const formattedEngagements = result.map(eng => ({
+        ...eng,
+        hourlyRate: eng.hourlyRate ? Number(eng.hourlyRate) : null,
+        projectAmount: eng.projectAmount ? Number(eng.projectAmount) : null
+      }));
+
+      if (formattedEngagements.length > 0) {
         console.log('First engagement sample:', {
-          id: result[0].id,
-          projectName: result[0].projectName,
-          clientName: result[0].clientName,
-          userId: result[0].userId
+          id: formattedEngagements[0].id,
+          projectName: formattedEngagements[0].projectName,
+          clientName: formattedEngagements[0].clientName,
+          userId: formattedEngagements[0].userId,
+          hourlyRate: formattedEngagements[0].hourlyRate,
+          projectAmount: formattedEngagements[0].projectAmount
         });
       } else {
         console.log('No engagements found in database query.');
         
-        // Try to determine why no engagements were found
         if (userId) {
           console.log(`Check if user ID ${userId} has any engagements in the database.`);
           console.log('Possible issues:');
@@ -390,7 +321,7 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
         }
       }
       
-      return result;
+      return formattedEngagements;
     } catch (error) {
       console.error("Error fetching engagements:", error);
       return [];
@@ -459,10 +390,7 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
           })
           .from(engagements)
           .leftJoin(clients, eq(engagements.clientId, clients.id))
-          .where(and(
-            eq(engagements.userId, userId),
-            eq(engagements.status, "active")
-          ))
+          .where(eq(engagements.userId, userId))
         : db.select({
             id: engagements.id,
             userId: engagements.userId,
@@ -480,11 +408,32 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
             netTerms: engagements.netTerms,
           })
           .from(engagements)
-          .leftJoin(clients, eq(engagements.clientId, clients.id))
-          .where(eq(engagements.status, "active"));
+          .leftJoin(clients, eq(engagements.clientId, clients.id));
 
       const result = await query;
-      return result;
+      
+      // Convert numeric strings to numbers
+      const formattedEngagements = result.map(eng => ({
+        ...eng,
+        hourlyRate: eng.hourlyRate ? Number(eng.hourlyRate) : null,
+        projectAmount: eng.projectAmount ? Number(eng.projectAmount) : null
+      }));
+      
+      // Import the calculateEngagementStatus function
+      const { calculateEngagementStatus } = await import('./calculateEngagementStatus');
+      
+      // Filter engagements to only return those with 'active' status based on date calculation
+      const activeEngagements = formattedEngagements.filter(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.startDate), 
+          new Date(engagement.endDate)
+        );
+        return currentStatus === 'active';
+      });
+      
+      console.log(`Retrieved ${result.length} total engagements, ${activeEngagements.length} are currently active based on date calculation`);
+      
+      return activeEngagements;
     } catch (error) {
       console.error("Error fetching active engagements:", error);
       return [];
@@ -493,7 +442,7 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
 
   async createEngagement(engagement: InsertEngagement): Promise<Engagement> {
     // Convert the engagement data to match DB schema
-    const dbEngagement: any = {
+    const dbEngagement = {
       userId: engagement.userId,
       clientId: engagement.clientId,
       projectName: engagement.projectName,
@@ -501,42 +450,27 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
       endDate: engagement.endDate,
       description: engagement.description || '',
       status: engagement.status || 'active',
-      engagementType: engagement.engagementType || 'hourly'
+      engagementType: engagement.engagementType || 'hourly',
+      // Convert numeric values to strings for database
+      hourlyRate: engagement.hourlyRate !== null ? String(engagement.hourlyRate) : null,
+      projectAmount: engagement.projectAmount !== null ? String(engagement.projectAmount) : null,
+      netTerms: engagement.netTerms
     };
-    
-    // Add hourlyRate or projectAmount based on engagement type
-    if (engagement.engagementType === 'project') {
-      dbEngagement.projectAmount = engagement.projectAmount;
-      // Set hourlyRate to null for project-based engagements
-      dbEngagement.hourlyRate = null;
-    } else {
-      // For hourly engagements, convert hourlyRate to string for numeric column
-      dbEngagement.hourlyRate = engagement.hourlyRate !== null ? String(engagement.hourlyRate) : null;
-      dbEngagement.projectAmount = null;
-    }
     
     console.log('Preparing to insert engagement with data:', dbEngagement);
     
     try {
       // Use raw SQL to avoid ORM issues with null values
       const query = `
-        SELECT insert_engagement(
-          $1, -- user_id
-          $2, -- client_id
-          $3, -- project_name
-          $4, -- start_date
-          $5, -- end_date
-          $6, -- engagement_type
-          $7, -- hourly_rate
-          $8, -- project_amount
-          $9, -- description
-          $10 -- status
-        ) as result
+        INSERT INTO engagements (
+          user_id, client_id, project_name, start_date, end_date,
+          engagement_type, hourly_rate, project_amount, description,
+          status, net_terms
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+        )
+        RETURNING *
       `;
-      
-      const pool = new Pool({
-        connectionString: process.env.DATABASE_URL
-      });
       
       const values = [
         dbEngagement.userId,
@@ -548,75 +482,148 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
         dbEngagement.hourlyRate,
         dbEngagement.projectAmount,
         dbEngagement.description,
-        dbEngagement.status
+        dbEngagement.status,
+        dbEngagement.netTerms
       ];
       
       console.log('Executing SQL with values:', values);
       const result = await pool.query(query, values);
       
-      // Close the connection
-      await pool.end();
-      
       if (result.rows.length === 0) {
         throw new Error('Failed to create engagement - no result returned');
       }
       
-      console.log('Engagement created successfully:', result.rows[0].result);
-      return result.rows[0].result;
+      // Convert numeric strings back to numbers in the response
+      const row = result.rows[0];
+      const createdEngagement: Engagement = {
+        id: row.id,
+        userId: row.user_id,
+        clientId: row.client_id,
+        projectName: row.project_name,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        hourlyRate: row.hourly_rate ? Number(row.hourly_rate) : null,
+        projectAmount: row.project_amount ? Number(row.project_amount) : null,
+        engagementType: row.engagement_type,
+        description: row.description || '',
+        status: row.status,
+        netTerms: row.net_terms
+      };
+      
+      console.log('Engagement created successfully:', createdEngagement);
+      return createdEngagement;
     } catch (error) {
-      console.error('Failed to create engagement with custom function:', error);
-      
-      // Fall back to the ORM method if custom function fails
-      console.log('Falling back to ORM insert method');
-      
-      // @ts-ignore - Ignore TypeScript error for type mismatches
-      const [newEngagement] = await db.insert(engagements).values(dbEngagement).returning();
-      return newEngagement;
+      console.error('Failed to create engagement:', error);
+      throw error;
     }
   }
 
   async updateEngagement(id: number, engagement: Partial<InsertEngagement>, userId?: number): Promise<Engagement | undefined> {
-    // Convert hourlyRate to string if it exists
-    const updateData: Record<string, any> = {};
-    
-    if (engagement.userId !== undefined) updateData.userId = engagement.userId;
-    if (engagement.clientId !== undefined) updateData.clientId = engagement.clientId;
-    if (engagement.projectName !== undefined) updateData.projectName = engagement.projectName;
-    if (engagement.startDate !== undefined) updateData.startDate = engagement.startDate;
-    if (engagement.endDate !== undefined) updateData.endDate = engagement.endDate;
-    if (engagement.description !== undefined) updateData.description = engagement.description;
-    if (engagement.status !== undefined) updateData.status = engagement.status;
-    if (engagement.netTerms !== undefined) updateData.netTerms = engagement.netTerms;
-    if (engagement.engagementType !== undefined) updateData.engagementType = engagement.engagementType;
-    
-    // Handle rate fields based on engagement type
-    if (engagement.engagementType === 'project') {
-      if (engagement.projectAmount !== undefined) updateData.projectAmount = engagement.projectAmount;
-      updateData.hourlyRate = null; // Set hourlyRate to null for project-based engagements
-    } else if (engagement.engagementType === 'hourly') {
-      if (engagement.hourlyRate !== undefined) updateData.hourlyRate = String(engagement.hourlyRate);
-      updateData.projectAmount = null; // Set projectAmount to null for hourly engagements
-    } else {
-      // If no engagement type specified but rates are updated
-      if (engagement.hourlyRate !== undefined) updateData.hourlyRate = String(engagement.hourlyRate);
-      if (engagement.projectAmount !== undefined) updateData.projectAmount = engagement.projectAmount;
+    try {
+      console.log('Storage: Updating engagement:', { id, userId, engagement });
+      
+      // Build the SET clause and values array for the SQL query
+      const updates: string[] = [];
+      const values: any[] = [];
+      let paramCount = 1;
+
+      // Helper function to add update
+      const addUpdate = (column: string, value: any) => {
+        if (value !== undefined && value !== null) {
+          updates.push(`${column} = $${paramCount}`);
+          values.push(value);
+          paramCount++;
+          console.log(`Adding update for ${column}:`, value);
+        }
+      };
+
+      // Handle basic fields
+      if (engagement.clientId !== undefined) addUpdate('client_id', engagement.clientId);
+      if (engagement.projectName !== undefined) addUpdate('project_name', engagement.projectName);
+      if (engagement.startDate !== undefined) addUpdate('start_date', engagement.startDate);
+      if (engagement.endDate !== undefined) addUpdate('end_date', engagement.endDate);
+      if (engagement.engagementType !== undefined) addUpdate('engagement_type', engagement.engagementType);
+      if (engagement.description !== undefined) addUpdate('description', engagement.description);
+      if (engagement.status !== undefined) addUpdate('status', engagement.status);
+      if (engagement.netTerms !== undefined) addUpdate('net_terms', engagement.netTerms);
+      if (engagement.userId !== undefined) addUpdate('user_id', engagement.userId);
+
+      // Handle numeric fields - convert to strings for the database
+      if (engagement.hourlyRate !== undefined) {
+        // Convert to string or null for the numeric column
+        const hourlyRateValue = engagement.hourlyRate !== null ? String(engagement.hourlyRate) : null;
+        addUpdate('hourly_rate', hourlyRateValue);
+      }
+      if (engagement.projectAmount !== undefined) {
+        // Convert to string or null for the numeric column
+        const projectAmountValue = engagement.projectAmount !== null ? String(engagement.projectAmount) : null;
+        addUpdate('project_amount', projectAmountValue);
+      }
+
+      // If no updates, return the existing engagement
+      if (updates.length === 0) {
+        console.log('No updates to apply');
+        return await this.getEngagement(id, userId);
+      }
+
+      // Add the WHERE clause parameters
+      values.push(id);
+      const whereClause = userId !== undefined 
+        ? `id = $${paramCount} AND user_id = $${paramCount + 1}` 
+        : `id = $${paramCount}`;
+      
+      if (userId !== undefined) {
+        values.push(userId);
+      }
+
+      // Construct the query
+      const query = `
+        UPDATE engagements 
+        SET ${updates.join(', ')} 
+        WHERE ${whereClause}
+        RETURNING 
+          id, user_id, client_id, project_name, 
+          start_date, end_date, engagement_type,
+          hourly_rate, project_amount, description,
+          status, net_terms
+      `;
+
+      console.log('Executing query:', { query, values });
+
+      // Execute the query using the pool
+      const result = await pool.query(query, values);
+
+      if (result.rows.length === 0) {
+        console.log('No rows returned from update');
+        return undefined;
+      }
+
+      // Convert the database row to our Engagement type
+      const row = result.rows[0];
+      console.log('Database returned:', row);
+
+      const updatedEngagement: Engagement = {
+        id: row.id,
+        userId: row.user_id,
+        clientId: row.client_id,
+        projectName: row.project_name,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        // Convert numeric strings back to numbers or null
+        hourlyRate: row.hourly_rate !== null ? Number(row.hourly_rate) : null,
+        projectAmount: row.project_amount !== null ? Number(row.project_amount) : null,
+        engagementType: row.engagement_type,
+        description: row.description || '',
+        status: row.status,
+        netTerms: row.net_terms
+      };
+
+      console.log('Returning updated engagement:', updatedEngagement);
+      return updatedEngagement;
+    } catch (error) {
+      console.error('Error updating engagement:', error);
+      throw error;
     }
-    
-    console.log('Updating engagement with data:', {
-      id,
-      userId,
-      updateData
-    });
-    
-    // @ts-ignore - Ignore condition type errors
-    const [updatedEngagement] = await db.update(engagements)
-      .set(updateData)
-      .where(userId !== undefined 
-        ? and(eq(engagements.id, id), eq(engagements.userId, userId))
-        : eq(engagements.id, id))
-      .returning();
-    
-    return updatedEngagement;
   }
 
   async deleteEngagement(id: number, userId?: number): Promise<boolean> {
@@ -799,7 +806,7 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
     // Handle the description field specifically to ensure null values are preserved
     const dataToUpdate = { ...timeLog };
     if ('description' in dataToUpdate && (dataToUpdate.description === null || dataToUpdate.description === '' || 
-        (typeof dataToUpdate.description === 'string' && dataToUpdate.description.trim() === ''))) {
+        (typeof dataToUpdate.description === 'string' && dataToUpdate.description.trim() === ""))) {
       dataToUpdate.description = null;
       console.log('Storage: Setting description to null');
     }
@@ -889,22 +896,22 @@ Result: ${JSON.stringify(result.rows[0], null, 2)}
       }
     }
     
-    // Create a line item with the hourly rate if we found it
-    const lineItems = [];
-    if (hourlyRate) {
-      lineItems.push({
-        id: 0,
-        invoiceId: invoice.id,
-        description: "Services rendered",
-        hours: invoice.totalHours,
-        rate: hourlyRate,
-        amount: invoice.totalAmount
-      });
-    }
+    // Create a default line item from the invoice total if no line items exist
+    const defaultLineItems: InvoiceWithLineItems['lineItems'] = [{
+      id: 0,
+      invoiceId: invoice.id,
+      description: `${invoice.projectName || 'Consulting'} Activities`,
+      hours: Number(invoice.totalHours),
+      rate: String(hourlyRate || 0),
+      amount: String(invoice.totalAmount)
+    }];
+    
+    // Use either the existing lineItems if available, or the default line item
+    const itemsToDisplay = (invoice as InvoiceWithLineItems).lineItems || defaultLineItems;
     
     return {
       ...invoice,
-      lineItems
+      lineItems: itemsToDisplay
     };
   }
 

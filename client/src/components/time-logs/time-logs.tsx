@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Plus, RefreshCw } from 'lucide-react';
@@ -26,41 +26,71 @@ const TimeLogs = () => {
     endDate: '',
   });
 
-  // Build query params - run this on every render with current filters
+  // Fetch engagements for client filter dropdown and the editing form
+  const { data: engagements = [] } = useQuery<any[]>({
+    queryKey: ['/api/engagements'],
+  });
+  
+  // Build query params
   const queryParams = new URLSearchParams();
   
-  // Filter by client
+  // Only add client if not 'all' and not empty
   if (filters.client && filters.client !== 'all') {
     queryParams.append('client', filters.client);
+  }
+  
+  // Only add search if not empty
+  if (filters.search && filters.search.trim() !== '') {
+    queryParams.append('search', filters.search.trim());
   }
   
   // Handle date filtering
   if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
     queryParams.append('startDate', filters.startDate);
     queryParams.append('endDate', filters.endDate);
-  } else if (filters.dateRange === 'all') {
-    // Don't apply date filtering for "all" date range
-    console.log('Using all date range - no date filters applied');
-  } else if (filters.dateRange !== 'custom' && filters.dateRange) {
-    // Add the named date range - this is important to keep for debugging
-    queryParams.append('dateRange', filters.dateRange);
+    queryParams.append('dateRange', 'custom');
+  } else if (filters.dateRange !== 'all') {
+    // For specific date ranges (week, month, quarter, year)
+    const today = new Date();
+    let startDate: Date;
+    let endDate: Date;
     
-    // ISSUE FOUND: We're using the current month date range (April) but our time logs are from March
-    // For now, let's NOT filter by date at all to show all time logs
-    // Remove date range filtering completely to see all data
-  } else {
-    // Default to all time logs if no date range specified
-    queryParams.append('dateRange', 'all');
-  }
-
-  // Add search term if present
-  if (filters.search) {
-    // Trim the search term to avoid whitespace issues
-    const trimmedSearch = filters.search.trim();
-    if (trimmedSearch) {
-      queryParams.append('search', trimmedSearch);
-      console.log(`Adding search parameter: "${trimmedSearch}"`);
+    switch (filters.dateRange) {
+      case 'week': {
+        const dayOfWeek = today.getDay();
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - dayOfWeek);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        break;
+      }
+      case 'month': {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        break;
+      }
+      case 'quarter': {
+        const quarter = Math.floor(today.getMonth() / 3);
+        startDate = new Date(today.getFullYear(), quarter * 3, 1);
+        endDate = new Date(today.getFullYear(), (quarter + 1) * 3, 0);
+        break;
+      }
+      case 'year': {
+        startDate = new Date(today.getFullYear(), 0, 1);
+        endDate = new Date(today.getFullYear(), 11, 31);
+        break;
+      }
+      default: {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      }
     }
+    queryParams.append('startDate', startDate.toISOString().split('T')[0]);
+    queryParams.append('endDate', endDate.toISOString().split('T')[0]);
+    queryParams.append('dateRange', filters.dateRange);
+  } else {
+    // Only send dateRange=all, do NOT send startDate or endDate at all
+    queryParams.append('dateRange', 'all');
   }
 
   // Fetch time logs with filters
@@ -69,24 +99,18 @@ const TimeLogs = () => {
     queryFn: async ({ queryKey }) => {
       const url = `${queryKey[0]}?${queryKey[1]}`;
       console.log('Fetching time logs with URL:', url);
+      console.log('Current filters:', filters);
+      console.log('Query parameters:', Object.fromEntries(queryParams.entries()));
+      
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error('Failed to fetch time logs');
+        // Log detailed error information
+        const errorText = await response.text();
+        console.error(`Error fetching time logs (${response.status}): ${errorText}`);
+        throw new Error(`Failed to fetch time logs: ${errorText}`);
       }
       const data = await response.json();
       console.log('Time logs data received:', data);
-      
-      // Log a sample time log client name to debug
-      if (data && data.length > 0) {
-        console.log('First time log client data:', {
-          id: data[0].id,
-          clientNameProperty: data[0].clientName,
-          engagementClientName: data[0].engagement?.clientName,
-          hourlyRate: data[0].engagement?.hourlyRate,
-          billableAmount: data[0].billableAmount
-        });
-      }
-      
       return data;
     },
     // Ensure we always get fresh data
@@ -97,11 +121,6 @@ const TimeLogs = () => {
     retryDelay: 1000, // Wait 1 second between retries
   });
 
-  // Fetch engagements for client filter dropdown and the editing form
-  const { data: engagements = [] } = useQuery<any[]>({
-    queryKey: ['/api/engagements'],
-  });
-  
   // Extract unique client names for filter dropdown - get from time logs instead of engagements
   // This uses the correct clientName property location
   const clientOptions: string[] = Array.from(

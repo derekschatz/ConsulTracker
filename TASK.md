@@ -1,4 +1,4 @@
-# ConsulTracker Tasks
+# Contraq Tasks
 
 ## Current Tasks
 - [ ] Set up database schema and migrations
@@ -32,6 +32,7 @@
   - [x] Prevent deletion of clients with active engagements
   - [x] Add support for project-based engagements alongside hourly engagements
   - [x] Integrate HeroSection component with responsive design and animations
+  - [x] Fix invoice modal to show correct fields for hourly engagements (2024-06-08)
 - [x] Add PDF generation for invoices
 - [ ] Implement email notifications
 - [ ] Add data validation and error handling
@@ -45,6 +46,7 @@
 ## Completed Tasks
 - [x] Project setup and configuration
 - [x] Define database schema
+- [x] Rebrand from ConsulTracker to Contraq
 
 ## Discovered During Work
 - Need to add indexes for frequently queried fields
@@ -60,6 +62,8 @@
 - Add error handling for the account settings forms
 - Modified business info form to use phone number instead of country field
 - Added reusable HeroSection component with animations and theme support for landing pages
+- Fixed active engagement metric on dashboard to use date-based calculation instead of stored status
+- Updated YTD Revenue to "Total Paid YTD" to accurately show revenue from paid invoices
 
 ## Notes
 - Using Drizzle ORM for database operations

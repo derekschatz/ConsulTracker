@@ -16,7 +16,8 @@ import {
   type TimeLogWithEngagement,
   engagementTypeEnum,
   engagements as engagementsTable,
-  clients as clientsTable
+  clients as clientsTable,
+  updateEngagementSchema
 } from "@shared/schema";
 import { setupAuth, hashPassword, comparePasswords } from "./auth";
 import { z } from "zod";
@@ -37,6 +38,8 @@ import type { FileFilterCallback } from 'multer';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { emailService } from './services/email-service';
+import stripeRoutes from './api/stripe';
+import testRoutes from './api/test';
 
 // Fix for __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url || '');
@@ -226,6 +229,81 @@ function handleError(err: any, res: Response) {
   }
 }
 
+// Add this function near the top with other helper functions
+async function getTimeLogs(userId: number, dateRange: string, startDate?: string, endDate?: string, engagementId?: string | number, clientFilter?: string) {
+  let query = `
+    SELECT t.*, e.client_name, e.project_name, e.hourly_rate 
+    FROM time_logs t 
+    JOIN engagements e ON t.engagement_id = e.id 
+    WHERE t.user_id = $1
+  `;
+  const params: any[] = [userId];
+  
+  // Filter by engagement if specified
+  if (engagementId && engagementId !== '0') {
+    query += ` AND t.engagement_id = $${params.length + 1}`;
+    params.push(Number(engagementId));
+  }
+  
+  // Filter by client if specified
+  if (clientFilter && clientFilter !== 'all') {
+    query += ` AND e.client_name = $${params.length + 1}`;
+    params.push(clientFilter);
+  }
+  
+  // Apply date filtering
+  if (dateRange === 'all') {
+    // No date filtering needed
+  } else {
+    let dateStart: Date;
+    let dateEnd: Date;
+    
+    if (dateRange === 'custom' && startDate && endDate) {
+      dateStart = parse(startDate, 'yyyy-MM-dd', new Date());
+      dateEnd = parse(endDate, 'yyyy-MM-dd', new Date());
+    } else {
+      // Use getDateRange for all predefined ranges (month, week, etc.)
+      const range = getDateRange(dateRange);
+      dateStart = range.startDate;
+      dateEnd = range.endDate;
+    }
+    
+    query += ` AND t.date >= $${params.length + 1}::date AND t.date <= $${params.length + 2}::date`;
+    params.push(format(dateStart, 'yyyy-MM-dd'), format(dateEnd, 'yyyy-MM-dd'));
+  }
+  
+  query += ` ORDER BY t.date DESC`;
+  
+  console.log('Executing getTimeLogs query:', { 
+    query, 
+    params, 
+    dateRange,
+    startDate: params[params.length - 2],
+    endDate: params[params.length - 1]
+  });
+  
+  const result = await pool.query(query, params);
+  console.log(`Found ${result.rows.length} time logs`);
+  
+  return result.rows.map(log => ({
+    id: log.id,
+    userId: log.user_id,
+    engagementId: log.engagement_id,
+    date: log.date,
+    hours: log.hours,
+    description: log.description,
+    billableAmount: parseFloat(log.hours) * parseFloat(log.hourly_rate),
+    clientName: log.client_name,
+    projectName: log.project_name,
+    engagement: {
+      id: log.engagement_id,
+      clientName: log.client_name,
+      projectName: log.project_name,
+      hourlyRate: log.hourly_rate
+    }
+  }));
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication
   setupAuth(app);
@@ -260,6 +338,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // prefix all routes with /api
+
+  // Add test routes first for diagnostics
+  app.use('/api/test', testRoutes);
+
+  // Add Stripe API routes
+  console.log('Registering Stripe API routes at /api/stripe');
+  app.use('/api/stripe', stripeRoutes);
+
+  // Global logging middleware to debug the 400 error
+  app.use('/api/*', (req, res, next) => {
+    console.log(`DEBUG - API Request: ${req.method} ${req.url}`);
+    
+    // Store original json method to intercept responses
+    const originalJson = res.json;
+    res.json = function(body) {
+      console.log(`DEBUG - API Response: ${res.statusCode} for ${req.url}`, 
+        res.statusCode >= 400 ? body : 'Success');
+      return originalJson.call(this, body);
+    };
+    
+    next();
+  });
 
   // Engagement routes
   app.get("/api/engagements", async (req, res) => {
@@ -540,18 +640,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         processedData.endDate = new Date(processedData.endDate);
       }
       
-      // Convert numeric fields
+      // Convert hourlyRate if it's a string
       if (processedData.hourlyRate && typeof processedData.hourlyRate === 'string') {
         processedData.hourlyRate = Number(processedData.hourlyRate);
-      }
-      
-      if (processedData.projectAmount && typeof processedData.projectAmount === 'string') {
-        processedData.projectAmount = Number(processedData.projectAmount);
-      }
-      
-      // Ensure netTerms is a number
-      if (processedData.netTerms && typeof processedData.netTerms === 'string') {
-        processedData.netTerms = Number(processedData.netTerms);
       }
       
       // Ensure status is a string if present
@@ -561,8 +652,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log("Processed data for update:", processedData);
       
-      // @ts-ignore - We're temporarily ignoring type errors with the zod schema partial validation
-      const validationResult = z.object(insertEngagementSchema.shape).partial().safeParse(processedData);
+      // Use the new updateEngagementSchema instead of partial()
+      const validationResult = updateEngagementSchema.safeParse(processedData);
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid engagement data", errors: validationResult.error.errors });
       }
@@ -570,45 +661,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the input data
       const inputData = validationResult.data;
       
-      // Only calculate status if both dates are provided in this update
-      if (inputData.startDate !== undefined && inputData.endDate !== undefined) {
-        // Calculate the status based on start and end dates
-        const status = calculateEngagementStatus(
-          new Date(inputData.startDate), 
-          new Date(inputData.endDate)
-        );
-        
-        // Override the status in the input data
-        inputData.status = status;
-      } 
-      // If only one date is provided, we need to get the other one from the database
-      else if (inputData.startDate !== undefined || inputData.endDate !== undefined) {
-        // Get the current engagement
-        const currentEngagement = await storage.getEngagement(id, userId);
-        if (!currentEngagement) {
+      // Calculate status based on dates if both are provided
+      if (inputData.startDate && inputData.endDate) {
+        inputData.status = calculateEngagementStatus(inputData.startDate, inputData.endDate);
+      }
+      
+      console.log("Sending to storage:", inputData);
+      
+      try {
+        const updatedEngagement = await storage.updateEngagement(id, inputData, userId);
+        if (!updatedEngagement) {
           return res.status(404).json({ message: "Engagement not found" });
         }
         
-        // Get the dates (use the new one if provided, otherwise use the existing one)
-        const startDate = inputData.startDate ? new Date(inputData.startDate) : new Date(currentEngagement.startDate);
-        const endDate = inputData.endDate ? new Date(inputData.endDate) : new Date(currentEngagement.endDate);
-        
-        // Calculate the status based on the combined dates
-        const status = calculateEngagementStatus(startDate, endDate);
-        
-        // Override the status in the input data
-        inputData.status = status;
+        console.log("Updated engagement:", updatedEngagement);
+        res.json(updatedEngagement);
+      } catch (error) {
+        console.error("Storage error:", error);
+        res.status(500).json({ 
+          message: "Failed to update engagement",
+          error: error instanceof Error ? error.message : "Unknown error"
+        });
       }
-
-      const updatedEngagement = await storage.updateEngagement(id, inputData, userId);
-      if (!updatedEngagement) {
-        return res.status(404).json({ message: "Engagement not found" });
-      }
-      
-      console.log("Updated engagement:", updatedEngagement);
-      res.json(updatedEngagement);
     } catch (error) {
-      console.error("Failed to update engagement:", error);
+      console.error("Error in PUT /api/engagements/:id:", error);
       res.status(500).json({ message: "Failed to update engagement" });
     }
   });
@@ -807,205 +883,42 @@ Result from storage: ${JSON.stringify(updatedClient, null, 2)}
   });
 
   // Time Log routes
-  app.get("/api/time-logs", async (req, res) => {
+  app.get("/api/time-logs", async (req: Request, res: Response) => {
     try {
-      console.log('==== TIME LOGS API ROUTE CALLED ====');
-      
-      // Get user ID from authenticated session if available
-      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
-      
-      const engagementId = req.query.engagementId ? Number(req.query.engagementId) : undefined;
-      const clientName = req.query.client as string | undefined;
-      const dateRange = req.query.dateRange as string | undefined;
-      const startDateParam = req.query.startDate as string | undefined;
-      const endDateParam = req.query.endDate as string | undefined;
-      const search = req.query.search as string | undefined;
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view time logs" });
+      }
 
-      console.log('Time log request params:', {
+      const userId = (req.user as any).id;
+      const { engagementId, startDate, endDate, dateRange, client: clientFilter } = req.query;
+      
+      console.log('Time logs router request:', {
         userId,
         engagementId,
-        clientName,
+        startDate,
+        endDate,
         dateRange,
-        startDate: startDateParam,
-        endDate: endDateParam,
-        search,
-        isAuthenticated: req.isAuthenticated()
+        clientFilter
       });
-      
-      let timeLogs;
-      let startDate, endDate;
 
-      // Helper function to ensure we have valid dates
-      const createValidDate = (dateStr: string | undefined): Date | null => {
-        if (!dateStr) return null;
-        
-        try {
-          const date = new Date(dateStr);
-          // Check if date is valid
-          if (isNaN(date.getTime())) {
-            console.log(`Invalid date string: ${dateStr}`);
-            return null;
-          }
-          return date;
-        } catch (error) {
-          console.error(`Error parsing date: ${dateStr}`, error);
-          return null;
-        }
-      };
-
-      console.log(`Using date range: ${dateRange || 'none'}`);
-
-      if (dateRange === 'all') {
-        // Special case - fetch all time logs without date filtering
-        console.log('Using all date range - not applying date filters');
-        timeLogs = await storage.getTimeLogs(userId);
-      } else if (startDateParam && endDateParam) {
-        // Use explicit date parameters, ensuring they're valid
-        startDate = createValidDate(startDateParam);
-        endDate = createValidDate(endDateParam);
-        
-        // Fall back to a predefined range if dates are invalid
-        if (!startDate || !endDate) {
-          console.log('Invalid date parameters, using month range instead');
-          const range = getDateRange('month');
-          startDate = range.startDate;
-          endDate = range.endDate;
-        } else {
-          console.log('Using explicit date range:', startDate, 'to', endDate);
-        }
-      } else if (dateRange && dateRange !== 'all') {
-        // Use predefined date range
-        const range = getDateRange(dateRange);
-        startDate = range.startDate;
-        endDate = range.endDate;
-        console.log('Using date range:', dateRange, startDate, 'to', endDate);
-      } else {
-        // Default to all time logs for this user
-        timeLogs = await storage.getTimeLogs(userId);
-        console.log('Getting all time logs for user');
-      }
-
-      // Get logs filtered by date range if we have dates
-      if (startDate && endDate) {
-        timeLogs = await storage.getTimeLogsByDateRange(startDate, endDate, userId);
-      } else if (engagementId) {
-        // Filter by specific engagement ID
-        timeLogs = await storage.getTimeLogsByEngagement(engagementId, userId);
-      } else if (!timeLogs) {
-        // If we haven't loaded logs yet, get all of them
-        timeLogs = await storage.getTimeLogs(userId);
-      }
-      
-      // Filter by client name if specified
-      if (clientName) {
-        console.log(`Filtering by client name: ${clientName}`);
-        if (timeLogs) {
-          timeLogs = timeLogs.filter(log => 
-            // Use top level clientName property instead of nested one
-            (log.engagement as any)?.clientName === clientName
-          );
-        }
-        console.log(`Client filter returned ${timeLogs?.length || 0} time logs`);
-      }
-
-      // Apply search filter if present
-      if (timeLogs && search) {
-        // Ensure search term is trimmed and lowercased
-        const searchLower = search.toLowerCase().trim();
-        console.log(`Applying search filter: "${searchLower}" to ${timeLogs.length} time logs`);
-        
-        // For debugging, log the first few time logs before filtering
-        if (timeLogs.length > 0) {
-          console.log('Sample time log before search filtering:', {
-            id: timeLogs[0].id,
-            description: timeLogs[0].description,
-            engagementData: {
-              clientName: (timeLogs[0].engagement as any)?.clientName,
-              projectName: timeLogs[0].engagement?.projectName
-            }
-          });
-        }
-        
-        // Create a more detailed filter with debugging
-        const filteredLogs = [];
-        for (const log of timeLogs) {
-          const descriptionMatch = log.description !== null && 
-                                   log.description !== undefined && 
-                                   typeof log.description === 'string' && 
-                                   log.description.toLowerCase().includes(searchLower);
-          
-          const clientNameMatch = log.engagement && 
-                                  (log.engagement as any).clientName && 
-                                  typeof (log.engagement as any).clientName === 'string' && 
-                                  (log.engagement as any).clientName.toLowerCase().includes(searchLower);
-          
-          const projectNameMatch = log.engagement && 
-                                   log.engagement.projectName && 
-                                   typeof log.engagement.projectName === 'string' && 
-                                   log.engagement.projectName.toLowerCase().includes(searchLower);
-          
-          if (descriptionMatch || clientNameMatch || projectNameMatch) {
-            filteredLogs.push(log);
-          }
-        }
-        
-        timeLogs = filteredLogs;
-        console.log(`Search filter returned ${timeLogs.length} time logs`);
-      }
-
-      // Ensure we only return time logs for the specified engagement
-      if (engagementId) {
-        timeLogs = timeLogs.filter(log => log.engagementId === engagementId);
-      }
-
-      // Sort time logs by date in descending order
-      if (timeLogs) {
-        timeLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      }
-
-      // IMPORTANT: Sanitize all time log descriptions to ensure consistency
-      if (timeLogs) {
-        console.log(`Sanitizing ${timeLogs.length} time logs before sending to client`);
-        
-        timeLogs = timeLogs.map(log => {
-          // Check if the description is empty or whitespace only
-          if (log.description === '' || (log.description && log.description.trim() === '')) {
-            console.log(`Fixing empty description for time log ${log.id}`);
-            return {
-              ...log,
-              description: null
-            };
-          }
-          return log;
+      // Only validate custom date range parameters
+      if (dateRange === 'custom' && (!startDate || !endDate)) {
+        return res.status(400).json({ 
+          message: "Missing required parameters: startDate and endDate are required for custom date range" 
         });
-        
-        // Log a sample of the sanitized time logs
-        if (timeLogs.length > 0) {
-          const sampleLog = timeLogs[0];
-          console.log(`Sample sanitized time log (ID ${sampleLog.id}):`, {
-            id: sampleLog.id,
-            description: sampleLog.description,
-            descriptionType: typeof sampleLog.description,
-            engagement: sampleLog.engagement ? {
-              id: sampleLog.engagement.id,
-              // Use type assertion to avoid type errors
-              clientName: (sampleLog.engagement as any).clientName || 'Not available',
-              projectName: sampleLog.engagement.projectName
-            } : 'No engagement data'
-          });
-        }
       }
 
-      if (timeLogs) {
-        console.log(`Final time logs count to send: ${timeLogs.length}`);
-        if (timeLogs.length > 0) {
-          console.log('First time log:', JSON.stringify(timeLogs[0], null, 2));
-        }
-      } else {
-        console.log('No time logs to send, returning empty array');
-      }
+      const timeLogs = await getTimeLogs(
+        userId,
+        dateRange as string || 'all',
+        startDate as string,
+        endDate as string,
+        engagementId,
+        clientFilter as string
+      );
 
-      res.json(timeLogs || []);
+      console.log(`Router found ${timeLogs.length} time logs for user ${userId}`);
+      res.json(timeLogs);
     } catch (error) {
       console.error("Error fetching time logs:", error);
       res.status(500).json({ message: "Failed to fetch time logs" });
@@ -1159,6 +1072,54 @@ Result from storage: ${JSON.stringify(updatedClient, null, 2)}
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete time log" });
+    }
+  });
+
+  // Final catchall for /api/time-logs in case other routes don't handle it
+  app.get("/api/time-logs", async (req: Request, res: Response) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view time logs" });
+      }
+
+      const userId = (req.user as any).id;
+      console.log('CATCHALL time-logs route hit with query:', req.query);
+      
+      // Get all time logs for user without any filtering
+      const result = await pool.query(
+        `SELECT t.*, e.client_name, e.project_name, e.hourly_rate 
+         FROM time_logs t 
+         JOIN engagements e ON t.engagement_id = e.id 
+         WHERE t.user_id = $1
+         ORDER BY t.date DESC`,
+        [userId]
+      );
+      
+      // Transform the results to match the expected format
+      const timeLogs = result.rows.map(log => ({
+        id: log.id,
+        userId: log.user_id,
+        engagementId: log.engagement_id,
+        date: log.date,
+        hours: log.hours,
+        description: log.description,
+        billableAmount: parseFloat(log.hours) * parseFloat(log.hourly_rate),
+        clientName: log.client_name,
+        projectName: log.project_name,
+        engagement: {
+          id: log.engagement_id,
+          clientName: log.client_name,
+          projectName: log.project_name,
+          hourlyRate: log.hourly_rate
+        }
+      }));
+
+      console.log(`CATCHALL found ${timeLogs.length} time logs for user ${userId}`);
+      res.json(timeLogs);
+    } catch (error) {
+      console.error("Error in catchall time-logs endpoint:", error);
+      res.status(500).json({ message: "Failed to fetch time logs" });
     }
   });
 
@@ -1607,32 +1568,77 @@ Result from storage: ${JSON.stringify(updatedClient, null, 2)}
       
       // Get current date info for proper calculations
       const currentDate = new Date();
-      const currentYear = currentDate.getFullYear();
-      const currentMonth = currentDate.getMonth();
       
-      // Calculate start and end of current month
-      const startOfMonth = new Date(currentYear, currentMonth, 1);
-      const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
+      // Calculate date ranges using the same function as time logs
+      const { startDate: monthStart, endDate: monthEnd } = getDateRange('month', currentDate);
+      const { startDate: yearStart, endDate: yearEnd } = getDateRange('current', currentDate);
       
       console.log(`Getting dashboard stats for userId: ${userId}`);
-      console.log(`Time period: ${startOfMonth.toISOString()} to ${endOfMonth.toISOString()}`);
+      console.log(`Year period: ${yearStart.toISOString()} to ${yearEnd.toISOString()}`);
+      console.log(`Month period: ${monthStart.toISOString()} to ${monthEnd.toISOString()}`);
+      console.log(`Current date: ${currentDate.toISOString()}`);
 
-      // Get stats in parallel
-      const [
-        activeEngagements,
-        ytdRevenue,
-        monthlyHours,
-        pendingInvoicesTotal
-      ] = await Promise.all([
-        storage.getActiveEngagements(userId),
-        storage.getYtdRevenue(currentYear, userId),
-        storage.getTotalHoursLogged(startOfMonth, endOfMonth, userId),
-        storage.getPendingInvoicesTotal(userId)
-      ]);
+      // Get all engagements and calculate active ones directly
+      console.log('Fetching engagements directly...');
+      
+      // Use direct SQL query for reliable results
+      const engResult = await pool.query(`
+        SELECT 
+          e.id, e.project_name, e.start_date, e.end_date, e.status
+        FROM engagements e
+        WHERE e.user_id = $1
+      `, [userId]);
+      
+      console.log(`Retrieved ${engResult.rows.length} total engagements`);
+      
+      // Import the status calculation function
+      const { calculateEngagementStatus } = await import('./calculateEngagementStatus');
+      
+      // Calculate active engagements based on date ranges
+      const activeEngagements = engResult.rows.filter(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.start_date), 
+          new Date(engagement.end_date)
+        );
+        return currentStatus === 'active';
+      });
+      
+      console.log(`Active engagements based on date calculation: ${activeEngagements.length}`);
+      
+      // Calculate YTD revenue directly from paid invoices
+      console.log('Calculating YTD revenue from paid invoices...');
+      const ytdRevenueResult = await pool.query(`
+        SELECT COALESCE(SUM(total_amount), 0) as total
+        FROM invoices
+        WHERE user_id = $1
+        AND status = 'paid'
+        AND issue_date BETWEEN $2 AND $3
+      `, [userId, yearStart, yearEnd]);
+      
+      const ytdRevenue = parseFloat(ytdRevenueResult.rows[0]?.total || '0');
+      console.log(`YTD Revenue from paid invoices: ${ytdRevenue}`);
+      
+      // Get monthly hours logged in current month using shared function
+      console.log('Calculating monthly hours logged...');
+      const monthlyTimeLogs = await getTimeLogs(userId, 'month');
+      const monthlyHours = monthlyTimeLogs.reduce((sum, log) => sum + Number(log.hours), 0);
+      console.log(`Monthly hours logged: ${monthlyHours} (from ${monthlyTimeLogs.length} time logs)`);
+      
+      // Get pending invoices total
+      console.log('Calculating pending invoices total...');
+      const pendingResult = await pool.query(`
+        SELECT COALESCE(SUM(total_amount), 0) as total
+        FROM invoices
+        WHERE user_id = $1
+        AND (status = 'submitted' OR status = 'overdue')
+      `, [userId]);
+      
+      const pendingInvoicesTotal = parseFloat(pendingResult.rows[0]?.total || '0');
+      console.log(`Pending invoices total: ${pendingInvoicesTotal}`);
 
       console.log(`Dashboard stats results for user ${userId}:
         - Active engagements: ${activeEngagements.length}
-        - YTD revenue: ${ytdRevenue}
+        - YTD revenue from paid invoices: ${ytdRevenue}
         - Monthly hours: ${monthlyHours}
         - Pending invoices: ${pendingInvoicesTotal}
       `);
@@ -1644,6 +1650,7 @@ Result from storage: ${JSON.stringify(updatedClient, null, 2)}
         pendingInvoicesTotal
       });
     } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
       res.status(500).json({ message: "Failed to fetch dashboard stats" });
     }
   });
@@ -1792,7 +1799,7 @@ Result from storage: ${JSON.stringify(updatedClient, null, 2)}
       // Create a default line item from the invoice total if no line items exist
       const defaultLineItems: InvoiceLineItem[] = [{
         invoiceId: invoice.id,
-        description: `Consultant ${invoice.projectName || 'Scrum Master'} Activities`,
+        description: `${invoice.projectName || 'Consulting'} Activities`,
         hours: Number(invoice.totalHours),
         rate: Number(invoice.totalAmount) / Number(invoice.totalHours),
         amount: Number(invoice.totalAmount)
@@ -2766,6 +2773,82 @@ Invoice Details:
     }
   });
 
+  // Add a test route for debugging active engagements
+  app.get("/api/debug/active-engagements", async (req, res) => {
+    try {
+      // Ensure user is authenticated for security
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view engagements" });
+      }
+      
+      // Get user ID from authenticated session
+      const userId = (req.user as any).id;
+      console.log(`Debugging active engagements for userId: ${userId}`);
+      
+      // First, get all engagements
+      const allEngagements = await storage.getEngagements(userId);
+      console.log(`Total engagements for user: ${allEngagements.length}`);
+      
+      // Get engagements with status 'active' in database
+      const statusActiveEngagements = allEngagements.filter(e => e.status === 'active');
+      console.log(`Engagements with status='active' in database: ${statusActiveEngagements.length}`);
+      
+      // Import the status calculation function
+      const { calculateEngagementStatus } = await import('./calculateEngagementStatus');
+      
+      // Calculate status for each engagement based on date ranges
+      const calculatedStatuses = allEngagements.map(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.startDate), 
+          new Date(engagement.endDate)
+        );
+        
+        return {
+          id: engagement.id,
+          projectName: engagement.projectName,
+          databaseStatus: engagement.status,
+          calculatedStatus: currentStatus,
+          startDate: new Date(engagement.startDate).toISOString(),
+          endDate: new Date(engagement.endDate).toISOString(),
+          isActive: currentStatus === 'active'
+        };
+      });
+      
+      // Count engagements that should be active based on date calculation
+      const dateActiveEngagements = calculatedStatuses.filter(e => e.calculatedStatus === 'active');
+      console.log(`Engagements that should be active based on date calculation: ${dateActiveEngagements.length}`);
+      
+      // Get active engagements using the storage method
+      const activeEngagements = await storage.getActiveEngagements(userId);
+      console.log(`Active engagements from storage.getActiveEngagements: ${activeEngagements.length}`);
+      
+      // Return detailed info for debugging
+      res.json({
+        user: { id: userId },
+        totals: {
+          allEngagements: allEngagements.length,
+          statusActive: statusActiveEngagements.length,
+          calculatedActive: dateActiveEngagements.length,
+          fromStorageMethod: activeEngagements.length
+        },
+        engagementDetails: calculatedStatuses,
+        activeEngagements: activeEngagements.map(e => ({
+          id: e.id,
+          projectName: e.projectName,
+          status: e.status,
+          startDate: e.startDate,
+          endDate: e.endDate
+        }))
+      });
+    } catch (error) {
+      console.error('Error in debug endpoint:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch debug information",
+        error: error.message
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
@@ -2773,8 +2856,83 @@ Invoice Details:
 export function createRouter(storage: DatabaseStorage): ExpressRouter {
   // @ts-ignore - Temporarily ignoring router typing issues
   const router = express.Router();
-  
-  // ... existing code ...
+
+  // Add debug endpoints
+  router.get("/debug/active-engagements", async (req, res) => {
+    try {
+      console.log("Debug endpoint called");
+      // Ensure user is authenticated for security
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view engagements" });
+      }
+      
+      // Get user ID from authenticated session
+      const userId = (req.user as any).id;
+      console.log(`Debugging active engagements for userId: ${userId}`);
+      
+      // First, get all engagements
+      const allEngagements = await storage.getEngagements(userId);
+      console.log(`Total engagements for user: ${allEngagements.length}`);
+      
+      // Get engagements with status 'active' in database
+      const statusActiveEngagements = allEngagements.filter(e => e.status === 'active');
+      console.log(`Engagements with status='active' in database: ${statusActiveEngagements.length}`);
+      
+      // Import the status calculation function
+      const { calculateEngagementStatus } = await import('./calculateEngagementStatus');
+      
+      // Calculate status for each engagement based on date ranges
+      const calculatedStatuses = allEngagements.map(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.startDate), 
+          new Date(engagement.endDate)
+        );
+        
+        return {
+          id: engagement.id,
+          projectName: engagement.projectName,
+          databaseStatus: engagement.status,
+          calculatedStatus: currentStatus,
+          startDate: new Date(engagement.startDate).toISOString(),
+          endDate: new Date(engagement.endDate).toISOString(),
+          isActive: currentStatus === 'active'
+        };
+      });
+      
+      // Count engagements that should be active based on date calculation
+      const dateActiveEngagements = calculatedStatuses.filter(e => e.calculatedStatus === 'active');
+      console.log(`Engagements that should be active based on date calculation: ${dateActiveEngagements.length}`);
+      
+      // Get active engagements using the storage method
+      const activeEngagements = await storage.getActiveEngagements(userId);
+      console.log(`Active engagements from storage.getActiveEngagements: ${activeEngagements.length}`);
+      
+      // Return detailed info for debugging
+      res.json({
+        user: { id: userId },
+        totals: {
+          allEngagements: allEngagements.length,
+          statusActive: statusActiveEngagements.length,
+          calculatedActive: dateActiveEngagements.length,
+          fromStorageMethod: activeEngagements.length
+        },
+        engagementDetails: calculatedStatuses,
+        activeEngagements: activeEngagements.map(e => ({
+          id: e.id,
+          projectName: e.projectName,
+          status: e.status,
+          startDate: e.startDate,
+          endDate: e.endDate
+        }))
+      });
+    } catch (error) {
+      console.error('Error in debug endpoint:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch debug information",
+        error: error.message
+      });
+    }
+  });
 
   // Client routes
   router.get("/clients", auth, async (req: Request, res: Response) => {
@@ -2859,7 +3017,1973 @@ export function createRouter(storage: DatabaseStorage): ExpressRouter {
     }
   });
 
-  // ... existing code ...
+  // Time Log routes
+  router.get("/time-logs", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view time logs" });
+      }
+
+      const userId = (req.user as any).id;
+      const { engagementId, startDate, endDate, dateRange, client: clientFilter } = req.query;
+      
+      // Log the incoming request parameters
+      console.log('Time logs router request:', {
+        userId,
+        engagementId,
+        startDate,
+        endDate,
+        dateRange,
+        clientFilter
+      });
+
+      let query;
+      let queryParams = [];
+      
+      // Base query selecting time logs with their engagement data
+      const baseQuery = `
+        SELECT t.*, e.client_name, e.project_name, e.hourly_rate 
+        FROM time_logs t 
+        JOIN engagements e ON t.engagement_id = e.id 
+        WHERE t.user_id = $1
+      `;
+      
+      // Always include user ID as the first parameter
+      queryParams.push(userId);
+      
+      // Start building the query
+      query = baseQuery;
+      
+      // Filter by engagement if specified
+      if (engagementId && engagementId !== '0') {
+        query += ` AND t.engagement_id = $${queryParams.length + 1}`;
+        queryParams.push(Number(engagementId));
+      }
+      
+      // Filter by client if specified
+      if (clientFilter && clientFilter !== 'all') {
+        query += ` AND e.client_name = $${queryParams.length + 1}`;
+        queryParams.push(clientFilter);
+      }
+      
+      // Apply date filtering if both start and end dates are provided and dateRange is not 'all'
+      if (startDate && endDate && dateRange !== 'all') {
+        query += ` AND t.date >= $${queryParams.length + 1}::date AND t.date <= $${queryParams.length + 2}::date`;
+        queryParams.push(startDate, endDate);
+      }
+      
+      // Add ordering
+      query += ` ORDER BY t.date DESC`;
+      
+      console.log('Executing router query:', { query, params: queryParams });
+      
+      const result = await pool.query(query, queryParams);
+      
+      // Transform the results to match the expected format
+      const timeLogs = result.rows.map(log => ({
+        id: log.id,
+        userId: log.user_id,
+        engagementId: log.engagement_id,
+        date: log.date,
+        hours: log.hours,
+        description: log.description,
+        billableAmount: parseFloat(log.hours) * parseFloat(log.hourly_rate),
+        clientName: log.client_name,
+        projectName: log.project_name,
+        engagement: {
+          id: log.engagement_id,
+          clientName: log.client_name,
+          projectName: log.project_name,
+          hourlyRate: log.hourly_rate
+        }
+      }));
+
+      // Log the response
+      console.log(`Router found ${timeLogs.length} time logs for user ${userId}`);
+
+      res.json(timeLogs);
+    } catch (error) {
+      console.error("Error fetching time logs:", error);
+      res.status(500).json({ message: "Failed to fetch time logs" });
+    }
+  });
+
+  router.get("/time-logs/:id", async (req, res) => {
+    try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      const id = Number(req.params.id);
+      console.log(`Fetching time log with ID: ${id}`);
+      
+      const timeLog = await storage.getTimeLog(id, userId);
+      if (!timeLog) {
+        return res.status(404).json({ message: "Time log not found" });
+      }
+      
+      // Ensure description is consistently handled
+      const sanitizedTimeLog = {
+        ...timeLog,
+        description: timeLog.description || null
+      };
+      
+      console.log(`Retrieved time log:`, sanitizedTimeLog);
+      res.json(sanitizedTimeLog);
+    } catch (error) {
+      console.error(`Error fetching time log:`, error);
+      res.status(500).json({ message: "Failed to fetch time log" });
+    }
+  });
+
+  router.post("/time-logs", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to create time logs" });
+      }
+      
+      // Debug log the incoming request body
+      console.log('Time log creation request body:', req.body);
+
+      // Process the data before validation
+      const processedData = {
+        ...req.body,
+        userId: (req.user as any).id,
+        date: new Date(req.body.date),
+        hours: Number(req.body.hours),
+        engagementId: Number(req.body.engagementId)
+      };
+      
+      console.log('Processed data before validation:', processedData);
+      
+      const validationResult = insertTimeLogSchema.safeParse(processedData);
+      if (!validationResult.success) {
+        console.log('Time log validation failed:', validationResult.error.format());
+        return res.status(400).json({ 
+          message: "Invalid time log data", 
+          errors: validationResult.error.format() 
+        });
+      }
+
+      console.log('Creating time log with validated data:', validationResult.data);
+      const timeLog = await storage.createTimeLog(validationResult.data);
+      console.log('Time log created successfully:', timeLog);
+      res.status(201).json(timeLog);
+    } catch (error) {
+      console.error("Failed to create time log:", error);
+      res.status(500).json({ message: "Failed to create time log" });
+    }
+  });
+
+  router.put("/time-logs/:id", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to update time logs" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+
+      // First get the existing time log
+      const existingTimeLog = await storage.getTimeLog(id, userId);
+      if (!existingTimeLog) {
+        return res.status(404).json({ message: "Time log not found" });
+      }
+
+      // Debug log the incoming request body
+      console.log('Time log update request body:', req.body);
+      console.log('Time log description received:', req.body.description);
+      console.log('Description type:', typeof req.body.description);
+      
+      // Handle empty string descriptions explicitly
+      let descriptionValue = req.body.description;
+      if (descriptionValue === "" || descriptionValue === null || descriptionValue === undefined || 
+          (typeof descriptionValue === 'string' && descriptionValue.trim() === '')) {
+        descriptionValue = null;
+        console.log('Converting empty description to null');
+      }
+      
+      // Process the data before validation, merging with existing data
+      const processedData = {
+        ...existingTimeLog,
+        ...req.body,
+        userId,
+        date: req.body.date ? new Date(req.body.date) : existingTimeLog.date,
+        hours: req.body.hours !== undefined ? Number(req.body.hours) : existingTimeLog.hours,
+        engagementId: req.body.engagementId !== undefined ? Number(req.body.engagementId) : existingTimeLog.engagementId,
+        description: descriptionValue
+      };
+      
+      console.log('Processed data before validation:', processedData);
+      console.log('Processed description value:', processedData.description);
+      
+      const validationResult = insertTimeLogSchema.safeParse(processedData);
+      if (!validationResult.success) {
+        console.log('Time log validation failed:', validationResult.error.format());
+        return res.status(400).json({ 
+          message: "Invalid time log data", 
+          errors: validationResult.error.format() 
+        });
+      }
+
+      const updatedTimeLog = await storage.updateTimeLog(id, validationResult.data, userId);
+      if (!updatedTimeLog) {
+        return res.status(404).json({ message: "Time log not found" });
+      }
+      res.json(updatedTimeLog);
+    } catch (error) {
+      console.error("Failed to update time log:", error);
+      res.status(500).json({ message: "Failed to update time log" });
+    }
+  });
+
+  router.delete("/time-logs/:id", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to delete time logs" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const success = await storage.deleteTimeLog(id, userId);
+      if (!success) {
+        return res.status(404).json({ message: "Time log not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete time log" });
+    }
+  });
+
+  // Invoice routes
+  
+  // Function to check and update overdue invoices
+  const checkAndUpdateOverdueInvoices = async () => {
+    try {
+      const today = new Date();
+      
+      // Find invoices that are past due date and not already marked as overdue or paid
+      const overdueInvoices = await pool.query(
+        'SELECT id FROM invoices WHERE due_date < $1 AND status = $2',
+        [today, 'submitted']
+      );
+      
+      // Update any overdue invoices
+      for (const invoice of overdueInvoices.rows) {
+        await pool.query(
+          'UPDATE invoices SET status = $1 WHERE id = $2',
+          ['overdue', invoice.id]
+        );
+        console.log(`Updated invoice ${invoice.id} to overdue status`);
+      }
+      
+      return overdueInvoices.rows.length;
+    } catch (error) {
+      console.error('Error checking overdue invoices:', error);
+      return 0;
+    }
+  };
+  
+  router.get("/invoices", async (req: Request, res: Response) => {
+    try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      // Check for overdue invoices before returning results
+      await checkAndUpdateOverdueInvoices();
+      
+      const { status, client, dateRange, startDate, endDate } = req.query;
+      let query = `
+        SELECT 
+          i.*
+        FROM invoices i
+        JOIN engagements e ON i.engagement_id = e.id
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+
+      // Add user filter if authenticated
+      if (userId !== undefined) {
+        query += ` AND i.user_id = $${params.length + 1}`;
+        params.push(userId);
+      }
+      
+      // Apply status filter
+      if (status && status !== 'all') {
+        query += ` AND i.status = $${params.length + 1}`;
+        params.push(status);
+      }
+
+      // Apply client filter
+      if (client && client !== 'all') {
+        query += ` AND i.client_name = $${params.length + 1}`;
+        params.push(client);
+      }
+
+      // Apply date range filter
+      if (dateRange === 'custom' && startDate && endDate) {
+        // Format the custom date range with time to include the full end date
+        const formattedStartDate = `${startDate as string} 00:00:00`;
+        const formattedEndDate = `${endDate as string} 23:59:59`;
+        
+        query += ` AND i.issue_date >= $${params.length + 1} AND i.issue_date <= $${params.length + 2}`;
+        params.push(formattedStartDate, formattedEndDate);
+      } else if (dateRange && dateRange !== 'all') {
+        const { startDate: rangeStart, endDate: rangeEnd } = getDateRange(dateRange as string);
+        query += ` AND i.issue_date >= $${params.length + 1} AND i.issue_date <= $${params.length + 2}`;
+        params.push(
+          format(rangeStart, 'yyyy-MM-dd'),
+          format(rangeEnd, 'yyyy-MM-dd 23:59:59')
+        );
+      }
+
+      query += ' ORDER BY i.issue_date DESC';
+
+      const result = await pool.query(query, params);
+      
+      // Convert totalAmount and totalHours to numbers
+      const invoices = result.rows.map(row => ({
+        ...row,
+        total_amount: Number(row.total_amount),
+        total_hours: Number(row.total_hours)
+      }));
+
+      res.json(invoices);
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      res.status(500).json({ error: 'Failed to fetch invoices' });
+    }
+  });
+
+  router.get("/invoices/:id", async (req, res) => {
+    try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      const invoiceId = Number(req.params.id);
+      
+      if (isNaN(invoiceId) || invoiceId <= 0) {
+        console.error(`Invalid invoice ID requested: ${req.params.id}`);
+        return res.status(400).json({ message: "Invalid invoice ID format" });
+      }
+      
+      console.log(`Fetching invoice details for ID: ${invoiceId}`);
+      const invoice = await storage.getInvoice(invoiceId, userId);
+      
+      if (!invoice) {
+        console.error(`Invoice not found with ID: ${invoiceId}`);
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      // Verify invoice has required fields
+      if (!invoice.invoiceNumber || !invoice.clientName) {
+        console.error(`Invoice ${invoiceId} has missing required fields:`, invoice);
+        return res.status(500).json({ message: "Invoice data is incomplete" });
+      }
+      
+      // Add empty lineItems array to satisfy client expectations
+      const invoiceWithLineItems = {
+        ...invoice,
+        lineItems: []
+      };
+      
+      console.log(`Successfully retrieved invoice ${invoiceId} (${invoice.invoiceNumber})`);
+      res.json(invoiceWithLineItems);
+    } catch (error) {
+      console.error(`Error fetching invoice ${req.params.id}:`, error);
+      res.status(500).json({ 
+        message: "Failed to fetch invoice", 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    }
+  });
+
+  router.post('/api/invoices', invoiceRateLimiter, async (req: Request, res: Response) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to create invoices" });
+      }
+      
+      const userId = (req.user as any).id;
+      const { 
+        engagementId, 
+        timeLogs = [], 
+        lineItems = [],
+        totalAmount: providedTotalAmount,
+        totalHours: providedTotalHours,
+        clientName: providedClientName,
+        projectName: providedProjectName,
+        periodStart,
+        periodEnd,
+        status = 'submitted'
+      } = req.body;
+
+      // Add detailed request logging
+      console.log('=== Invoice Creation Request Start ===');
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      console.log('User ID:', userId);
+      console.log('=== Invoice Creation Request End ===');
+
+      // Validate required fields
+      if (!engagementId) {
+        console.error('Missing engagement ID');
+        return res.status(400).json({ error: 'Engagement ID is required' });
+      }
+
+      // Get engagement details
+      try {
+        const engagementResult = await pool.query(
+          'SELECT e.project_name, e.hourly_rate, c.name as client_name FROM engagements e ' +
+          'LEFT JOIN clients c ON e.client_id = c.id ' +
+          'WHERE e.id = $1 AND e.user_id = $2',
+          [engagementId, userId]
+        );
+        
+        if (engagementResult.rows.length === 0) {
+          console.error(`Engagement not found: ${engagementId} for user ${userId}`);
+          return res.status(404).json({ error: 'Engagement not found' });
+        }
+        
+        const engagement = engagementResult.rows[0];
+        console.log('Found engagement:', engagement);
+
+        const clientName = providedClientName || engagement.client_name;
+        const projectName = providedProjectName || engagement.project_name;
+        
+        let finalTotalAmount: number;
+        let finalTotalHours: number;
+
+        console.log('Processing time logs for invoice totals...');
+        // Calculate total amount and hours from time logs or use provided values
+        if (providedTotalAmount && providedTotalHours) {
+          // Use provided values
+          finalTotalAmount = Number(providedTotalAmount);
+          finalTotalHours = Number(providedTotalHours);
+          console.log('Using provided totals:', { finalTotalAmount, finalTotalHours });
+        } else if (lineItems && lineItems.length > 0) {
+          // Calculate from line items
+          finalTotalHours = Number(lineItems.reduce((sum: number, item: { hours: number | string }) => 
+            sum + Number(item.hours), 0).toFixed(2));
+          finalTotalAmount = Number(lineItems.reduce((sum: number, item: { amount: number | string }) => 
+            sum + Number(item.amount), 0).toFixed(2));
+          console.log('Calculated totals from line items:', { finalTotalAmount, finalTotalHours });
+        } else if (timeLogs && timeLogs.length > 0) {
+          // Calculate from time logs
+          finalTotalHours = Number(timeLogs.reduce((sum: number, log: any) => 
+            sum + Number(log.hours), 0).toFixed(2));
+          
+          finalTotalAmount = Number(timeLogs.reduce((sum: number, log: any) => {
+            const hours = Number(log.hours);
+            const rate = Number(log.engagement.hourlyRate);
+            return sum + (hours * rate);
+          }, 0).toFixed(2));
+          
+          console.log('Calculated totals from time logs:', { finalTotalAmount, finalTotalHours });
+        } else {
+          console.error('No data provided to calculate invoice totals');
+          return res.status(400).json({ error: 'No data provided to calculate invoice totals' });
+        }
+
+        // Validate calculated values
+        if (isNaN(finalTotalAmount) || finalTotalAmount <= 0) {
+          console.error('Invalid total amount:', finalTotalAmount);
+          return res.status(400).json({ error: 'Invalid total amount' });
+        }
+
+        if (isNaN(finalTotalHours) || finalTotalHours <= 0) {
+          console.error('Invalid total hours:', finalTotalHours);
+          return res.status(400).json({ error: 'Invalid total hours' });
+        }
+
+        console.log('Creating invoice record...');
+        const today = new Date();
+        const dueDate = new Date();
+        dueDate.setDate(today.getDate() + 30);
+
+        try {
+          // Create invoice with total amount and hours
+          const invoiceResult = await pool.query(
+            'INSERT INTO invoices (engagement_id, status, issue_date, due_date, invoice_number, client_name, total_amount, total_hours, period_start, period_end, project_name, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id',
+            [
+              engagementId, 
+              status, 
+              today, 
+              dueDate, 
+              req.body.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`,
+              clientName,
+              finalTotalAmount,
+              finalTotalHours,
+              periodStart || today, 
+              periodEnd || today,
+              projectName,
+              userId
+            ]
+          );
+          
+          const invoiceId = invoiceResult.rows[0].id;
+          console.log(`Created invoice with ID: ${invoiceId}`);
+
+          console.log('Successfully created invoice');
+          res.json({ id: invoiceId });
+        } catch (error) {
+          console.error('Database error creating invoice:', error);
+          throw error;
+        }
+      } catch (error) {
+        console.error('Error in engagement lookup or processing:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      // Send more detailed error information
+      res.status(500).json({ 
+        error: 'Failed to create invoice', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+  });
+
+  router.put("/api/invoices/:id/status", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to update invoice status" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const statusSchema = z.object({ status: z.string() });
+      
+      const validationResult = statusSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: "Invalid status data", errors: validationResult.error.errors });
+      }
+
+      const updatedInvoice = await storage.updateInvoiceStatus(id, validationResult.data.status, userId);
+      if (!updatedInvoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json(updatedInvoice);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update invoice status" });
+    }
+  });
+
+  router.put("/api/invoices/:id", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to update invoices" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      // Extract fields that can be updated
+      const {
+        clientName,
+        projectName,
+        issueDate,
+        dueDate,
+        totalAmount,
+        totalHours,
+        notes,
+        periodStart,
+        periodEnd,
+        netTerms // Add netTerms to the list of fields
+      } = req.body;
+      
+      // Prepare update object with only provided fields
+      const updateData: Partial<Invoice> = {};
+      
+      if (clientName !== undefined) updateData.clientName = clientName;
+      if (projectName !== undefined) updateData.projectName = projectName;
+      if (issueDate !== undefined) updateData.issueDate = new Date(issueDate);
+      if (dueDate !== undefined) updateData.dueDate = new Date(dueDate);
+      if (totalAmount !== undefined) updateData.totalAmount = totalAmount;
+      if (totalHours !== undefined) updateData.totalHours = totalHours;
+      if (notes !== undefined) updateData.notes = notes;
+      if (periodStart !== undefined) updateData.periodStart = new Date(periodStart);
+      if (periodEnd !== undefined) updateData.periodEnd = new Date(periodEnd);
+      if (netTerms !== undefined) updateData.netTerms = netTerms; // Add netTerms to updateData
+      
+      // Update invoice
+      const updatedInvoice = await storage.updateInvoice(id, updateData, userId);
+      
+      if (!updatedInvoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      res.json(updatedInvoice);
+    } catch (error) {
+      console.error('Error updating invoice:', error);
+      res.status(500).json({ 
+        message: "Failed to update invoice",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  router.delete("/api/invoices/:id", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to delete invoices" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const success = await storage.deleteInvoice(id, userId);
+      if (!success) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete invoice" });
+    }
+  });
+
+  // Dashboard routes
+  router.get("/api/dashboard/ytd-revenue", async (req, res) => {
+    try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      // Default to 2025 for current year if no year is provided
+      const year = Number(req.query.year) || 2025;
+      const revenue = await storage.getYtdRevenue(year, userId);
+      res.json({ revenue });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch YTD revenue" });
+    }
+  });
+
+  router.get("/api/dashboard/monthly-revenue", async (req, res) => {
+    try {
+      // Ensure user is authenticated for security
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view monthly revenue data" });
+      }
+      
+      // Get user ID from authenticated session
+      const userId = (req.user as any).id;
+      
+      // Default to current year if no year is provided
+      const defaultYear = new Date().getFullYear();
+      const year = Number(req.query.year) || defaultYear;
+      
+      console.log(`Getting monthly revenue data for userId: ${userId}, year: ${year}`);
+      
+      const monthlyData = await storage.getMonthlyRevenueBillable(year, userId);
+      
+      console.log(`Retrieved ${monthlyData.length} months of revenue data for user ${userId}`);
+      
+      res.json(monthlyData);
+    } catch (error) {
+      console.error('Error fetching monthly revenue:', error);
+      res.status(500).json({ message: "Failed to fetch monthly revenue" });
+    }
+  });
+
+  router.get("/api/dashboard/stats", async (req, res) => {
+    try {
+      // Ensure user is authenticated for security
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view dashboard stats" });
+      }
+      
+      // Get user ID from authenticated session
+      const userId = (req.user as any).id;
+      
+      // Get current date info for proper calculations
+      const currentDate = new Date();
+      
+      // Calculate date ranges using the same function as time logs
+      const { startDate: monthStart, endDate: monthEnd } = getDateRange('month', currentDate);
+      const { startDate: yearStart, endDate: yearEnd } = getDateRange('current', currentDate);
+      
+      console.log(`Getting dashboard stats for userId: ${userId}`);
+      console.log(`Year period: ${yearStart.toISOString()} to ${yearEnd.toISOString()}`);
+      console.log(`Month period: ${monthStart.toISOString()} to ${monthEnd.toISOString()}`);
+      console.log(`Current date: ${currentDate.toISOString()}`);
+
+      // Get all engagements and calculate active ones directly
+      console.log('Fetching engagements directly...');
+      
+      // Use direct SQL query for reliable results
+      const engResult = await pool.query(`
+        SELECT 
+          e.id, e.project_name, e.start_date, e.end_date, e.status
+        FROM engagements e
+        WHERE e.user_id = $1
+      `, [userId]);
+      
+      console.log(`Retrieved ${engResult.rows.length} total engagements`);
+      
+      // Import the status calculation function
+      const { calculateEngagementStatus } = await import('./calculateEngagementStatus');
+      
+      // Calculate active engagements based on date ranges
+      const activeEngagements = engResult.rows.filter(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.start_date), 
+          new Date(engagement.end_date)
+        );
+        return currentStatus === 'active';
+      });
+      
+      console.log(`Active engagements based on date calculation: ${activeEngagements.length}`);
+      
+      // Calculate YTD revenue directly from paid invoices
+      console.log('Calculating YTD revenue from paid invoices...');
+      const ytdRevenueResult = await pool.query(`
+        SELECT COALESCE(SUM(total_amount), 0) as total
+        FROM invoices
+        WHERE user_id = $1
+        AND status = 'paid'
+        AND issue_date BETWEEN $2 AND $3
+      `, [userId, yearStart, yearEnd]);
+      
+      const ytdRevenue = parseFloat(ytdRevenueResult.rows[0]?.total || '0');
+      console.log(`YTD Revenue from paid invoices: ${ytdRevenue}`);
+      
+      // Get monthly hours logged in current month using shared function
+      console.log('Calculating monthly hours logged...');
+      const monthlyTimeLogs = await getTimeLogs(userId, 'month');
+      const monthlyHours = monthlyTimeLogs.reduce((sum, log) => sum + Number(log.hours), 0);
+      console.log(`Monthly hours logged: ${monthlyHours} (from ${monthlyTimeLogs.length} time logs)`);
+      
+      // Get pending invoices total
+      console.log('Calculating pending invoices total...');
+      const pendingResult = await pool.query(`
+        SELECT COALESCE(SUM(total_amount), 0) as total
+        FROM invoices
+        WHERE user_id = $1
+        AND (status = 'submitted' OR status = 'overdue')
+      `, [userId]);
+      
+      const pendingInvoicesTotal = parseFloat(pendingResult.rows[0]?.total || '0');
+      console.log(`Pending invoices total: ${pendingInvoicesTotal}`);
+
+      console.log(`Dashboard stats results for user ${userId}:
+        - Active engagements: ${activeEngagements.length}
+        - YTD revenue from paid invoices: ${ytdRevenue}
+        - Monthly hours: ${monthlyHours}
+        - Pending invoices: ${pendingInvoicesTotal}
+      `);
+
+      res.json({
+        ytdRevenue,
+        activeEngagements: activeEngagements.length,
+        monthlyHours,
+        pendingInvoicesTotal
+      });
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      res.status(500).json({ message: "Failed to fetch dashboard stats" });
+    }
+  });
+
+  // Email invoice endpoint
+  router.post("/api/invoices/:id/email", async (req, res) => {
+    try {
+      // Ensure user is authenticated
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to email invoices" });
+      }
+      
+      const id = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const invoice = await storage.getInvoice(id, userId);
+      
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+
+      // Generate PDF for attachment
+      console.log("Generating PDF attachment...");
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF();
+      
+      // First, fetch the business info
+      console.log("Fetching business info for invoice...");
+      const businessInfoQuery = `SELECT * FROM business_info WHERE user_id = $1`;
+      const businessInfoResult = await pool.query(businessInfoQuery, [userId]);
+      const businessInfo = businessInfoResult.rows.length > 0 ? businessInfoResult.rows[0] : null;
+      
+      // Get user's name - use req.user if available or business info
+      const userName = (req.user as any)?.name || businessInfo?.company_name || "Derek Schatz";
+      
+      // 1. Name at top left
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(userName, 20, 30);
+      
+      // 2. Logo centered at top (or company name if no logo)
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'normal');
+      if (businessInfo && businessInfo.company_name) {
+        pdf.text(businessInfo.company_name, 105, 30, { align: 'center' });
+      } else {
+        pdf.text("Agile Infusion", 105, 30, { align: 'center' });
+      }
+      
+      // 3. INVOICE title and info at top right
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("INVOICE", 190, 30, { align: 'right' });
+      
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`INVOICE #${invoice.invoiceNumber}`, 190, 40, { align: 'right' });
+      pdf.text(`DATE: ${new Date(invoice.issueDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long', 
+        day: 'numeric'
+      })}`, 190, 50, { align: 'right' });
+      
+      // Due date
+      if (invoice.dueDate) {
+        pdf.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })}`, 190, 60, { align: 'right' });
+      }
+      
+      // 4. Company details below name on left
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      let yPos = 40;
+      
+      if (businessInfo) {
+        if (businessInfo.company_name) {
+          pdf.text(businessInfo.company_name, 20, yPos);
+          yPos += 8;
+        }
+        
+        if (businessInfo.address) {
+          pdf.text(businessInfo.address, 20, yPos);
+          yPos += 8;
+        }
+        
+        // City, state, zip
+        const addressLine = [
+          businessInfo.city,
+          businessInfo.state,
+          businessInfo.zip
+        ].filter(Boolean).join(", ");
+        
+        if (addressLine) {
+          pdf.text(addressLine, 20, yPos);
+          yPos += 8;
+        }
+        
+        if (businessInfo.phone_number) {
+          pdf.text(`Phone: ${businessInfo.phone_number}`, 20, yPos);
+          yPos += 8;
+        }
+        
+        if (businessInfo.tax_id) {
+          pdf.text(`Tax ID: ${businessInfo.tax_id}`, 20, yPos);
+          yPos += 8;
+        }
+      } else {
+        // Default business info matching screenshot
+        pdf.text("Agile Infusion", 20, 40);
+        pdf.text("100 Danby Court", 20, 48);
+        pdf.text("Churchville, PA, 18966", 20, 56);
+        pdf.text("Phone: 215-630-3317", 20, 64);  
+        pdf.text("Tax ID: 20-5199056", 20, 72);
+        yPos = 80;
+      }
+      
+      // Add horizontal line 
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(20, 100, 190, 100);
+      
+      // BILL TO section - keep this
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("BILL TO:", 20, 115);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`${invoice.clientName}`, 50, 115);
+      
+      // 7. Table layout - moved up since we're removing just the FOR section
+      const tableStartY = 140;
+      
+      // Column headers
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("DESCRIPTION", 20, tableStartY);
+      pdf.text("HOURS", 120, tableStartY);
+      pdf.text("RATE", 145, tableStartY);
+      pdf.text("AMOUNT", 170, tableStartY);
+      
+      // Add a line under the header
+      pdf.setDrawColor(0, 0, 0);
+      pdf.line(20, tableStartY + 5, 190, tableStartY + 5);
+      
+      // Create a default line item from the invoice total if no line items exist
+      const defaultLineItems: InvoiceLineItem[] = [{
+        invoiceId: invoice.id,
+        description: `${invoice.projectName || 'Consulting'} Activities`,
+        hours: Number(invoice.totalHours),
+        rate: Number(invoice.totalAmount) / Number(invoice.totalHours),
+        amount: Number(invoice.totalAmount)
+      }];
+      
+      // Use either the existing lineItems if available, or the default line item
+      const itemsToDisplay = (invoice as InvoiceWithLineItems).lineItems || defaultLineItems;
+      
+      // Table data
+      let itemY = tableStartY + 15;
+      pdf.setFont('helvetica', 'normal');
+      
+      itemsToDisplay.forEach(item => {
+        pdf.text(item.description.substring(0, 50), 20, itemY);
+        pdf.text(item.hours.toString(), 120, itemY);
+        pdf.text(`$${typeof item.rate === 'string' ? item.rate : item.rate.toFixed(2)}/hr`, 145, itemY);
+        pdf.text(`$${typeof item.amount === 'string' ? item.amount : item.amount.toFixed(2)}`, 170, itemY);
+        itemY += 10;
+      });
+      
+      // If we have period info, add it as a separate line
+      if (invoice.periodStart && invoice.periodEnd) {
+        itemY += 10;
+        pdf.text(`Period: ${new Date(invoice.periodStart).toLocaleDateString()} - ${new Date(invoice.periodEnd).toLocaleDateString()}`, 20, itemY);
+        itemY += 10;
+      }
+      
+      // Horizontal line above total
+      itemY += 10;
+      pdf.line(120, itemY, 190, itemY);
+      itemY += 10;
+      
+      // Total
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("TOTAL", 145, itemY);
+      pdf.text(`$${invoice.totalAmount}`, 170, itemY);
+      
+      // 8. Payment terms at bottom
+      itemY += 35;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text("Make all checks payable to the company name.", 20, itemY);
+      pdf.text("Total due in 30 days.", 20, itemY + 8);
+      
+      // Convert PDF to base64
+      const pdfBase64 = pdf.output('datauristring');
+      
+      // Return the PDF data and email details
+      const emailSubject = `Invoice #${invoice.invoiceNumber} from Your Consulting Service`;
+      const emailBody = `Please find attached invoice #${invoice.invoiceNumber} for ${invoice.clientName} in the amount of $${invoice.totalAmount}.
+      
+Invoice Details:
+- Invoice Number: ${invoice.invoiceNumber}
+- Client: ${invoice.clientName}
+- Amount: $${invoice.totalAmount}
+- Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}
+- Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`;
+      
+      res.json({ 
+        message: "PDF generated successfully",
+        pdfData: pdfBase64,
+        emailSubject,
+        emailBody,
+        filename: `Invoice-${invoice.invoiceNumber}.pdf`
+      });
+    } catch (error) {
+      console.error("General error:", error);
+      res.status(500).json({ 
+        message: "Failed to generate invoice PDF",
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
+  });
+
+  // Update user personal information
+  router.put("/api/user", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).send("Not authenticated");
+    }
+    
+    try {
+      const userId = req.user?.id;
+      const data = personalInfoSchema.parse(req.body);
+      
+      // Check if username is being changed and if it's already taken
+      if (data.username !== req.user?.username) {
+        const existingUser = await storage.getUserByUsername(data.username);
+        if (existingUser) {
+          return res.status(400).send("Username already exists");
+        }
+      }
+      
+      // Update user info
+      const updateQuery = `
+        UPDATE users
+        SET 
+          name = $1,
+          email = $2,
+          username = $3
+        WHERE id = $4
+        RETURNING id, username, name, email, created_at
+      `;
+      
+      const result = await pool.query(updateQuery, [
+        data.name,
+        data.email,
+        data.username,
+        userId
+      ]);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).send("User not found");
+      }
+      
+      // Update the user in the session
+      const updatedUser = result.rows[0];
+      req.login({
+        ...updatedUser,
+        createdAt: updatedUser.created_at
+      }, (err) => {
+        if (err) {
+          return res.status(500).send("Error updating session");
+        }
+        res.json(updatedUser);
+      });
+    } catch (error) {
+      console.error("Error updating user:", error);
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      
+      res.status(500).send("Server error");
+    }
+  });
+  
+  // Helper function to ensure business_info table exists
+  const ensureBusinessInfoTable = async () => {
+    try {
+      // Check if business_info table exists
+      const checkTableQuery = `
+        SELECT EXISTS (
+          SELECT 1 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'business_info'
+        );
+      `;
+      
+      const tableExists = await pool.query(checkTableQuery);
+      console.log('business_info table exists:', tableExists.rows[0].exists);
+      
+      if (!tableExists.rows[0].exists) {
+        console.log('Creating business_info table...');
+        
+        // Create the table
+        const createTableQuery = `
+          CREATE TABLE business_info (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            company_name VARCHAR(255) NOT NULL,
+            address TEXT,
+            city VARCHAR(255),
+            state VARCHAR(255),
+            zip VARCHAR(50),
+            phone_number VARCHAR(50),
+            tax_id VARCHAR(100),
+            company_logo VARCHAR(255),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+          );
+          
+          -- Add index for faster lookups
+          CREATE INDEX business_info_user_id_idx ON business_info(user_id);
+          
+          -- Ensure user_id is unique
+          ALTER TABLE business_info ADD CONSTRAINT unique_user_id UNIQUE (user_id);
+        `;
+        
+        await pool.query(createTableQuery);
+        console.log('business_info table created successfully');
+        return true;
+      }
+      
+      // Check if the table has phone_number column
+      const checkPhoneNumberColumnQuery = `
+        SELECT EXISTS (
+          SELECT 1 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'business_info'
+          AND column_name = 'phone_number'
+        );
+      `;
+      
+      const phoneNumberExists = await pool.query(checkPhoneNumberColumnQuery);
+      console.log('phone_number column exists:', phoneNumberExists.rows[0].exists);
+      
+      // Check if the table has country column
+      const checkCountryColumnQuery = `
+        SELECT EXISTS (
+          SELECT 1 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'business_info'
+          AND column_name = 'country'
+        );
+      `;
+      
+      const countryExists = await pool.query(checkCountryColumnQuery);
+      console.log('country column exists:', countryExists.rows[0].exists);
+      
+      // If there's country but no phone_number, update the table
+      if (countryExists.rows[0].exists && !phoneNumberExists.rows[0].exists) {
+        console.log('Adding phone_number column...');
+        await pool.query(`ALTER TABLE business_info ADD COLUMN phone_number VARCHAR(50)`);
+        
+        // Migrate data
+        console.log('Copying data from country to phone_number...');
+        await pool.query(`UPDATE business_info SET phone_number = country`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error ensuring business_info table:', error);
+      return false;
+    }
+  };
+
+  // Get business information
+  router.get("/api/business-info", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).send("Not authenticated");
+    }
+    
+    try {
+      // Ensure the table exists
+      await ensureBusinessInfoTable();
+      
+      const userId = req.user?.id;
+      
+      // Check if business info exists
+      const checkQuery = `
+        SELECT * FROM business_info WHERE user_id = $1
+      `;
+      
+      const checkResult = await pool.query(checkQuery, [userId]);
+      
+      if (checkResult.rows.length === 0) {
+        // Return default empty object
+        return res.json({
+          companyName: "",
+          address: "",
+          city: "",
+          state: "",
+          zip: "",
+          phoneNumber: "",
+          taxId: "",
+        });
+      }
+      
+      // Convert snake_case to camelCase for response
+      const businessInfo = checkResult.rows[0];
+      
+      console.log("Business info from database:", businessInfo);
+      
+      res.json({
+        companyName: businessInfo.company_name,
+        address: businessInfo.address,
+        city: businessInfo.city,
+        state: businessInfo.state,
+        zip: businessInfo.zip,
+        phoneNumber: businessInfo.phone_number, // Make sure we're using phone_number from DB
+        taxId: businessInfo.tax_id,
+        companyLogo: businessInfo.company_logo,
+      });
+    } catch (error) {
+      console.error("Error getting business info:", error);
+      res.status(500).send("Server error");
+    }
+  });
+  
+  // Update business information
+  router.put("/api/business-info", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).send("Not authenticated");
+    }
+    
+    try {
+      // Ensure the table exists
+      await ensureBusinessInfoTable();
+      
+      console.log("PUT /api/business-info - Request body:", req.body);
+      
+      const userId = req.user?.id;
+      console.log("User ID:", userId);
+      
+      const data = businessInfoSchema.parse(req.body);
+      console.log("Parsed data:", data);
+      
+      // Check if business info exists for this user
+      const checkQuery = `
+        SELECT id FROM business_info WHERE user_id = $1
+      `;
+      
+      console.log("Checking if business info exists for user:", userId);
+      const checkResult = await pool.query(checkQuery, [userId]);
+      console.log("Check result:", checkResult.rows.length > 0 ? "Exists" : "Does not exist");
+      
+      let result;
+      
+      if (checkResult.rows.length === 0) {
+        // Insert new business info
+        console.log("Inserting new business info");
+        const insertQuery = `
+          INSERT INTO business_info (
+            user_id, company_name, address, city, state, 
+            zip, phone_number, tax_id, company_logo
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING *
+        `;
+        
+        const params = [
+          userId,
+          data.companyName,
+          data.address || "",
+          data.city || "",
+          data.state || "",
+          data.zip || "",
+          data.phoneNumber || "",
+          data.taxId || "",
+          data.companyLogo || null
+        ];
+        
+        console.log("Insert params:", params);
+        
+        try {
+          result = await pool.query(insertQuery, params);
+          console.log("Insert result rows:", result.rows.length);
+        } catch (dbError) {
+          console.error("Database insert error:", dbError);
+          throw dbError;
+        }
+      } else {
+        // Update existing business info
+        console.log("Updating existing business info");
+        const updateQuery = `
+          UPDATE business_info
+          SET 
+            company_name = $2,
+            address = $3,
+            city = $4,
+            state = $5,
+            zip = $6,
+            phone_number = $7,
+            tax_id = $8
+          WHERE user_id = $1
+          RETURNING *
+        `;
+        
+        const params = [
+          userId,
+          data.companyName,
+          data.address || "",
+          data.city || "",
+          data.state || "",
+          data.zip || "",
+          data.phoneNumber || "",
+          data.taxId || ""
+        ];
+        
+        console.log("Update params:", params);
+        
+        try {
+          result = await pool.query(updateQuery, params);
+          console.log("Update result rows:", result.rows.length);
+        } catch (dbError) {
+          console.error("Database update error:", dbError);
+          throw dbError;
+        }
+      }
+      
+      // Convert snake_case to camelCase for response
+      const businessInfo = result.rows[0];
+      console.log("Business info from database:", businessInfo);
+      
+      const response = {
+        companyName: businessInfo.company_name,
+        address: businessInfo.address,
+        city: businessInfo.city,
+        state: businessInfo.state,
+        zip: businessInfo.zip,
+        phoneNumber: businessInfo.phone_number,
+        taxId: businessInfo.tax_id,
+        companyLogo: businessInfo.company_logo,
+      };
+      
+      console.log("Sending response:", response);
+      res.json(response);
+    } catch (error) {
+      console.error("Error updating business info:", error);
+      
+      if (error instanceof z.ZodError) {
+        console.error("Validation error:", error.errors);
+        return res.status(400).json({ error: error.errors });
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error("Error message:", errorMessage);
+      res.status(500).send(`Server error: ${errorMessage}`);
+    }
+  });
+  
+  // Upload business logo
+  router.post("/api/business-logo", (req, res) => {
+    console.log("Received logo upload request");
+    
+    // Use a try-catch block around the middleware to catch multer errors
+    const uploadMiddleware = upload.single('logo');
+    
+    uploadMiddleware(req, res, async (err) => {
+      console.log("Multer middleware executed");
+      
+      if (err) {
+        console.error("Multer error:", err);
+        return res.status(400).send(`File upload error: ${err.message}`);
+      }
+      
+      // Check authentication
+      if (!req.isAuthenticated()) {
+        console.log("Not authenticated");
+        return res.status(401).send("Not authenticated");
+      }
+      
+      try {
+        const userId = req.user?.id;
+        console.log("Processing logo upload for user:", userId);
+        
+        if (!req.file) {
+          console.error("No file received in request");
+          return res.status(400).send("No file uploaded");
+        }
+        
+        console.log("File received:", req.file);
+        const filename = path.basename(req.file.path);
+        console.log("Generated filename:", filename);
+        
+        // Update the business_info table with the logo filename
+        const updateQuery = `
+          UPDATE business_info
+          SET company_logo = $2
+          WHERE user_id = $1
+          RETURNING *
+        `;
+        
+        console.log("Executing update query");
+        const result = await pool.query(updateQuery, [userId, filename]);
+        console.log("Update query result rows:", result.rows.length);
+        
+        if (result.rows.length === 0) {
+          // If no business info exists, create one
+          console.log("No existing business info, creating new record");
+          const insertQuery = `
+            INSERT INTO business_info (user_id, company_logo, company_name)
+            VALUES ($1, $2, $3)
+            RETURNING *
+          `;
+          
+          await pool.query(insertQuery, [userId, filename, ""]);
+          console.log("New business info record created");
+        }
+        
+        console.log("Logo upload successful");
+        res.json({ 
+          filename,
+          path: `/api/business-logo/${filename}`,
+          success: true 
+        });
+      } catch (error) {
+        console.error("Error in logo upload handler:", error);
+        res.status(500).send(`Server error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    });
+  });
+  
+  // Serve business logo
+  router.get("/api/business-logo/:filename", (req, res) => {
+    const filename = req.params.filename;
+    const logoPath = path.join(UPLOADS_DIR, filename);
+    
+    // Check if file exists
+    if (!fs.existsSync(logoPath)) {
+      console.log(`❌ Logo not found: ${logoPath}`);
+      return res.status(404).json({ error: "Logo not found" });
+    }
+    
+    console.log(`✅ Serving logo: ${logoPath}`);
+    res.sendFile(logoPath);
+  });
+
+  // Create a new, simplified logo upload endpoint
+  router.post("/api/upload-logo", (req, res) => {
+    console.log("📤 NEW LOGO UPLOAD REQUEST RECEIVED");
+    
+    // Handle auth first to fail fast
+    if (!req.isAuthenticated()) {
+      console.log("❌ Upload rejected: Not authenticated");
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    
+    const userId = req.user ? (req.user as any).id : null;
+    console.log(`👤 Authenticated user: ${userId}`);
+    
+    if (!userId) {
+      console.log("❌ Upload rejected: Invalid user ID");
+      return res.status(401).json({ error: "Invalid user ID" });
+    }
+    
+    // Set up a simplified upload middleware for this endpoint
+    const simpleUpload = multer({
+      storage: multer.diskStorage({
+        destination: (req, file, cb) => {
+          console.log(`📁 Upload directory: ${UPLOADS_DIR}`);
+          cb(null, UPLOADS_DIR);
+        },
+        filename: (req, file, cb) => {
+          const safeFileName = `logo-${userId}-${Date.now()}${path.extname(file.originalname)}`;
+          console.log(`📄 Generated filename: ${safeFileName}`);
+          cb(null, safeFileName);
+        }
+      }),
+      fileFilter: (req, file, cb) => {
+        // Validate mime type
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(file.mimetype)) {
+          console.log(`❌ Rejected file type: ${file.mimetype}`);
+          return cb(new Error(`Invalid file type. Allowed: ${allowedTypes.join(', ')}`));
+        }
+        console.log(`✅ Accepted file type: ${file.mimetype}`);
+        cb(null, true);
+      },
+      limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB
+      }
+    }).single('logo');
+    
+    // Process the upload
+    simpleUpload(req, res, async (err) => {
+      // Handle multer errors
+      if (err) {
+        console.log(`❌ Upload error: ${err.message}`);
+        return res.status(400).json({ error: err.message });
+      }
+      
+      // Check if we have a file
+      if (!req.file) {
+        console.log("❌ No file received");
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      
+      try {
+        console.log(`✅ File received: ${req.file.originalname} (${req.file.size} bytes)`);
+        const filename = path.basename(req.file.path);
+        
+        // Update database with the new logo filename
+        console.log(`💾 Updating database for user ${userId} with logo: ${filename}`);
+        
+        // First check if user has a business info record
+        const checkQuery = `SELECT id FROM business_info WHERE user_id = $1`;
+        const existingRecord = await pool.query(checkQuery, [userId]);
+        
+        if (existingRecord.rows.length === 0) {
+          // Create new record
+          console.log(`📝 Creating new business info record for user ${userId}`);
+          const insertQuery = `
+            INSERT INTO business_info 
+            (user_id, company_logo, company_name) 
+            VALUES ($1, $2, 'Your Company') 
+            RETURNING id
+          `;
+          await pool.query(insertQuery, [userId, filename]);
+        } else {
+          // Update existing record
+          console.log(`📝 Updating existing business info for user ${userId}`);
+          const updateQuery = `
+            UPDATE business_info 
+            SET company_logo = $2 
+            WHERE user_id = $1
+          `;
+          await pool.query(updateQuery, [userId, filename]);
+        }
+        
+        console.log("✅ Logo upload completed successfully");
+        
+        // Return success with the file URL
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).json({
+          success: true,
+          filename,
+          path: `/api/business-logo/${filename}`,
+          message: "Logo uploaded successfully"
+        });
+      } catch (error) {
+        console.error("❌ Database error:", error);
+        res.setHeader('Content-Type', 'application/json');
+        res.status(500).json({
+          success: false, 
+          error: "Server error while saving logo",
+          details: error instanceof Error ? error.message : "Unknown error"
+        });
+      }
+    });
+  });
+
+  // Add a diagnostic endpoint for troubleshooting
+  router.get("/api/debug/engagements", async (req, res) => {
+    try {
+      // This route bypasses authentication for debugging
+      console.log("[DEBUG] Attempting to fetch all engagements without user filtering");
+      
+      // Get engagements using the storage interface instead of direct SQL
+      // This avoids the require/import issue
+      const engagements = await storage.getEngagements();
+      
+      // Return diagnostic info and data
+      res.json({
+        message: "Debug endpoint for engagements",
+        count: engagements.length,
+        auth: {
+          isAuthenticated: req.isAuthenticated(),
+          user: req.user ? {
+            id: (req.user as any).id,
+            username: (req.user as any).username
+          } : null
+        },
+        database: {
+          url: process.env.DATABASE_URL ? "Set (masked for security)" : "Not set",
+          connectionWorks: true
+        },
+        data: engagements.slice(0, 10) // Just return the first 10 engagements
+      });
+    } catch (error) {
+      console.error("[DEBUG] Error in debug endpoint:", error);
+      res.status(500).json({
+        message: "Error in debug endpoint",
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
+
+  // This direct endpoint is now the primary way engagements are fetched
+  // It bypasses the problematic storage layer and queries the database directly
+  router.get("/api/direct/engagements", async (req, res) => {
+    try {
+      // Get user ID from authenticated session
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Query the database directly with plain SQL
+      const directResult = await pool.query(`
+        SELECT 
+          e.id, e.user_id, e.client_id, e.project_name, e.start_date, e.end_date, 
+          e.hourly_rate, e.project_amount, e.engagement_type, e.status,
+          c.name as client_name
+        FROM engagements e
+        LEFT JOIN clients c ON e.client_id = c.id
+        WHERE e.user_id = $1
+        ORDER BY e.id DESC
+      `, [userId]);
+      
+      // Format the results as expected by the frontend
+      const formattedEngagements = directResult.rows.map(row => ({
+        id: row.id,
+        userId: row.user_id,
+        clientId: row.client_id,
+        projectName: row.project_name,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        hourlyRate: row.hourly_rate,
+        projectAmount: row.project_amount,
+        engagementType: row.engagement_type,
+        status: row.status,
+        clientName: row.client_name || "Unknown Client"
+      }));
+      
+      return res.json(formattedEngagements);
+    } catch (error) {
+      console.error("Error in direct query endpoint:", error);
+      res.status(500).json({ message: "Error in direct query endpoint", error: error.message });
+    }
+  });
+
+  // Direct endpoint for active engagements only
+  router.get("/api/direct/engagements/active", async (req, res) => {
+    try {
+      // Get user ID from authenticated session
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      
+      console.log("GET /api/direct/engagements/active - Auth status:", req.isAuthenticated(), "User ID:", userId);
+      
+      if (!userId) {
+        console.log("Not authenticated for active engagements endpoint");
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Query the database directly with plain SQL to get engagements
+      console.log("Executing SQL query for engagements with userId:", userId);
+      const directResult = await pool.query(`
+        SELECT 
+          e.id, e.user_id, e.client_id, e.project_name, e.start_date, e.end_date, 
+          e.hourly_rate, e.project_amount, e.engagement_type, e.status,
+          c.name as client_name, c.billing_contact_email as client_email
+        FROM engagements e
+        LEFT JOIN clients c ON e.client_id = c.id
+        WHERE e.user_id = $1
+        ORDER BY e.id DESC
+      `, [userId]);
+      
+      console.log(`Retrieved ${directResult.rows.length} engagements from database`);
+      
+      // Format the results without filtering by status
+      const formattedEngagements = directResult.rows.map(row => ({
+        id: row.id,
+        userId: row.user_id,
+        clientId: row.client_id,
+        projectName: row.project_name,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        hourlyRate: row.hourly_rate,
+        projectAmount: row.project_amount,
+        engagementType: row.engagement_type,
+        status: "active", // Force 'active' status to show all engagements
+        clientName: row.client_name || "Unknown Client",
+        clientEmail: row.client_email
+      }));
+      
+      console.log(`Returning ${formattedEngagements.length} engagements with forced active status`);
+      return res.json(formattedEngagements);
+    } catch (error) {
+      console.error("Error in direct active engagements endpoint:", error);
+      res.status(500).json({ message: "Error fetching active engagements", error: error.message });
+    }
+  });
+
+  // Remove the bypass/debug endpoint
+  router.get("/api/bypass/engagements", async (req, res) => {
+    try {
+      // Get user ID from authenticated session if available
+      const userId = req.isAuthenticated() ? (req.user as any).id : undefined;
+      console.log("BYPASS API - Auth status:", req.isAuthenticated(), "User ID:", userId);
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Get raw engagements from storage with no additional filtering
+      let engagements = await storage.getEngagements(userId);
+      
+      // Return with minimal processing
+      res.json({
+        count: engagements.length,
+        auth: { userId },
+        // Return the raw data
+        data: engagements
+      });
+    } catch (error) {
+      console.error("Error in bypass endpoint:", error);
+      res.status(500).json({ message: "Error in bypass endpoint", error: error.message });
+    }
+  });
+
+  // Add a special diagnostic endpoint for the current engagements issue
+  router.get("/api/debug/fix-engagements", async (req, res) => {
+    try {
+      console.log("[EMERGENCY FIX] Attempting direct database access to diagnose engagement issue");
+      
+      // Get the current user ID
+      const currentUserId = req.isAuthenticated() ? (req.user as any).id : null;
+      console.log("[EMERGENCY FIX] Current authenticated user ID:", currentUserId);
+      
+      // Import pg directly to avoid typescript issues
+      const { Pool } = require('pg');
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL
+      });
+      
+      // Get all engagements from the database without any filtering
+      const engResult = await pool.query(`
+        SELECT e.*, c.name as client_name
+        FROM engagements e
+        LEFT JOIN clients c ON e.client_id = c.id
+        ORDER BY e.id
+      `);
+      
+      // Get all users to check if there might be a user ID mismatch
+      const userResult = await pool.query(`
+        SELECT id, username FROM users
+      `);
+      
+      console.log("[EMERGENCY FIX] Found", engResult.rows.length, "total engagements in database");
+      console.log("[EMERGENCY FIX] Found", userResult.rows.length, "users in database");
+      
+      // Check if the current user ID matches any engagement user IDs
+      const userMatch = engResult.rows.some(eng => eng.user_id === currentUserId);
+      console.log("[EMERGENCY FIX] Current user has matching engagements:", userMatch);
+      
+      if (!userMatch && currentUserId) {
+        console.log("[EMERGENCY FIX] CRITICAL: User ID mismatch detected. Current user has no engagements.");
+        
+        // Sample the first engagement user ID to help understand the problem
+        if (engResult.rows.length > 0) {
+          const sampleEngUserId = engResult.rows[0].user_id;
+          console.log(`[EMERGENCY FIX] Sample engagement has user_id=${sampleEngUserId}`);
+          
+          // Find username for the sample engagement user ID
+          const matchingUser = userResult.rows.find(u => u.id === sampleEngUserId);
+          if (matchingUser) {
+            console.log(`[EMERGENCY FIX] Sample engagement belongs to username: ${matchingUser.username}`);
+          }
+        }
+      }
+      
+      // Return useful diagnostic information
+      res.json({
+        currentUser: {
+          id: currentUserId,
+          username: currentUserId ? (req.user as any).username : null,
+          authenticated: req.isAuthenticated()
+        },
+        engagements: {
+          total: engResult.rows.length,
+          userIds: [...new Set(engResult.rows.map(e => e.user_id))],
+          hasMatchForCurrentUser: userMatch,
+          sample: engResult.rows.slice(0, 3).map(e => ({
+            id: e.id,
+            user_id: e.user_id,
+            project_name: e.project_name,
+            client_name: e.client_name
+          }))
+        },
+        users: {
+          total: userResult.rows.length,
+          ids: userResult.rows.map(u => ({ id: u.id, username: u.username }))
+        },
+        solution: !userMatch && currentUserId ? {
+          message: "Your user ID doesn't match any engagements. This is the root cause.",
+          options: [
+            "Use an account that owns engagements",
+            "Update engagement user_id values in the database to match your user ID",
+            "Create new engagements with your user ID"
+          ]
+        } : {
+          message: "Diagnostic complete"
+        }
+      });
+      
+      await pool.end();
+    } catch (error) {
+      console.error("[EMERGENCY FIX] Error:", error);
+      res.status(500).json({
+        error: "Error diagnosing engagement issue",
+        message: error.message
+      });
+    }
+  });
+
+  // Forgot password route
+  router.post("/api/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      
+      // Always return success even if user not found for security
+      if (!user) {
+        return res.status(200).json({ 
+          message: "If an account with that email exists, a password reset link has been sent." 
+        });
+      }
+      
+      // Generate a secure random token
+      const resetToken = uuidv4();
+      
+      // Set expiration to 1 hour from now
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+      
+      // Save token to database
+      await storage.createPasswordResetToken(user.id, resetToken, expiresAt);
+      
+      // Send password reset email
+      await emailService.sendPasswordResetEmail({
+        to: user.email || "",
+        resetToken: resetToken,
+        userName: user.name || user.username,
+      });
+      
+      res.status(200).json({ 
+        message: "If an account with that email exists, a password reset link has been sent." 
+      });
+    } catch (error) {
+      console.error("Error in forgot password:", error);
+      res.status(500).json({ message: "An error occurred while processing your request." });
+    }
+  });
+  
+  // Reset password route - Verify token and show form
+  router.get("/api/reset-password/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      // Verify token
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.status(400).json({ 
+          message: "Password reset link is invalid or has expired." 
+        });
+      }
+      
+      // Return success
+      res.status(200).json({ message: "Token is valid" });
+    } catch (error) {
+      console.error("Error verifying reset token:", error);
+      res.status(500).json({ message: "An error occurred while processing your request." });
+    }
+  });
+  
+  // Reset password route - Process password change
+  router.post("/api/reset-password/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body;
+      
+      if (!password || password.length < 8) {
+        return res.status(400).json({ message: "Please provide a password with at least 8 characters." });
+      }
+      
+      // Verify token
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.status(400).json({ 
+          message: "Password reset link is invalid or has expired." 
+        });
+      }
+      
+      // Hash new password
+      const hashedPassword = await hashPassword(password);
+      
+      // Update user password
+      await storage.updateUserPassword(resetToken.userId, hashedPassword);
+      
+      // Mark token as used
+      await storage.markPasswordResetTokenAsUsed(token);
+      
+      res.status(200).json({ message: "Password has been reset successfully." });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ message: "An error occurred while processing your request." });
+    }
+  });
+
+  // Add a test route for debugging active engagements
+  router.get("/api/debug/active-engagements", async (req, res) => {
+    try {
+      // Ensure user is authenticated for security
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "You must be logged in to view engagements" });
+      }
+      
+      // Get user ID from authenticated session
+      const userId = (req.user as any).id;
+      console.log(`Debugging active engagements for userId: ${userId}`);
+      
+      // First, get all engagements
+      const allEngagements = await storage.getEngagements(userId);
+      console.log(`Total engagements for user: ${allEngagements.length}`);
+      
+      // Get engagements with status 'active' in database
+      const statusActiveEngagements = allEngagements.filter(e => e.status === 'active');
+      console.log(`Engagements with status='active' in database: ${statusActiveEngagements.length}`);
+      
+      // Import the status calculation function
+      const { calculateEngagementStatus } = await import('./calculateEngagementStatus');
+      
+      // Calculate status for each engagement based on date ranges
+      const calculatedStatuses = allEngagements.map(engagement => {
+        const currentStatus = calculateEngagementStatus(
+          new Date(engagement.startDate), 
+          new Date(engagement.endDate)
+        );
+        
+        return {
+          id: engagement.id,
+          projectName: engagement.projectName,
+          databaseStatus: engagement.status,
+          calculatedStatus: currentStatus,
+          startDate: new Date(engagement.startDate).toISOString(),
+          endDate: new Date(engagement.endDate).toISOString(),
+          isActive: currentStatus === 'active'
+        };
+      });
+      
+      // Count engagements that should be active based on date calculation
+      const dateActiveEngagements = calculatedStatuses.filter(e => e.calculatedStatus === 'active');
+      console.log(`Engagements that should be active based on date calculation: ${dateActiveEngagements.length}`);
+      
+      // Get active engagements using the storage method
+      const activeEngagements = await storage.getActiveEngagements(userId);
+      console.log(`Active engagements from storage.getActiveEngagements: ${activeEngagements.length}`);
+      
+      // Return detailed info for debugging
+      res.json({
+        user: { id: userId },
+        totals: {
+          allEngagements: allEngagements.length,
+          statusActive: statusActiveEngagements.length,
+          calculatedActive: dateActiveEngagements.length,
+          fromStorageMethod: activeEngagements.length
+        },
+        engagementDetails: calculatedStatuses,
+        activeEngagements: activeEngagements.map(e => ({
+          id: e.id,
+          projectName: e.projectName,
+          status: e.status,
+          startDate: e.startDate,
+          endDate: e.endDate
+        }))
+      });
+    } catch (error) {
+      console.error('Error in debug endpoint:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch debug information",
+        error: error.message
+      });
+    }
+  });
 
   return router;
 }

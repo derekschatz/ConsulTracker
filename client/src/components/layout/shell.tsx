@@ -21,7 +21,7 @@ const getPageTitle = (path: string): string => {
     case '/invoices':
       return 'Invoices';
     default:
-      return 'ConsultTrack';
+      return 'Contraq';
   }
 };
 
@@ -44,17 +44,17 @@ const Shell = ({ children, className }: ShellProps) => {
 
   // Normal layout with navigation for authenticated users
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Sidebar - Hidden on mobile */}
       <Sidebar />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="md:pl-64 lg:pl-72">
         {/* Mobile Navigation */}
         <MobileNav />
 
         {/* Content Wrapper */}
-        <div className={cn("flex-1 overflow-y-auto p-4 md:p-6 lg:p-8", className)}>
+        <div className={cn("min-h-screen p-4 md:p-6 lg:p-8", className)}>
           {children}
         </div>
       </main>

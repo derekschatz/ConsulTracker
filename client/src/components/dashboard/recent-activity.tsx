@@ -15,6 +15,16 @@ interface Activity {
   entityId: number;
 }
 
+// Add a helper function to format dates consistently
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+};
+
 const RecentActivity = () => {
   // Replace with actual API call when available
   // For now, construct activities from time logs and invoices
@@ -48,9 +58,9 @@ const RecentActivity = () => {
     activities.push({
       id: invoice.id,
       type: 'invoice',
-      title: `Created invoice #${invoice.invoiceNumber} for ${invoice.clientName}`,
-      description: `$${invoice.amount} for ${new Date(invoice.periodStart).toLocaleDateString()} - ${new Date(invoice.periodEnd).toLocaleDateString()}`,
-      timestamp: invoice.issueDate,
+      title: `Created invoice #${invoice.invoice_number} for ${invoice.client_name}`,
+      description: `$${invoice.total_amount} for ${formatDate(invoice.period_start)} - ${formatDate(invoice.period_end)}`,
+      timestamp: invoice.issue_date,
       entityId: invoice.id,
     });
   });

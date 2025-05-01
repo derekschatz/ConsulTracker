@@ -48,6 +48,10 @@ export type InvoiceStatus = z.infer<typeof invoiceStatusEnum>;
 export const engagementTypeEnum = z.enum(['hourly', 'project']);
 export type EngagementType = z.infer<typeof engagementTypeEnum>;
 
+// Define invoice type enum
+export const invoiceTypeEnum = z.enum(['hourly', 'project']);
+export type InvoiceType = z.infer<typeof invoiceTypeEnum>;
+
 // Client table
 export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),
@@ -130,6 +134,42 @@ export const insertEngagementSchema = z.object({
   }
 );
 
+// New schema for updates that makes all fields optional
+export const updateEngagementSchema = z.object({
+  clientId: z.number().optional(),
+  projectName: z.string().optional(),
+  startDate: z.date().optional(),
+  endDate: z.date().optional(),
+  engagementType: engagementTypeEnum.optional(),
+  hourlyRate: z.number().positive('Hourly rate must be positive').optional().nullable(),
+  projectAmount: z.number().positive('Project amount must be positive').optional().nullable(),
+  description: z.string().optional(),
+  status: z.string().optional(),
+  netTerms: z.number().int().min(1).optional()
+}).refine(
+  (data) => {
+    // Only validate rate/amount if engagementType is being updated
+    if (!data.engagementType) return true;
+    
+    if (data.engagementType === 'hourly') {
+      return data.hourlyRate !== undefined && data.hourlyRate !== null;
+    } else if (data.engagementType === 'project') {
+      return data.projectAmount !== undefined && data.projectAmount !== null;
+    }
+    return false;
+  },
+  {
+    message: "Hourly rate is required for hourly engagements, or project amount is required for project engagements",
+    path: ['engagementType'],
+  }
+);
+
+export type Engagement = Omit<typeof engagements.$inferSelect, 'hourlyRate' | 'projectAmount'> & {
+  hourlyRate: number | null;
+  projectAmount: number | null;
+};
+export type InsertEngagement = z.infer<typeof insertEngagementSchema>;
+
 // Time logs table
 export const timeLogs = pgTable("time_logs", {
   id: serial("id").primaryKey(),
@@ -174,6 +214,7 @@ export const invoices = pgTable("invoices", {
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
   projectName: text("project_name"),
+  invoice_type: text("invoice_type").notNull(),
   billingContactName: text("billing_contact_name"),
   billingContactEmail: text("billing_contact_email"),
   billingAddress: text("billing_address"),
@@ -204,6 +245,7 @@ export const insertInvoiceSchema = createInsertSchema(invoices).pick({
   periodStart: true,
   periodEnd: true,
   projectName: true,
+  invoice_type: true,
   billingContactName: true,
   billingContactEmail: true,
   billingAddress: true,
@@ -250,9 +292,6 @@ export const insertUserSchema = createInsertSchema(users).pick({
 // Type definitions
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = z.infer<typeof insertClientSchema>;
-
-export type Engagement = typeof engagements.$inferSelect;
-export type InsertEngagement = z.infer<typeof insertEngagementSchema>;
 
 export type TimeLog = typeof timeLogs.$inferSelect;
 export type InsertTimeLog = z.infer<typeof insertTimeLogSchema>;

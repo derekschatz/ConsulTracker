@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { useState, useEffect, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -133,13 +133,13 @@ const EngagementModal = ({
     control,
     watch,
     setValue,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: engagement
       ? {
           ...engagement,
-          clientId: engagement.clientId || engagement.client_id || 0,
+          clientId: Number(engagement.clientId || engagement.client_id || 0),
           startDate: engagement.startDate ? getISODate(new Date(engagement.startDate)) : getISODate(),
           endDate: engagement.endDate ? getISODate(new Date(engagement.endDate)) : '',
           engagementType: (engagement.engagementType === 'project' || 
@@ -163,6 +163,7 @@ const EngagementModal = ({
           description: '',
           netTerms: 30,
         },
+    mode: 'onChange',
   });
   
   // Watch for engagement type changes
@@ -212,25 +213,33 @@ const EngagementModal = ({
   
   // Handle modal close and reset form
   const handleClose = () => {
+    // Completely reset all state
     reset();
     onOpenChange(false);
   };
 
   // Function to handle client selection and set client name
   const handleClientChange = (clientId: string, onChange: (value: number) => void) => {
+    console.log("Client selected:", clientId);
     const id = parseInt(clientId);
+    
+    if (isNaN(id) || id <= 0) {
+      console.error("Invalid client ID:", clientId);
+      return;
+    }
+    
     onChange(id);
     
     // Find the selected client to get its name
     const selectedClient = clients.find(client => client.id === id);
+    console.log("Selected client:", selectedClient);
+    
     if (selectedClient) {
-      // Update client name field
-      const clientNameEvent = {
-        target: { value: selectedClient.name }
-      } as React.ChangeEvent<HTMLInputElement>;
-      
-      // Simulate an input event to update the clientName field
-      register('clientName').onChange(clientNameEvent);
+      // Update client name field using setValue for more reliability
+      setValue('clientName', selectedClient.name);
+      console.log("Set client name to:", selectedClient.name);
+    } else {
+      console.error("Client not found for ID:", id);
     }
   };
 
@@ -248,55 +257,112 @@ const EngagementModal = ({
     }
   };
 
-  // Submit form data
+  // Called when form is submitted
   const onSubmit = async (data: FormValues) => {
     try {
-      setIsSubmitting(true);
-
-      // Convert values to appropriate types
-      const startDate = new Date(data.startDate);
-      const endDate = new Date(data.endDate);
+      console.log("Form submitted with data:", data);
       
-      // Automatically calculate status based on dates
-      const status = calculateEngagementStatus(startDate, endDate);
-      
-      const formattedData = {
-        ...data,
-        startDate,
-        endDate,
-        status,
-      };
-
-      // Create or update engagement
-      const response = await apiRequest(
-        isEditMode ? 'PUT' : 'POST',
-        isEditMode ? `/api/engagements/${engagement.id}` : '/api/engagements',
-        formattedData
-      );
-
-      // Get the response data
-      const responseData = await response.json().catch(e => ({ error: 'Failed to parse response' }));
-
-      if (!response.ok) {
-        throw new Error(responseData.message || 'Failed to save engagement');
+      // Check for validation errors
+      if (Object.keys(errors).length > 0) {
+        console.error("Form validation errors:", errors);
+        toast({
+          variant: "destructive",
+          title: "Validation Error",
+          description: "Please fix the errors in the form before submitting."
+        });
+        return;
       }
-
-      // Success toast
-      toast({
-        title: `Engagement ${isEditMode ? 'updated' : 'created'} successfully`,
-        description: `${formattedData.clientName} - ${formattedData.projectName}`,
-      });
-
-      // Close modal and reset form
-      handleClose();
       
-      // Trigger success callback to refresh data
-      onSuccess();
-    } catch (error) {
+      setIsSubmitting(true);
+      
+      // Convert dates to Date objects
+      const startDate = new Date(data.startDate);
+      const endDate = data.endDate ? new Date(data.endDate) : null;
+      
+      // Calculate status (draft, active, completed) based on dates
+      const currentDate = new Date();
+      let status = 'draft';
+      
+      if (currentDate >= startDate) {
+        status = 'active';
+        if (endDate && currentDate > endDate) {
+          status = 'completed';
+        }
+      }
+      
+      // Format data for submission
+      const formData = {
+        clientId: data.clientId,
+        clientName: data.clientName,
+        projectName: data.projectName,
+        engagementType: data.engagementType,
+        ...(data.engagementType === 'hourly' ? { hourlyRate: data.hourlyRate } : {}),
+        ...(data.engagementType === 'project' ? { projectAmount: data.projectAmount } : {}),
+        startDate: getISODate(startDate),
+        ...(endDate ? { endDate: getISODate(endDate) } : {}),
+        netTerms: data.netTerms,
+        status,
+        ...(data.description ? { description: data.description } : {}),
+      };
+      
+      console.log("Sending formatted data to API:", formData);
+      
+      // Make API request (POST for create, PUT for edit)
+      const response = await apiRequest(
+        engagement ? 'PUT' : 'POST',
+        engagement ? `/api/engagements/${engagement.id}` : '/api/engagements',
+        formData
+      );
+      
+      // Handle successful response
+      console.log("API response:", response);
+      
+      // Show success toast
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'An unknown error occurred',
-        variant: 'destructive',
+        title: `Engagement ${engagement ? 'updated' : 'created'} successfully`,
+        description: `The engagement "${data.projectName}" has been ${engagement ? 'updated' : 'created'}.`,
+      });
+      
+      // Call the success callback
+      if (onSuccess) {
+        onSuccess();
+      }
+      
+      // Reset the form
+      console.log("Resetting form with defaults:", {
+        clientId: 0,
+        clientName: '',
+        projectName: '',
+        startDate: getISODate(),
+        endDate: '',
+        engagementType: 'hourly',
+        hourlyRate: null,
+        projectAmount: null,
+        description: '',
+        netTerms: 30,
+      });
+      
+      // Close the modal - close it first, then reset form state
+      onOpenChange(false);
+      
+      // Reset form after modal is closed
+      setTimeout(() => {
+        reset();
+      }, 100);
+    } catch (error) {
+      console.error("Error submitting engagement form:", error);
+      
+      let errorMessage = "An unexpected error occurred.";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      // Show error toast
+      toast({
+        variant: "destructive",
+        title: "Failed to save engagement",
+        description: errorMessage,
       });
     } finally {
       setIsSubmitting(false);
@@ -304,7 +370,7 @@ const EngagementModal = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Edit' : 'Create'} Engagement</DialogTitle>
@@ -341,14 +407,14 @@ const EngagementModal = ({
 
           {/* Project Name */}
           <div className="space-y-2">
-            <Label htmlFor="projectName">Project Name</Label>
+            <Label htmlFor="projectName">Name</Label>
             <Input id="projectName" {...register('projectName')} />
             {errors.projectName && <p className="text-red-500 text-sm">{errors.projectName.message}</p>}
           </div>
           
           {/* Engagement Type */}
           <div className="space-y-2">
-            <Label htmlFor="engagementType">Engagement Type</Label>
+            <Label htmlFor="engagementType">Type</Label>
             <Controller
               control={control}
               name="engagementType"
@@ -361,8 +427,8 @@ const EngagementModal = ({
                     <SelectValue placeholder="Select engagement type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="hourly">Hourly Rate</SelectItem>
-                    <SelectItem value="project">Project-Based</SelectItem>
+                    <SelectItem value="hourly">Hourly</SelectItem>
+                    <SelectItem value="project">Project</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -375,7 +441,7 @@ const EngagementModal = ({
           {/* Rate Input - show conditionally based on engagement type */}
           {engagementType === 'hourly' ? (
             <div className="space-y-2">
-              <Label htmlFor="hourlyRate">Hourly Rate ($)</Label>
+              <Label htmlFor="hourlyRate">Rate ($)</Label>
               <Input 
                 id="hourlyRate" 
                 type="number" 
@@ -390,7 +456,7 @@ const EngagementModal = ({
             </div>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="projectAmount">Project Amount ($)</Label>
+              <Label htmlFor="projectAmount">Amount ($)</Label>
               <Input 
                 id="projectAmount" 
                 type="number" 

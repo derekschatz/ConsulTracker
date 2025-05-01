@@ -1,6 +1,9 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import bodyParser from 'body-parser';
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Global error handler for uncaught exceptions
 process.on('uncaughtException', (error) => {
@@ -18,6 +21,15 @@ process.on('unhandledRejection', (reason, promise) => {
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Add middleware for raw bodies (needed for Stripe webhook verification)
+app.use((req, res, next) => {
+  if (req.path === '/api/stripe/webhook') {
+    bodyParser.raw({ type: 'application/json' })(req, res, next);
+  } else {
+    express.json()(req, res, next);
+  }
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -47,6 +59,27 @@ app.use((req, res, next) => {
   });
 
   next();
+});
+
+// Add a test route before registering other routes
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'API is working!' });
+});
+
+// Add a test route for the stripe endpoint to diagnose
+app.post('/api/stripe-test', (req, res) => {
+  console.log('Received stripe-test request:', {
+    body: req.body,
+    headers: req.headers,
+    method: req.method,
+  });
+  res.json({ success: true, message: 'Stripe test endpoint working', received: req.body });
+});
+
+console.log('Environment check:', {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT,
+  STRIPE_KEY_AVAILABLE: !!process.env.STRIPE_SECRET_KEY,
 });
 
 (async () => {

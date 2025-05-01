@@ -2,7 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db } from '../db/index.js';
+import pg from 'pg';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -15,9 +15,17 @@ async function runEngagementNetTermsMigration() {
     console.log(`Reading SQL file: ${sqlPath}`);
     const sql = fs.readFileSync(sqlPath, 'utf8');
     
+    // Create a new pool
+    const pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL
+    });
+    
     // Execute the SQL directly
     console.log('Executing SQL migration...');
-    await db.execute(sql);
+    await pool.query(sql);
+    
+    // Close the pool
+    await pool.end();
     
     console.log('Migration completed successfully');
   } catch (error) {
