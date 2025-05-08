@@ -1,14 +1,21 @@
-modules = ["nodejs-20", "postgresql-16", "web"]
-run = "npm run dev"
-hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
+modules = ["nodejs-20", "postgresql-16", "python-3.11", "web"]
+run = "VITE_FORCE_NO_HOST_CHECK=true NODE_ENV=development node --no-warnings --loader tsx ./server/index.ts"
+hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist", "package-lock.json"]
+entrypoint = "server/index.ts"
 
 [nix]
-channel = "stable-24_05"
+channel = "stable-23_11"
+
+[env]
+XDG_CONFIG_HOME = "/home/runner/.config"
+PATH = "/home/runner/$REPL_SLUG/.config/npm/node_global/bin:/home/runner/$REPL_SLUG/node_modules/.bin"
+npm_config_prefix = "/home/runner/$REPL_SLUG/.config/npm/node_global"
+VITE_FORCE_NO_HOST_CHECK = "true"
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "cloudrun"
 build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+run = ["sh", "-c", "npm run start"]
 
 [workflows]
 runButton = "Project"
@@ -92,3 +99,7 @@ externalPort = 8080
 [[ports]]
 localPort = 5012
 externalPort = 8081
+
+[[ports]]
+localPort = 24678
+externalPort = 8099
