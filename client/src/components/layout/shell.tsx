@@ -1,9 +1,8 @@
 import { ReactNode } from 'react';
 import { useLocation } from 'wouter';
-import Sidebar from './sidebar';
-import MobileNav from './mobile-nav';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { SidebarDemo } from '@/components/ui/sidebar-demo';
 
 interface ShellProps {
   children: ReactNode;
@@ -42,19 +41,18 @@ const Shell = ({ children, className }: ShellProps) => {
     );
   }
 
-  // Normal layout with navigation for authenticated users
+  // Layout with sidebar for authenticated users
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Sidebar - Hidden on mobile */}
-      <Sidebar />
-
+    <div className="min-h-screen bg-background flex h-screen overflow-hidden">
+      {/* Sidebar navigation */}
+      <SidebarDemo />
+      
       {/* Main Content Area */}
-      <main className="md:pl-64 lg:pl-72">
-        {/* Mobile Navigation */}
-        <MobileNav />
-
-        {/* Content Wrapper */}
-        <div className={cn("min-h-screen p-4 md:p-6 lg:p-8", className)}>
+      <main className="flex-1 overflow-auto w-full">
+        <div className={cn(
+          "p-4 md:p-6 pt-16 md:pt-4 md:ml-[60px] min-h-screen",
+          className
+        )}>
           {children}
         </div>
       </main>

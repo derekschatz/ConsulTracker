@@ -8,7 +8,7 @@ import Footer from "../components/layout/footer";
 const PricingPage = () => {
   return (
     <div className="min-h-screen bg-white">
-      <Navbar />
+      <Navbar variant="marketing" />
       <div className="pt-16">
         <Pricing />
       </div>

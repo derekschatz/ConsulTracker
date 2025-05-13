@@ -36,7 +36,7 @@ const plans: PricingPlan[] = [
     yearlyPrice: "0",
     period: "per month",
     features: [
-      "Up to 2 clients",
+      "Up to 5 clients",
       "Time tracking",
       "Standard Invoice Template",
       "Email support"

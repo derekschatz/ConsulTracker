@@ -53,23 +53,23 @@ const InvoiceSummary = ({
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
       <Card>
         <CardContent className="p-4">
-          <div className="text-sm font-medium text-slate-500 mb-1">Total Invoiced</div>
-          <div className="text-2xl font-semibold text-white">{formatCurrency(totalInvoiced)}</div>
-          <div className="text-xs text-slate-500 mt-1">{getSummaryLabel()}</div>
+          <div className="text-sm font-medium text-muted-foreground mb-1">Total Invoiced</div>
+          <div className="text-2xl font-semibold text-foreground">{formatCurrency(totalInvoiced)}</div>
+          <div className="text-xs text-muted-foreground mt-1">{getSummaryLabel()}</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4">
-          <div className="text-sm font-medium text-slate-500 mb-1">Paid Invoices</div>
+          <div className="text-sm font-medium text-muted-foreground mb-1">Paid Invoices</div>
           <div className="text-2xl font-semibold text-green-600">{formatCurrency(paidInvoices)}</div>
-          <div className="text-xs text-slate-500 mt-1">{formatPercentage(paidPercentage)} of total</div>
+          <div className="text-xs text-muted-foreground mt-1">{formatPercentage(paidPercentage)} of total</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4">
-          <div className="text-sm font-medium text-slate-500 mb-1">Outstanding Invoices</div>
+          <div className="text-sm font-medium text-muted-foreground mb-1">Outstanding Invoices</div>
           <div className="text-2xl font-semibold text-amber-600">{formatCurrency(outstandingInvoices)}</div>
-          <div className="text-xs text-slate-500 mt-1">{formatPercentage(outstandingPercentage)} of total</div>
+          <div className="text-xs text-muted-foreground mt-1">{formatPercentage(outstandingPercentage)} of total</div>
         </CardContent>
       </Card>
     </div>

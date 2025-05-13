@@ -3,6 +3,10 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import { handleError } from './serverError';
 dotenv.config();
 
 // Global error handler for uncaught exceptions
@@ -17,6 +21,34 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Reason:', reason);
   console.error('Promise:', promise);
 });
+
+// Log file system paths for debugging routes
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+console.log('Server root directory:', __dirname);
+console.log('Routes directory should be at:', path.join(__dirname, 'routes'));
+console.log('Current environment:', process.env.NODE_ENV);
+
+// Ensure the routes directory structure exists in production
+if (process.env.NODE_ENV === 'production') {
+  const routesDir = path.join(__dirname, 'routes');
+  const apiDir = path.join(routesDir, 'api');
+  
+  if (!fs.existsSync(routesDir)) {
+    console.log('Creating routes directory:', routesDir);
+    fs.mkdirSync(routesDir, { recursive: true });
+  }
+  
+  if (!fs.existsSync(apiDir)) {
+    console.log('Creating routes/api directory:', apiDir);
+    fs.mkdirSync(apiDir, { recursive: true });
+  }
+  
+  // Log directory structure for debugging
+  console.log('Directory structure after ensuring paths:');
+  console.log('- Routes dir exists:', fs.existsSync(routesDir));
+  console.log('- API dir exists:', fs.existsSync(apiDir));
+}
 
 const app = express();
 app.use(express.json());
@@ -85,14 +117,6 @@ console.log('Environment check:', {
 (async () => {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
@@ -128,7 +152,9 @@ console.log('Environment check:', {
   // Start with preferred port (from env or 5000)
   const startPort = process.env.PORT ? parseInt(process.env.PORT) : 5000;
   try {
-    await tryPort(startPort);
+    // For Replit deployment, port 5000 is mapped to external port 80
+    const portToUse = app.get("env") === "production" ? 5000 : startPort;
+    await tryPort(portToUse);
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);

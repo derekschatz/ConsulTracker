@@ -49,7 +49,7 @@ const InvoiceTable = ({
       accessor: 'invoiceNumber',
       header: 'Invoice #',
       cell: (invoice) => (
-        <span className="font-medium text-white">{invoice.invoiceNumber}</span>
+        <span className="font-medium text-foreground">{invoice.invoiceNumber}</span>
       ),
     },
     {
@@ -57,8 +57,8 @@ const InvoiceTable = ({
       header: 'Client',
       cell: (invoice) => (
         <div>
-          <div className="font-medium text-white">{invoice.clientName}</div>
-          <div className="text-xs text-slate-500 mt-1 sm:hidden">{formatDate(invoice.issueDate)}</div>
+          <div className="font-medium text-foreground">{invoice.clientName}</div>
+          <div className="text-xs text-muted-foreground mt-1 sm:hidden">{formatDate(invoice.issueDate)}</div>
         </div>
       ),
     },
@@ -78,7 +78,7 @@ const InvoiceTable = ({
       accessor: 'amount',
       header: 'Amount',
       cell: (invoice) => (
-        <span className="font-medium text-white">{formatCurrency(invoice.amount)}</span>
+        <span className="font-medium text-foreground">{formatCurrency(invoice.amount)}</span>
       ),
     },
     {

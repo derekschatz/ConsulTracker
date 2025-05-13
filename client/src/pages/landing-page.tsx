@@ -8,7 +8,7 @@ import Footer from "../components/layout/footer";
 const LandingPage = () => {
   return (
     <div className="min-h-screen bg-white">
-      <Navbar />
+      <Navbar variant="marketing" />
       <Hero />
       <Features />
       <Testimonials />

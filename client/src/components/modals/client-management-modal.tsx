@@ -8,13 +8,15 @@ import {
   DialogFooter 
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, CreditCard } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClientDetailsPanel } from './client-details-panel';
 import { DeleteConfirmationModal } from './delete-confirmation-modal';
 import { ClientFormModal } from './client-form-modal';
 import { apiRequest } from '@/lib/queryClient';
+import { useSubscription } from '@/hooks/use-subscription';
+import { useLocation } from 'wouter';
 
 interface Client {
   id: number;
@@ -39,12 +41,14 @@ export default function ClientManagementModal({
 }: ClientManagementModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [clientToDelete, setClientToDelete] = useState<number | null>(null);
   const [clientToDeleteName, setClientToDeleteName] = useState<string>('');
+  const { isSubscriptionActive, tier, isSolo } = useSubscription();
 
   // Fetch clients
   const { data: clients = [], isLoading, refetch } = useQuery<Client[]>({
@@ -77,7 +81,22 @@ export default function ClientManagementModal({
   };
 
   const handleCreateClient = () => {
+    // Check if user is on the free tier and already has 5 clients
+    if (isSolo && clients.length >= 5) {
+      toast({
+        title: 'Client limit reached',
+        description: 'Free accounts are limited to 5 clients. Upgrade to Pro for unlimited clients.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     setIsCreateOpen(true);
+  };
+
+  const handleUpgrade = () => {
+    onOpenChange(false); // Close the modal
+    navigate('/pricing'); // Navigate to pricing page
   };
 
   const handleDeleteClient = (clientId: number, clientName: string) => {
@@ -159,6 +178,9 @@ export default function ClientManagementModal({
     setIsCreateOpen(false);
   };
 
+  // Check if user has reached the free tier client limit
+  const hasReachedClientLimit = isSolo && clients.length >= 5;
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -167,14 +189,26 @@ export default function ClientManagementModal({
             <DialogTitle>Manage Clients</DialogTitle>
             <DialogDescription>
               View, edit, or delete your client information.
+              {isSolo && (
+                <span className="block mt-1 text-xs text-muted-foreground">
+                  Free accounts are limited to 5 clients.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
 
           <div className="mb-4 flex justify-end">
-            <Button onClick={handleCreateClient} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              New Client
-            </Button>
+            {hasReachedClientLimit ? (
+              <Button onClick={handleUpgrade} size="sm" className="bg-primary-600 hover:bg-primary-700 text-white">
+                <CreditCard className="h-4 w-4 mr-2" />
+                Upgrade to Pro
+              </Button>
+            ) : (
+              <Button onClick={handleCreateClient} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                New Client
+              </Button>
+            )}
           </div>
 
           {isLoading ? (
@@ -220,6 +254,27 @@ export default function ClientManagementModal({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {hasReachedClientLimit && (
+            <div className="mt-4 p-3 bg-muted rounded-md border border-border">
+              <p className="text-sm text-center">
+                You've reached the limit of 5 clients on the free plan.
+                <br />
+                <span className="font-medium">Upgrade to Pro for unlimited clients.</span>
+              </p>
+              <div className="mt-2 flex justify-center">
+                <Button 
+                  onClick={handleUpgrade}
+                  variant="default" 
+                  size="sm"
+                  className="bg-primary-600 hover:bg-primary-700 text-white"
+                >
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Upgrade Now
+                </Button>
+              </div>
             </div>
           )}
 

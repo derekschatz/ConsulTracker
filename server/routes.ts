@@ -40,10 +40,42 @@ import { dirname } from 'path';
 import { emailService } from './services/email-service';
 import stripeRoutes from './api/stripe';
 import testRoutes from './api/test';
+// Use dynamic import for routes index to handle both development and production environments
+// Import createRequire for loading CommonJS modules
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import fs from 'fs';
+import path from 'path';
 
-// Fix for __dirname in ES modules
-const __filename = fileURLToPath(import.meta.url || '');
+// Setup for ES modules
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
+
+// Load routes index safely
+let routesIndex;
+try {
+  // For production, we might need to use a different approach
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Production environment detected, using empty object for routes index');
+    routesIndex = { default: {} };
+  } else {
+    // For development, try to import or require the file
+    try {
+      routesIndex = await import('./routes/index.js').catch(() => {
+        console.log('Dynamic import failed, using require fallback');
+        return require('./routes/index.js');
+      });
+    } catch (err) {
+      console.warn('Could not load routes/index.js, using empty object:', err);
+      routesIndex = { default: {} };
+    }
+  }
+} catch (err) {
+  console.error('Error loading routes/index.js:', err);
+  routesIndex = { default: {} };
+}
 
 // Ensure uploads directory exists at startup
 const UPLOADS_DIR = path.join(dirname(fileURLToPath(import.meta.url || '')), '..', 'uploads', 'logos');
@@ -305,6 +337,46 @@ async function getTimeLogs(userId: number, dateRange: string, startDate?: string
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  const server = createServer(app);
+  
+  // Debug paths to ensure routes are accessible
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  console.log('Server directory path:', __dirname);
+  console.log('Routes directory path:', path.join(__dirname, 'routes'));
+  
+  // Log environment and context information
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+  console.log('Process cwd:', process.cwd());
+  
+  // Try to find and register routes
+  try {
+    // Check if the routes directory exists
+    const routesDir = path.join(__dirname, 'routes');
+    if (fs.existsSync(routesDir)) {
+      console.log(`Routes directory exists at ${routesDir}, checking contents...`);
+      
+      // Check for api subdirectory
+      const apiDir = path.join(routesDir, 'api');
+      if (fs.existsSync(apiDir)) {
+        console.log(`API directory exists at ${apiDir}, checking contents...`);
+        const apiFiles = fs.readdirSync(apiDir);
+        console.log(`API directory contains: ${apiFiles.join(', ')}`);
+        
+        // Traditional approach for mounting the routes
+        app.use('/api/create-checkout-session', require(path.join(apiDir, 'create-checkout-session.js')));
+        app.use('/api/verify-session', require(path.join(apiDir, 'verify-session.js')));
+        console.log('Routes mounted successfully');
+      } else {
+        console.warn(`API directory not found at ${apiDir}`);
+      }
+    } else {
+      console.warn(`Routes directory not found at ${routesDir}`);
+    }
+  } catch (error) {
+    console.error('Error registering routes:', error);
+  }
+
   // Set up authentication
   setupAuth(app);
   
@@ -2849,8 +2921,7 @@ Invoice Details:
     }
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  return server;
 }
 
 export function createRouter(storage: DatabaseStorage): ExpressRouter {

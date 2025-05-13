@@ -73,6 +73,12 @@
 - [x] Added Stripe billing section to account settings with customer portal integration (2024-07-16)
 - [x] Enhanced pricing page to show "Current Plan" for authenticated users on their current tier (2024-07-16)
 - [x] Implemented subscription-based access control for the Dashboard, making it accessible only to Pro and Team tier subscribers (2024-07-19)
+- [x] Added client limit of 5 clients for users on the free (Solo) tier with upgrade prompt (2024-07-20)
+- [x] Enhanced navbar to display user profile and navigation options when authenticated (2024-07-20)
+- [x] Updated navbar to show consistent app navigation links for authenticated users across all pages (2024-07-20)
+- [x] Replaced sidebar with consistent top navigation bar across the entire application (2024-07-20)
+- [x] Improved navigation by removing Pricing link and adding Upgrade button to user dropdown menu (2024-07-20)
+- [x] Implemented new animated sidebar navigation for authenticated users to replace header navigation (2024-07-27)
 
 ## Notes
 - Using Drizzle ORM for database operations
