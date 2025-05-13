@@ -86,11 +86,11 @@ const Dashboard = () => {
     <div className="max-w-7xl mx-auto">
       <header className="mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-3xl font-bold text-[#0D2B47]">Hi, {firstName}!</h1>
+          <h1 className="text-3xl font-bold text-foreground">Hi, {firstName}!</h1>
           <div className="mt-4 sm:mt-0 flex items-center gap-4">
-            <span className="text-sm text-slate-600 mr-2">Current Year:</span>
+            <span className="text-sm text-muted-foreground mr-2">Current Year:</span>
             <Select value={selectedYear} onValueChange={handleYearChange}>
-              <SelectTrigger className="w-[160px] border-slate-200">
+              <SelectTrigger className="w-[160px] border-border">
                 <SelectValue placeholder="Select year" />
               </SelectTrigger>
               <SelectContent>
@@ -104,7 +104,7 @@ const Dashboard = () => {
       </header>
       
       {hasAuthError && (
-        <Alert variant="warning" className="mb-8 border-2 border-amber-200 bg-amber-50">
+        <Alert variant="warning" className="mb-8">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Authentication Required</AlertTitle>
           <AlertDescription>
@@ -120,35 +120,35 @@ const Dashboard = () => {
           value={isLoadingStats ? "Loading..." : formatCurrency(stats?.ytdRevenue || 0)}
           subtitle="Paid invoices this year"
           loading={isLoadingStats}
-          className="bg-white shadow-lg rounded-xl border-0"
+          className="bg-card shadow-lg rounded-xl"
         />
         <MetricCard
           title="Active Engagements"
           value={isLoadingStats ? "Loading..." : stats?.activeEngagements || 0}
           subtitle="Current active projects"
           loading={isLoadingStats}
-          className="bg-white shadow-lg rounded-xl border-0"
+          className="bg-card shadow-lg rounded-xl"
         />
         <MetricCard
           title="Hours This Month"
           value={isLoadingStats ? "Loading..." : formatHours(stats?.monthlyHours || 0)}
           subtitle="Time logged in current month"
           loading={isLoadingStats}
-          className="bg-white shadow-lg rounded-xl border-0"
+          className="bg-card shadow-lg rounded-xl"
         />
         <MetricCard
           title="Pending Invoices"
           value={isLoadingStats ? "Loading..." : formatCurrency(stats?.pendingInvoicesTotal || 0)}
           subtitle={stats?.pendingInvoicesTotal > 0 ? "Invoices awaiting payment" : "No pending invoices"}
           loading={isLoadingStats}
-          className="bg-white shadow-lg rounded-xl border-0"
+          className="bg-card shadow-lg rounded-xl"
         />
       </div>
 
       {/* Monthly Revenue Chart */}
-      <Card className="mb-8 shadow-lg rounded-xl border-0">
+      <Card className="mb-8 shadow-lg rounded-xl">
         <CardContent className="pt-6">
-          <h3 className="text-xl font-semibold text-[#0D2B47] mb-6">Monthly Revenue</h3>
+          <h3 className="text-xl font-semibold text-foreground mb-6">Monthly Amount Invoiced</h3>
           <div className="h-64">
             <MonthlyRevenueChart data={monthlyData || []} loading={isLoadingMonthly} />
           </div>
@@ -158,17 +158,17 @@ const Dashboard = () => {
       {/* Quick Access */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Quick Add Time */}
-        <Card className="shadow-lg rounded-xl border-0">
+        <Card className="shadow-lg rounded-xl">
           <CardContent className="pt-6">
-            <h3 className="text-xl font-semibold text-[#0D2B47] mb-6">Quick Add Time Log</h3>
+            <h3 className="text-xl font-semibold text-foreground mb-6">Quick Add Time Log</h3>
             <QuickAddTimeForm />
           </CardContent>
         </Card>
 
         {/* Recent Activity */}
-        <Card className="shadow-lg rounded-xl border-0">
+        <Card className="shadow-lg rounded-xl">
           <CardContent className="pt-6">
-            <h3 className="text-xl font-semibold text-[#0D2B47] mb-6">Recent Activity</h3>
+            <h3 className="text-xl font-semibold text-foreground mb-6">Recent Activity</h3>
             <RecentActivity />
           </CardContent>
         </Card>

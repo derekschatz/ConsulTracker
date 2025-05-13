@@ -65,7 +65,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
       <CardContent className="pt-4 pb-3">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
-            <Label htmlFor="statusFilter" className="block text-sm font-medium text-slate-700 mb-1">Status</Label>
+            <Label htmlFor="statusFilter" className="block text-sm font-medium text-foreground mb-1">Status</Label>
             <Select value={filters.status} onValueChange={handleStatusChange}>
               <SelectTrigger id="statusFilter">
                 <SelectValue placeholder="All Statuses" />
@@ -79,7 +79,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
             </Select>
           </div>
           <div className="flex-1">
-            <Label htmlFor="clientFilter" className="block text-sm font-medium text-slate-700 mb-1">Client</Label>
+            <Label htmlFor="clientFilter" className="block text-sm font-medium text-foreground mb-1">Client</Label>
             <Select value={filters.client} onValueChange={handleClientChange}>
               <SelectTrigger id="clientFilter">
                 <SelectValue placeholder="All Clients" />
@@ -93,7 +93,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
             </Select>
           </div>
           <div className="flex-1">
-            <Label htmlFor="dateRangeFilter" className="block text-sm font-medium text-slate-700 mb-1">Date Range</Label>
+            <Label htmlFor="dateRangeFilter" className="block text-sm font-medium text-foreground mb-1">Date Range</Label>
             <Select value={filters.dateRange} onValueChange={handleDateRangeChange}>
               <SelectTrigger id="dateRangeFilter">
                 <SelectValue placeholder="Select Range" />
@@ -112,7 +112,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
         {showCustomRange && (
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="startDateFilter" className="block text-sm font-medium text-slate-700 mb-1">Start Date</Label>
+              <Label htmlFor="startDateFilter" className="block text-sm font-medium text-foreground mb-1">Start Date</Label>
               <Input
                 id="startDateFilter"
                 type="date"
@@ -121,7 +121,7 @@ const EngagementFilters = ({ filters, setFilters, clientOptions }: EngagementFil
               />
             </div>
             <div>
-              <Label htmlFor="endDateFilter" className="block text-sm font-medium text-slate-700 mb-1">End Date</Label>
+              <Label htmlFor="endDateFilter" className="block text-sm font-medium text-foreground mb-1">End Date</Label>
               <Input
                 id="endDateFilter"
                 type="date"

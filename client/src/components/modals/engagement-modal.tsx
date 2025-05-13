@@ -12,7 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { calculateEngagementStatus, engagementTypeEnum } from '@shared/schema';
 import { getISODate } from '@/lib/date-utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { formLabelStyles } from '@/components/ui/form-styles';
 
 // Client interface
 interface Client {
@@ -378,7 +379,7 @@ const EngagementModal = ({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* Client Selection */}
           <div className="space-y-2">
-            <Label htmlFor="clientId">Client</Label>
+            <Label htmlFor="clientId" className={formLabelStyles}>Client</Label>
             <Controller
               control={control}
               name="clientId"
@@ -407,14 +408,14 @@ const EngagementModal = ({
 
           {/* Project Name */}
           <div className="space-y-2">
-            <Label htmlFor="projectName">Name</Label>
+            <Label htmlFor="projectName" className={formLabelStyles}>Name</Label>
             <Input id="projectName" {...register('projectName')} />
             {errors.projectName && <p className="text-red-500 text-sm">{errors.projectName.message}</p>}
           </div>
           
           {/* Engagement Type */}
           <div className="space-y-2">
-            <Label htmlFor="engagementType">Type</Label>
+            <Label htmlFor="engagementType" className={formLabelStyles}>Type</Label>
             <Controller
               control={control}
               name="engagementType"
@@ -441,7 +442,7 @@ const EngagementModal = ({
           {/* Rate Input - show conditionally based on engagement type */}
           {engagementType === 'hourly' ? (
             <div className="space-y-2">
-              <Label htmlFor="hourlyRate">Rate ($)</Label>
+              <Label htmlFor="hourlyRate" className={formLabelStyles}>Rate ($)</Label>
               <Input 
                 id="hourlyRate" 
                 type="number" 
@@ -456,7 +457,7 @@ const EngagementModal = ({
             </div>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="projectAmount">Amount ($)</Label>
+              <Label htmlFor="projectAmount" className={formLabelStyles}>Amount ($)</Label>
               <Input 
                 id="projectAmount" 
                 type="number" 
@@ -474,12 +475,12 @@ const EngagementModal = ({
           {/* Date Inputs */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
+              <Label htmlFor="startDate" className={formLabelStyles}>Start Date</Label>
               <Input id="startDate" type="date" {...register('startDate')} />
               {errors.startDate && <p className="text-red-500 text-sm">{errors.startDate.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
+              <Label htmlFor="endDate" className={formLabelStyles}>End Date</Label>
               <Input id="endDate" type="date" {...register('endDate')} />
               {errors.endDate && <p className="text-red-500 text-sm">{errors.endDate.message}</p>}
             </div>
@@ -487,7 +488,7 @@ const EngagementModal = ({
 
           {/* Net Terms */}
           <div className="space-y-2">
-            <Label htmlFor="netTerms">Payment Terms (days)</Label>
+            <Label htmlFor="netTerms" className={formLabelStyles}>Payment Terms (days)</Label>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">Net</span>
               <Input 
@@ -509,7 +510,7 @@ const EngagementModal = ({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description" className={formLabelStyles}>Description</Label>
             <Textarea id="description" {...register('description')} />
             {errors.description && <p className="text-red-500 text-sm">{errors.description.message}</p>}
           </div>

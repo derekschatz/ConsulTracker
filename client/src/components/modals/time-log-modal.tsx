@@ -15,6 +15,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getISODate } from '@/lib/date-utils';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { formLabelStyles } from '@/components/ui/form-styles';
 
 // Define engagement interface
 interface Engagement {
@@ -448,7 +449,7 @@ const TimeLogModal = ({
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-1 gap-2">
-              <Label htmlFor="engagementId" className="text-sm font-medium text-slate-700">
+              <Label htmlFor="engagementId" className={formLabelStyles}>
                 Engagement
               </Label>
               <Controller
@@ -505,7 +506,7 @@ const TimeLogModal = ({
             
             <div className="grid grid-cols-2 gap-4">
               <div className="grid grid-cols-1 gap-2">
-                <Label htmlFor="date" className="text-sm font-medium text-slate-700">
+                <Label htmlFor="date" className={formLabelStyles}>
                   Date
                 </Label>
                 <Input
@@ -520,7 +521,7 @@ const TimeLogModal = ({
               </div>
               
               <div className="grid grid-cols-1 gap-2">
-                <Label htmlFor="hours" className="text-sm font-medium text-slate-700">
+                <Label htmlFor="hours" className={formLabelStyles}>
                   Hours (max 8)
                 </Label>
                 <Input
@@ -540,7 +541,7 @@ const TimeLogModal = ({
             </div>
             
             <div className="grid grid-cols-1 gap-2">
-              <Label htmlFor="description" className="text-sm font-medium text-slate-700">
+              <Label htmlFor="description" className={formLabelStyles}>
                 Description
               </Label>
               <Textarea
@@ -571,7 +572,7 @@ const TimeLogModal = ({
                   }}
                   className="rounded border-gray-300"
                 />
-                <Label htmlFor="multipleEntries" className="text-sm">
+                <Label htmlFor="multipleEntries" className={formLabelStyles}>
                   Add multiple entries
                 </Label>
               </div>

@@ -61,7 +61,7 @@ const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersPr
       <CardContent className="pt-4 pb-3">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <Label htmlFor="dateRangeLogFilter" className="block text-sm font-medium text-slate-700 mb-1">Date Range</Label>
+            <Label htmlFor="dateRangeLogFilter" className="block text-sm font-medium text-foreground mb-1">Date Range</Label>
             <Select value={filters.dateRange} onValueChange={handleDateRangeChange}>
               <SelectTrigger id="dateRangeLogFilter">
                 <SelectValue placeholder="Select date range" />
@@ -77,7 +77,7 @@ const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersPr
             </Select>
           </div>
           <div>
-            <Label htmlFor="clientLogFilter" className="block text-sm font-medium text-slate-700 mb-1">Client</Label>
+            <Label htmlFor="clientLogFilter" className="block text-sm font-medium text-foreground mb-1">Client</Label>
             <Select value={filters.client} onValueChange={handleClientChange}>
               <SelectTrigger id="clientLogFilter">
                 <SelectValue placeholder="All Clients" />
@@ -93,7 +93,7 @@ const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersPr
             </Select>
           </div>
           <div>
-            <Label htmlFor="searchLogs" className="block text-sm font-medium text-slate-700 mb-1">Search</Label>
+            <Label htmlFor="searchLogs" className="block text-sm font-medium text-foreground mb-1">Search</Label>
             <div className="relative">
               <Input
                 id="searchLogs"
@@ -116,7 +116,7 @@ const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersPr
         {showCustomRange && (
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="startDateFilter" className="block text-sm font-medium text-slate-700 mb-1">Start Date</Label>
+              <Label htmlFor="startDateFilter" className="block text-sm font-medium text-foreground mb-1">Start Date</Label>
               <Input
                 id="startDateFilter"
                 type="date"
@@ -125,7 +125,7 @@ const TimeLogFilters = ({ filters, setFilters, clientOptions }: TimeLogFiltersPr
               />
             </div>
             <div>
-              <Label htmlFor="endDateFilter" className="block text-sm font-medium text-slate-700 mb-1">End Date</Label>
+              <Label htmlFor="endDateFilter" className="block text-sm font-medium text-foreground mb-1">End Date</Label>
               <Input
                 id="endDateFilter"
                 type="date"

@@ -17,7 +17,7 @@ const Features = () => {
         heading: "Organize your consulting work efficiently",
         description: "Create and organize your projects with manageable tasks that keep everyone on the same page. Set priorities, due dates, and track progress all in one place.",
         buttonText: "Learn More",
-        imageSrc: "/images/schedule-workflow.jpg",
+        imageSrc: "/images/engagements.png",
         imageAlt: "Schedule workflow visualization",
         checks: [
           "Create and assign tasks",
@@ -36,7 +36,7 @@ const Features = () => {
         heading: "Time Tracking Made Simple",
         description: "Easily track time spent on different client projects with a simple interface. Create detailed time logs with descriptions and categorize by project.",
         buttonText: "Learn More",
-        imageSrc: "/images/time-tracking.jpg",
+        imageSrc: "/images/timelogs.png",
         imageAlt: "Time tracking interface",
         checks: [
           "One-click time tracking",
@@ -55,7 +55,7 @@ const Features = () => {
         heading: "Professional Invoice Generation",
         description: "Generate professional invoices with just a few clicks. Automatically pull in time logs and calculate totals.",
         buttonText: "Learn More",
-        imageSrc: "/images/invoice-generation.jpg",
+        imageSrc: "/images/invoices.png",
         imageAlt: "Invoice generation screen",
         checks: [
           "Professional PDF invoices",
@@ -74,7 +74,7 @@ const Features = () => {
         heading: "Client Management & Reporting",
         description: "Keep all your client information in one place, including contact details, projects, and billing history.",
         buttonText: "Learn More",
-        imageSrc: "/images/reporting.jpg",
+        imageSrc: "/images/dashboard.png",
         imageAlt: "Reporting dashboard",
         checks: [
           "Centralized client database",

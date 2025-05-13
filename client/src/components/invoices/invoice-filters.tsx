@@ -65,7 +65,7 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
       <CardContent className="pt-4 pb-3">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <Label htmlFor="statusInvoiceFilter" className="block text-sm font-medium text-slate-700 mb-1">Status</Label>
+            <Label htmlFor="statusInvoiceFilter" className="block text-sm font-medium text-foreground mb-1">Status</Label>
             <Select value={filters.status} onValueChange={handleStatusChange}>
               <SelectTrigger id="statusInvoiceFilter">
                 <SelectValue placeholder="All Statuses" />
@@ -80,7 +80,7 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
             </Select>
           </div>
           <div>
-            <Label htmlFor="clientInvoiceFilter" className="block text-sm font-medium text-slate-700 mb-1">Client</Label>
+            <Label htmlFor="clientInvoiceFilter" className="block text-sm font-medium text-foreground mb-1">Client</Label>
             <Select value={filters.client} onValueChange={handleClientChange}>
               <SelectTrigger id="clientInvoiceFilter">
                 <SelectValue placeholder="All Clients" />
@@ -94,7 +94,7 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
             </Select>
           </div>
           <div>
-            <Label htmlFor="dateRangeInvoiceFilter" className="block text-sm font-medium text-slate-700 mb-1">Date Range</Label>
+            <Label htmlFor="dateRangeInvoiceFilter" className="block text-sm font-medium text-foreground mb-1">Date Range</Label>
             <Select value={filters.dateRange} onValueChange={handleDateRangeChange}>
               <SelectTrigger id="dateRangeInvoiceFilter">
                 <SelectValue placeholder="Select Range" />
@@ -114,7 +114,7 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
         {showCustomRange && (
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="startDateFilter" className="block text-sm font-medium text-slate-700 mb-1">Start Date</Label>
+              <Label htmlFor="startDateFilter" className="block text-sm font-medium text-foreground mb-1">Start Date</Label>
               <Input
                 id="startDateFilter"
                 type="date"
@@ -123,7 +123,7 @@ const InvoiceFilters = ({ filters, setFilters, clientOptions }: InvoiceFiltersPr
               />
             </div>
             <div>
-              <Label htmlFor="endDateFilter" className="block text-sm font-medium text-slate-700 mb-1">End Date</Label>
+              <Label htmlFor="endDateFilter" className="block text-sm font-medium text-foreground mb-1">End Date</Label>
               <Input
                 id="endDateFilter"
                 type="date"

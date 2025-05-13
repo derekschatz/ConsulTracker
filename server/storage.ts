@@ -1037,36 +1037,30 @@ export class DatabaseStorage implements IStorage {
     }
 
     try {
-      console.log(`Getting revenue from paid invoices for year: ${year}, userId: ${userId || 'all'}`);
+      console.log(`Getting total amount invoiced for year: ${year}, userId: ${userId || 'all'}`);
       
-      // Get revenue from paid invoices
+      // Get total amount invoiced (all statuses, not just paid)
       const yearCondition = sql`extract(year from ${invoices.issueDate}) = ${year}`;
       const invoiceBaseQuery = db.select({
         month: sql<number>`extract(month from ${invoices.issueDate}) - 1`,
         amount: invoices.totalAmount
       }).from(invoices);
       
-      let paidInvoices;
+      let allInvoices;
       if (userId !== undefined) {
-        paidInvoices = await invoiceBaseQuery.where(
+        allInvoices = await invoiceBaseQuery.where(
           and(
-            eq(invoices.status, 'paid'),
             yearCondition,
             eq(invoices.userId, userId)
           )
         );
       } else {
-        paidInvoices = await invoiceBaseQuery.where(
-          and(
-            eq(invoices.status, 'paid'),
-            yearCondition
-          )
-        );
+        allInvoices = await invoiceBaseQuery.where(yearCondition);
       }
 
-      console.log(`Found ${paidInvoices.length} paid invoices`);
+      console.log(`Found ${allInvoices.length} invoices in total`);
 
-      for (const invoice of paidInvoices) {
+      for (const invoice of allInvoices) {
         if (invoice && invoice.month !== null && invoice.month !== undefined) {
           const month = invoice.month;
           if (month >= 0 && month < 12) {

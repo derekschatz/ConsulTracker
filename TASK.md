@@ -33,6 +33,8 @@
   - [x] Add support for project-based engagements alongside hourly engagements
   - [x] Integrate HeroSection component with responsive design and animations
   - [x] Fix invoice modal to show correct fields for hourly engagements (2024-06-08)
+  - [x] Redesign account settings page to use sub-navigation panel and scrollable sections (2024-07-14)
+  - [x] Make Dashboard accessible only to users with "Pro" or "Team" subscription tiers (2024-07-19)
 - [x] Add PDF generation for invoices
 - [ ] Implement email notifications
 - [ ] Add data validation and error handling
@@ -64,6 +66,13 @@
 - Added reusable HeroSection component with animations and theme support for landing pages
 - Fixed active engagement metric on dashboard to use date-based calculation instead of stored status
 - Updated YTD Revenue to "Total Paid YTD" to accurately show revenue from paid invoices
+- [x] Moved pricing table to its own page and added a "Get Started Today" CTA button on the landing page (2024-07-12)
+- [x] Removed Stripe integration for the Solo pricing tier and directed it to the signup form (2024-07-12)
+- [x] Implemented Stripe subscription status check API and React hook (2024-07-12)
+- [x] Fixed Stripe API key configuration issues with fallback to hardcoded test keys in development (2024-07-12)
+- [x] Added Stripe billing section to account settings with customer portal integration (2024-07-16)
+- [x] Enhanced pricing page to show "Current Plan" for authenticated users on their current tier (2024-07-16)
+- [x] Implemented subscription-based access control for the Dashboard, making it accessible only to Pro and Team tier subscribers (2024-07-19)
 
 ## Notes
 - Using Drizzle ORM for database operations

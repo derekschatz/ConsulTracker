@@ -24,7 +24,7 @@ const Navbar = () => {
             <Link href="/#features" className="text-gray-700 hover:text-primary-600 font-medium">
               Features
             </Link>
-            <Link href="/#pricing" className="text-gray-700 hover:text-primary-600 font-medium">
+            <Link href="/pricing" className="text-gray-700 hover:text-primary-600 font-medium">
               Pricing
             </Link>
             <Link href="/login" className="ml-4">
@@ -75,7 +75,7 @@ const Navbar = () => {
               Features
             </Link>
             <Link
-              href="/#pricing"
+              href="/pricing"
               className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
               onClick={() => setIsMenuOpen(false)}
             >

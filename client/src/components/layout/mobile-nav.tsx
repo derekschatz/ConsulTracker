@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { useSubscription } from '@/hooks/use-subscription';
+import { useTheme } from 'next-themes';
 import {
   Menu,
   LayoutDashboard,
@@ -22,6 +24,9 @@ const MobileNav = ({ className }: MobileNavProps) => {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const { user, logoutMutation } = useAuth();
+  const { isPro, isTeam } = useSubscription();
+  const { resolvedTheme } = useTheme();
+  const isDarkMode = resolvedTheme === 'dark';
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
@@ -31,36 +36,37 @@ const MobileNav = ({ className }: MobileNavProps) => {
     setIsOpen(false);
   };
 
+  // Only show Dashboard for Pro or Team subscriptions
   const navigationItems = [
-    {
+    ...(isPro || isTeam ? [{
       name: 'Dashboard',
-      href: '/',
-      icon: LayoutDashboard,
-    },
+      href: '/dashboard',
+      icon: LayoutDashboard
+    }] : []),
     {
       name: 'Engagements',
       href: '/engagements',
-      icon: Building2,
+      icon: Building2
     },
     {
       name: 'Time Logs',
       href: '/time-logs',
-      icon: Clock,
+      icon: Clock
     },
     {
       name: 'Invoices',
       href: '/invoices',
-      icon: FileText,
+      icon: FileText
     },
   ];
 
   return (
     <>
       {/* Mobile Header */}
-      <header className={cn("md:hidden bg-white border-b border-slate-200 p-4", className)}>
+      <header className={cn("md:hidden bg-card border-b border-border p-4", className)}>
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <img src="/images/contraq-logo.png" alt="Contraq Logo" className="h-8" />
+            <img src={isDarkMode ? "/images/contraq-logo-white.png" : "/images/contraq-logo.png"} alt="Contraq Logo" className="h-8" />
           </div>
           
           {/* Mobile Menu Button */}
@@ -68,7 +74,7 @@ const MobileNav = ({ className }: MobileNavProps) => {
             variant="ghost"
             size="sm"
             onClick={toggleMenu}
-            className="text-slate-700 p-1"
+            className="text-foreground p-1"
           >
             <Menu className="h-6 w-6" />
           </Button>
@@ -85,18 +91,18 @@ const MobileNav = ({ className }: MobileNavProps) => {
       >
         <div 
           className={cn(
-            "fixed right-0 top-0 h-full w-64 bg-white shadow-xl transition-transform transform",
+            "fixed right-0 top-0 h-full w-64 bg-card text-card-foreground shadow-xl transition-transform transform",
             isOpen ? "translate-x-0" : "translate-x-full"
           )}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+          <div className="p-4 border-b border-border flex justify-between items-center">
             <h2 className="font-semibold text-lg">Menu</h2>
             <Button
               variant="ghost"
               size="sm"
               onClick={closeMenu}
-              className="text-slate-700 p-1"
+              className="text-foreground p-1"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -113,39 +119,40 @@ const MobileNav = ({ className }: MobileNavProps) => {
                   className={cn(
                     "flex items-center px-4 py-3",
                     isActive
-                      ? "bg-slate-100 text-slate-900 font-medium"
-                      : "text-slate-700 hover:bg-slate-100"
+                      ? "bg-secondary text-foreground font-medium"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                   )}
                 >
-                  <item.icon className="h-5 w-5 mr-3" />
+                  <div className="flex items-center mr-3">
+                    <item.icon className="h-5 w-5" />
+                  </div>
                   {item.name}
                 </Link>
               );
             })}
-          </nav>
-          
-          <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+          </nav>          
+          <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center">
-                  <span className="text-sm font-medium text-slate-700">
+                <div className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
+                  <span className="text-sm font-medium text-foreground">
                     {user?.name 
                       ? `${user.name.split(' ')[0][0]}${user.name.split(' ')[1]?.[0] || ''}`
                       : user?.username.substring(0, 2).toUpperCase() || 'U'}
                   </span>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-slate-900">
+                  <p className="text-sm font-medium text-foreground">
                     {user?.name || user?.username}
                   </p>
-                  <p className="text-xs text-slate-500">Consultant</p>
+                  <p className="text-xs text-muted-foreground">Consultant</p>
                 </div>
               </div>
               
               <div className="flex items-center space-x-3">
                 <Link href="/account/settings" onClick={closeMenu}>
                   <button 
-                    className="flex items-center justify-center text-slate-500 hover:text-slate-700 p-2"
+                    className="flex items-center justify-center text-muted-foreground hover:text-foreground p-2"
                     aria-label="Settings"
                   >
                     <Settings className="h-4 w-4" />
@@ -156,7 +163,7 @@ const MobileNav = ({ className }: MobileNavProps) => {
                     logoutMutation.mutate();
                     closeMenu();
                   }} 
-                  className="flex items-center justify-center text-slate-500 hover:text-slate-700 p-2"
+                  className="flex items-center justify-center text-muted-foreground hover:text-foreground p-2"
                   disabled={logoutMutation.isPending}
                   aria-label="Logout"
                 >
@@ -172,3 +179,4 @@ const MobileNav = ({ className }: MobileNavProps) => {
 };
 
 export default MobileNav;
+

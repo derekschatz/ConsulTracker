@@ -34,10 +34,10 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
       header: 'Engagement',
       cell: (engagement) => (
         <div>
-          <div className="font-medium text-slate-900">
+          <div className="font-medium text-foreground">
             {engagement.projectName}
           </div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-xs text-muted-foreground mt-1">
             {engagement.description}
           </div>
         </div>
@@ -49,14 +49,14 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
       cell: (engagement) => (
         <div>
           <div 
-            className="font-medium text-slate-700 hover:text-blue-600 hover:underline cursor-pointer"
+            className="font-medium text-foreground hover:text-primary hover:underline cursor-pointer"
             onClick={() => handleClientClick(engagement.clientId)}
           >
             {engagement.clientName}
           </div>
           {engagement.clientEmail && (
-            <div className="text-xs text-slate-500 mt-1 flex items-center">
-              <Mail className="h-3 w-3 mr-1.5 text-slate-400" />
+            <div className="text-xs text-muted-foreground mt-1 flex items-center">
+              <Mail className="h-3 w-3 mr-1.5 text-muted-foreground" />
               {engagement.clientEmail}
             </div>
           )}
@@ -68,7 +68,7 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
       header: 'Start Date',
       cell: (engagement) => (
         <div className="flex items-center">
-          <Calendar className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
+          <Calendar className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
           {formatDate(engagement.startDate)}
         </div>
       ),
@@ -79,7 +79,7 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
       header: 'End Date',
       cell: (engagement) => (
         <div className="flex items-center">
-          <Calendar className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
+          <Calendar className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
           {formatDate(engagement.endDate)}
         </div>
       ),
@@ -92,7 +92,7 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
         const isProjectBased = engagement.engagementType === 'project';
         
         return (
-          <div className="text-sm">
+          <div className="text-sm text-foreground">
             {isProjectBased ? 'Project-Based' : 'Hourly'}
           </div>
         );
@@ -109,13 +109,13 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
         
         if (isProjectBased) {
           return (
-            <div>
+            <div className="text-foreground">
               {formatCurrency(projectAmount)}
             </div>
           );
         } else {
           return (
-            <div>
+            <div className="text-foreground">
               {formatCurrency(engagement.hourlyRate) + '/hr'}
             </div>
           );
@@ -143,7 +143,7 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
             variant="ghost" 
             size="icon" 
             onClick={() => onViewInvoiceHistory(engagement.clientName)} 
-            className="h-8 w-8 text-slate-600 hover:text-blue-600"
+            className="h-8 w-8 text-muted-foreground hover:text-primary"
             title="View Invoice History"
           >
             <ReceiptIcon size={16} className="text-current" />
@@ -152,7 +152,7 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
             variant="ghost" 
             size="icon" 
             onClick={() => onEdit(engagement)} 
-            className="h-8 w-8 text-slate-600 hover:text-blue-600"
+            className="h-8 w-8 text-muted-foreground hover:text-primary"
             title="Edit Engagement"
           >
             <Edit className="h-4 w-4" />
@@ -161,7 +161,7 @@ const EngagementTable = ({ engagements, isLoading, onEdit, onDelete, onViewInvoi
             variant="ghost" 
             size="icon" 
             onClick={() => onDelete(engagement.id)} 
-            className="h-8 w-8 text-slate-600 hover:text-red-600"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
             title="Delete Engagement"
           >
             <Trash2 className="h-4 w-4" />

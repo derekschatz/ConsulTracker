@@ -243,7 +243,7 @@ const Engagements = () => {
       <header className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Engagements</h1>
+            <h1 className="text-2xl font-semibold text-foreground">Engagements</h1>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
             <Button

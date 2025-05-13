@@ -54,7 +54,7 @@ const InvoiceSummary = ({
       <Card>
         <CardContent className="p-4">
           <div className="text-sm font-medium text-slate-500 mb-1">Total Invoiced</div>
-          <div className="text-2xl font-semibold text-slate-900">{formatCurrency(totalInvoiced)}</div>
+          <div className="text-2xl font-semibold text-white">{formatCurrency(totalInvoiced)}</div>
           <div className="text-xs text-slate-500 mt-1">{getSummaryLabel()}</div>
         </CardContent>
       </Card>

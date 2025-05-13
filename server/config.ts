@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+
+// Try to load from .env file
+dotenv.config();
+
 /**
  * Application configuration
  */

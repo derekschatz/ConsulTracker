@@ -4,6 +4,7 @@ import { Clock, Check, Building2 } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/format-utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from 'wouter';
+import { cn } from '@/lib/utils';
 
 // Mocked activity data structure until we have a proper API endpoint
 interface Activity {
@@ -82,7 +83,7 @@ const RecentActivity = () => {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="flex gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+          <div key={i} className="flex gap-3 pb-3 border-b border-border last:border-0 last:pb-0">
             <Skeleton className="h-8 w-8 rounded-full flex-shrink-0" />
             <div className="space-y-2 flex-1">
               <Skeleton className="h-4 w-3/4" />
@@ -111,31 +112,31 @@ const RecentActivity = () => {
   const getActivityColor = (type: string) => {
     switch (type) {
       case 'time_log':
-        return 'bg-blue-100 text-blue-600';
+        return cn('bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400');
       case 'invoice':
-        return 'bg-green-100 text-green-600';
+        return cn('bg-green-100 text-green-600 dark:bg-green-950/30 dark:text-green-400');
       case 'engagement':
-        return 'bg-indigo-100 text-indigo-600';
+        return cn('bg-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400');
       default:
-        return 'bg-gray-100 text-gray-600';
+        return cn('bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400');
     }
   };
 
   return (
     <div className="space-y-4">
       {recentActivities.length === 0 ? (
-        <p className="text-sm text-slate-500 text-center py-6">No recent activity</p>
+        <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
       ) : (
         recentActivities.map((activity) => (
-          <div key={activity.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+          <div key={activity.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
             <div className="flex items-start">
               <div className={`h-8 w-8 rounded-full ${getActivityColor(activity.type)} flex items-center justify-center mr-3 flex-shrink-0 mt-0.5`}>
                 {getActivityIcon(activity.type)}
               </div>
               <div>
-                <p className="text-sm text-slate-900 font-medium">{activity.title}</p>
-                <p className="text-xs text-slate-500 mt-1">{activity.description}</p>
-                <p className="text-xs text-slate-400 mt-1">{activity.timestamp ? formatRelativeTime(activity.timestamp) : 'Recently'}</p>
+                <p className="text-sm text-foreground font-medium">{activity.title}</p>
+                <p className="text-xs text-muted-foreground mt-1">{activity.description}</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">{activity.timestamp ? formatRelativeTime(activity.timestamp) : 'Recently'}</p>
               </div>
             </div>
           </div>
@@ -143,7 +144,7 @@ const RecentActivity = () => {
       )}
       {activities.length > 0 && (
         <Link href={activities[0]?.type === 'time_log' ? '/time-logs' : '/invoices'}>
-          <Button variant="link" className="p-0 h-auto text-sm text-blue-600 hover:text-blue-700 font-medium">
+          <Button variant="link" className="p-0 h-auto text-sm text-primary hover:text-primary/80 font-medium">
             View all activity
           </Button>
         </Link>

@@ -36,7 +36,7 @@ const Shell = ({ children, className }: ShellProps) => {
   // If on auth page, render only the children without navigation
   if (isAuthPage || !user) {
     return (
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-background">
         {children}
       </div>
     );
@@ -44,7 +44,7 @@ const Shell = ({ children, className }: ShellProps) => {
 
   // Normal layout with navigation for authenticated users
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Sidebar - Hidden on mobile */}
       <Sidebar />
 

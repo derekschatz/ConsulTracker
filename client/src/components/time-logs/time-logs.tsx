@@ -258,7 +258,7 @@ const TimeLogs = () => {
     <div>
       <header className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-semibold text-slate-900">Time Logs</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Time Logs</h1>
           <div className="flex items-center gap-2 mt-3 sm:mt-0">
             <Button 
               onClick={() => queryClient.invalidateQueries({queryKey: ['/api/time-logs']})}

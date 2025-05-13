@@ -71,7 +71,7 @@ export default function AuthPage() {
                   Start your free trial
                 </h2>
                 <p className="text-gray-600 mt-2">
-                  No credit card required. Try Contrack free for 14 days.
+                  Start today for free!
                 </p>
               </div>
               <SignupForm />

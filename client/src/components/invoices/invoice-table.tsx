@@ -49,7 +49,7 @@ const InvoiceTable = ({
       accessor: 'invoiceNumber',
       header: 'Invoice #',
       cell: (invoice) => (
-        <span className="font-medium text-slate-900">{invoice.invoiceNumber}</span>
+        <span className="font-medium text-white">{invoice.invoiceNumber}</span>
       ),
     },
     {
@@ -57,7 +57,7 @@ const InvoiceTable = ({
       header: 'Client',
       cell: (invoice) => (
         <div>
-          <div className="font-medium text-slate-900">{invoice.clientName}</div>
+          <div className="font-medium text-white">{invoice.clientName}</div>
           <div className="text-xs text-slate-500 mt-1 sm:hidden">{formatDate(invoice.issueDate)}</div>
         </div>
       ),
@@ -78,7 +78,7 @@ const InvoiceTable = ({
       accessor: 'amount',
       header: 'Amount',
       cell: (invoice) => (
-        <span className="font-medium text-slate-900">{formatCurrency(invoice.amount)}</span>
+        <span className="font-medium text-white">{formatCurrency(invoice.amount)}</span>
       ),
     },
     {
@@ -102,25 +102,25 @@ const InvoiceTable = ({
       header: 'Actions',
       cell: (invoice) => (
         <div className="flex justify-end items-center space-x-2">
-          <Button variant="ghost" size="icon" onClick={() => onView(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
+          <Button variant="ghost" size="icon" onClick={() => onView(invoice)} className="action-icon">
             <Eye className="h-4 w-4" />
           </Button>
           {onDownload && (
-            <Button variant="ghost" size="icon" onClick={() => onDownload(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
+            <Button variant="ghost" size="icon" onClick={() => onDownload(invoice)} className="action-icon">
               <Download className="h-4 w-4" />
             </Button>
           )}
           {onEdit && (
-            <Button variant="ghost" size="icon" onClick={() => onEdit(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
+            <Button variant="ghost" size="icon" onClick={() => onEdit(invoice)} className="action-icon">
               <Edit className="h-4 w-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" onClick={() => onEmail(invoice)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
+          <Button variant="ghost" size="icon" onClick={() => onEmail(invoice)} className="action-icon">
             <Mail className="h-4 w-4" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600">
+              <Button variant="ghost" size="icon" className="action-icon">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -145,7 +145,7 @@ const InvoiceTable = ({
               )}
               {invoice.status !== 'pending' && (
                 <DropdownMenuItem onClick={() => onUpdateStatus(invoice.id, 'pending')}>
-                  <Clock className="h-4 w-4 mr-2 text-slate-600" />
+                  <Clock className="h-4 w-4 mr-2 text-slate-400" />
                   Mark as Not Submitted
                 </DropdownMenuItem>
               )}

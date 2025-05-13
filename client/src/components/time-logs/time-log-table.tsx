@@ -60,10 +60,10 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
         
         return (
           <div>
-            <div className="font-medium text-slate-900">
+            <div className="font-medium text-foreground">
               {clientName}
             </div>
-            <div className="text-xs text-slate-500 mt-1 md:hidden">
+            <div className="text-xs text-foreground opacity-80 mt-1 md:hidden">
               {timeLog.description || ''}
             </div>
           </div>
@@ -83,7 +83,7 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
       accessor: 'hours',
       header: 'Hours',
       cell: (timeLog) => (
-        <span className="font-medium">{formatHours(timeLog.hours)}</span>
+        <span className="font-medium text-foreground">{formatHours(timeLog.hours)}</span>
       ),
     },
     {
@@ -102,7 +102,7 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
           amount = timeLog.hours * Number(timeLog.engagement.hourlyRate);
         }
         
-        return formatCurrency(amount);
+        return <span className="text-foreground">{formatCurrency(amount)}</span>;
       },
       hidden: () => isMobile,
     },
@@ -111,10 +111,10 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
       header: 'Actions',
       cell: (timeLog) => (
         <div className="flex justify-end items-center space-x-3">
-          <Button variant="ghost" size="icon" onClick={() => onEdit(timeLog)} className="h-8 w-8 text-slate-600 hover:text-blue-600">
+          <Button variant="ghost" size="icon" onClick={() => onEdit(timeLog)} className="action-icon">
             <Edit className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => onDelete(timeLog.id)} className="h-8 w-8 text-slate-600 hover:text-red-600">
+          <Button variant="ghost" size="icon" onClick={() => onDelete(timeLog.id)} className="action-icon-delete">
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -124,7 +124,7 @@ const TimeLogTable = ({ timeLogs, isLoading, onEdit, onDelete }: TimeLogTablePro
   ];
 
   return (
-    <Card className="mb-6 border shadow-sm">
+    <Card className="mb-6 border shadow-sm bg-card">
       <DataTable
         data={timeLogs}
         columns={columns}

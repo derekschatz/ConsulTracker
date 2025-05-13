@@ -466,7 +466,7 @@ const Invoices = () => {
     <div>
       <header className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-semibold text-slate-900">Invoices</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Invoices</h1>
           <Button 
             onClick={handleOpenCreateModal} 
             className="mt-3 sm:mt-0"

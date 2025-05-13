@@ -19,21 +19,21 @@ const TimeLogSummary = ({
       <Card>
         <CardContent className="p-4">
           <div className="text-sm font-medium text-slate-500 mb-1">Total Hours</div>
-          <div className="text-2xl font-semibold text-slate-900">{formatHours(totalHours)}</div>
+          <div className="text-2xl font-semibold text-white">{formatHours(totalHours)}</div>
           <div className="text-xs text-slate-500 mt-1">{period}</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4">
           <div className="text-sm font-medium text-slate-500 mb-1">Billable Amount</div>
-          <div className="text-2xl font-semibold text-slate-900">{formatCurrency(billableAmount)}</div>
+          <div className="text-2xl font-semibold text-green-600">{formatCurrency(billableAmount)}</div>
           <div className="text-xs text-slate-500 mt-1">{period}</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4">
           <div className="text-sm font-medium text-slate-500 mb-1">Average Daily Hours</div>
-          <div className="text-2xl font-semibold text-slate-900">{formatHours(avgDailyHours)}</div>
+          <div className="text-2xl font-semibold text-amber-600">{formatHours(avgDailyHours)}</div>
           <div className="text-xs text-slate-500 mt-1">{period}</div>
         </CardContent>
       </Card>

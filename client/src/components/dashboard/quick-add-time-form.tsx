@@ -143,7 +143,7 @@ const QuickAddTimeForm = () => {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <Label htmlFor="engagementSelect" className="block text-sm font-medium text-slate-700 mb-1">
+        <Label htmlFor="engagementSelect" className="block text-sm font-medium mb-1">
           Engagement
         </Label>
         <Controller
@@ -159,7 +159,7 @@ const QuickAddTimeForm = () => {
                   field.onChange(Number(value));
                 }}
               >
-                <SelectTrigger className={errors.engagementId ? 'border-red-500' : ''}>
+                <SelectTrigger className={errors.engagementId ? 'border-red-500 dark:border-red-400' : ''}>
                   <SelectValue placeholder="Select an engagement" />
                 </SelectTrigger>
                 <SelectContent>
@@ -174,27 +174,27 @@ const QuickAddTimeForm = () => {
           }}
         />
         {errors.engagementId && (
-          <span className="text-xs text-red-500">{errors.engagementId.message}</span>
+          <span className="text-xs text-red-500 dark:text-red-400">{errors.engagementId.message}</span>
         )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="datePicker" className="block text-sm font-medium text-slate-700 mb-1">
+          <Label htmlFor="datePicker" className="block text-sm font-medium mb-1">
             Date
           </Label>
           <Input
             id="datePicker"
             type="date"
             {...register('date')}
-            className={errors.date ? 'border-red-500' : ''}
+            className={errors.date ? 'border-red-500 dark:border-red-400' : ''}
           />
           {errors.date && (
-            <span className="text-xs text-red-500">{errors.date.message}</span>
+            <span className="text-xs text-red-500 dark:text-red-400">{errors.date.message}</span>
           )}
         </div>
         <div>
-          <Label htmlFor="hoursInput" className="block text-sm font-medium text-slate-700 mb-1">
+          <Label htmlFor="hoursInput" className="block text-sm font-medium mb-1">
             Hours (max 8)
           </Label>
           <Input
@@ -216,16 +216,16 @@ const QuickAddTimeForm = () => {
                 }
               }
             })}
-            className={errors.hours ? 'border-red-500' : ''}
+            className={errors.hours ? 'border-red-500 dark:border-red-400' : ''}
           />
           {errors.hours && (
-            <span className="text-xs text-red-500">{errors.hours.message}</span>
+            <span className="text-xs text-red-500 dark:text-red-400">{errors.hours.message}</span>
           )}
         </div>
       </div>
 
       <div>
-        <Label htmlFor="descriptionInput" className="block text-sm font-medium text-slate-700 mb-1">
+        <Label htmlFor="descriptionInput" className="block text-sm font-medium mb-1">
           Description
         </Label>
         <Textarea
@@ -233,10 +233,10 @@ const QuickAddTimeForm = () => {
           rows={2}
           placeholder="What did you work on?"
           {...register('description')}
-          className={errors.description ? 'border-red-500' : ''}
+          className={errors.description ? 'border-red-500 dark:border-red-400' : ''}
         />
         {errors.description && (
-          <span className="text-xs text-red-500">{errors.description.message}</span>
+          <span className="text-xs text-red-500 dark:text-red-400">{errors.description.message}</span>
         )}
       </div>
 
