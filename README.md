@@ -97,6 +97,43 @@ npm run test:watch
 npm run test:coverage
 ```
 
+## 🚢 Deployment
+
+### Building for Production
+
+To build the application for production:
+
+```bash
+npm run build
+```
+
+This will:
+1. Build the React client-side application using Vite
+2. Compile the TypeScript server files
+3. Create a production-ready structure in the `dist` directory
+
+### Deploying on Replit
+
+The application is configured for seamless deployment on Replit:
+
+1. The `.replit` file configures the runtime environment
+2. The `deploy.sh` script handles the build process for both client and server
+3. Static assets are served from the Express server
+
+To deploy on Replit:
+- Fork the repository to your Replit account
+- Replit will automatically run `npm install` and `npm run build`
+- The application will be available at your Replit URL
+
+### Managing Port Conflicts
+
+If you encounter port conflicts during deployment:
+```bash
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+```
+
+Update the port in `deploy.sh` to use a different port or set `PORT` environment variable.
+
 ## 🐳 Docker Deployment
 
 The application includes Docker configuration for easy deployment:

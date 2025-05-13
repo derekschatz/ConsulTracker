@@ -40,42 +40,19 @@ import { dirname } from 'path';
 import { emailService } from './services/email-service';
 import stripeRoutes from './api/stripe';
 import testRoutes from './api/test';
-// Use dynamic import for routes index to handle both development and production environments
-// Import createRequire for loading CommonJS modules
 import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import fs from 'fs';
-import path from 'path';
 
 // Setup for ES modules
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
-// Load routes index safely
-let routesIndex;
-try {
-  // For production, we might need to use a different approach
-  if (process.env.NODE_ENV === 'production') {
-    console.log('Production environment detected, using empty object for routes index');
-    routesIndex = { default: {} };
-  } else {
-    // For development, try to import or require the file
-    try {
-      routesIndex = await import('./routes/index.js').catch(() => {
-        console.log('Dynamic import failed, using require fallback');
-        return require('./routes/index.js');
-      });
-    } catch (err) {
-      console.warn('Could not load routes/index.js, using empty object:', err);
-      routesIndex = { default: {} };
-    }
-  }
-} catch (err) {
-  console.error('Error loading routes/index.js:', err);
-  routesIndex = { default: {} };
-}
+// Import routes directly from the routes directory with a file extension
+import routesIndexDefault from './routes/index.js';
+
+// Log environment for debugging
+console.log('Routes module: Node environment:', process.env.NODE_ENV);
+console.log('Routes module: Routes directory path:', path.join(__dirname, 'routes'));
 
 // Ensure uploads directory exists at startup
 const UPLOADS_DIR = path.join(dirname(fileURLToPath(import.meta.url || '')), '..', 'uploads', 'logos');

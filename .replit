@@ -1,16 +1,24 @@
+entrypoint = "dist/server/index.js"
 modules = ["nodejs-20", "web", "postgresql-16"]
-run = "npm run dev"
+run = "NODE_NO_WARNINGS=1 npm start"
+onBoot = "npm install"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
+[packager]
+language = "nodejs"
+
 [nix]
-channel = "stable-24_05"
+channel = "stable-22_11"
 
 [deployment]
-deploymentTarget = "autoscale"
-build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+deploymentTarget = "cloudrun"
+run = ["sh", "-c", "NODE_OPTIONS=--enable-source-maps NODE_NO_WARNINGS=1 npm start"]
 ignorePorts = false
+build = ["sh", "-c", "npm install && npm run build"]
 directoryPath = "/dist"
+
+[env]
+NODE_ENV = "production"
 
 [workflows]
 runButton = "Project"
@@ -50,3 +58,31 @@ externalPort = 80
 [[ports]]
 localPort = 5001
 externalPort = 3001
+
+[[ports]]
+localPort = 5002
+externalPort = 3002
+
+[[ports]]
+localPort = 5003
+externalPort = 3003
+
+[[ports]]
+localPort = 5004
+externalPort = 4200
+
+[[ports]]
+localPort = 5005
+externalPort = 5000
+
+[[ports]]
+localPort = 5006
+externalPort = 5173
+
+[[ports]]
+localPort = 5007
+externalPort = 6000
+
+[[ports]]
+localPort = 5008
+externalPort = 6800

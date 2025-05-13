@@ -20,12 +20,6 @@ import { ProtectedWrapper } from "./lib/protected-route";
 import { ThemeProvider } from "next-themes";
 import AccountSettings from "./components/account/account-settings";
 
-// Authenticated route that redirects to login if not authenticated
-const AuthenticatedRoute = ({ component: Component, ...rest }: any) => {
-  const { user } = useAuth();
-  return user ? <Component {...rest} /> : <Redirect to="/login" />;
-};
-
 // Public only route that redirects to dashboard if authenticated
 const PublicOnlyRoute = ({ component: Component, ...rest }: any) => {
   const { user } = useAuth();
