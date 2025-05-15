@@ -1,3 +1,4 @@
+
 import { Router } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,5 +14,5 @@ if (!fs.existsSync(apiDir)) {
   fs.mkdirSync(apiDir, { recursive: true });
 }
 
-// Export as ES module
+// Export the router as default
 export default router;
