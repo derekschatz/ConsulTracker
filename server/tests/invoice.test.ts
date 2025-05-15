@@ -71,11 +71,11 @@ describe('Invoice Creation', () => {
     // Verify invoice details
     const invoice = await storage.getInvoice(result.id);
     expect(invoice).toBeDefined();
-    expect(invoice?.totalAmount).toBe(800); // 8 hours * $100/hour
+    expect(invoice?.amount).toBe(800); // 8 hours * $100/hour
     expect(invoice?.lineItems).toHaveLength(1);
-    expect(Number(invoice?.lineItems[0].amount)).toBe(800);
+    expect(invoice?.lineItems[0].amount).toBe(800);
     expect(invoice?.lineItems[0].hours).toBe(8);
-    expect(Number(invoice?.lineItems[0].rate)).toBe(100);
+    expect(invoice?.lineItems[0].rate).toBe(100);
   });
 
   it('should handle multiple time logs correctly', async () => {
@@ -127,9 +127,9 @@ describe('Invoice Creation', () => {
     // Verify invoice details
     const invoice = await storage.getInvoice(result.id);
     expect(invoice).toBeDefined();
-    expect(invoice?.totalAmount).toBe(1200); // (8 + 4) hours * $100/hour
+    expect(invoice?.amount).toBe(1200); // (8 + 4) hours * $100/hour
     expect(invoice?.lineItems).toHaveLength(2);
-    expect(invoice?.lineItems.reduce((sum, item) => sum + Number(item.amount), 0)).toBe(1200);
+    expect(invoice?.lineItems.reduce((sum, item) => sum + item.amount, 0)).toBe(1200);
     expect(invoice?.lineItems.reduce((sum, item) => sum + item.hours, 0)).toBe(12);
   });
 }); 
