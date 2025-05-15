@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server/index.ts",
     "prebuild": "rm -rf dist",
-    "build": "tsc -p tsconfig.node.json && tsc -p tsconfig.vitest.json && tsc && cp -r client/public dist/client/ || true",
+    "build": "tsc -p tsconfig.node.json && tsc -p tsconfig.vitest.json && tsc && cp -r client/public dist/client/ && mkdir -p dist/server/routes/api && cp -r server/routes/api/* dist/server/routes/api/ || true",
     "postbuild": "mkdir -p dist/server/routes/api dist/server/api && echo 'export default {};' > dist/server/routes/index.js && cp -r server/api/* dist/server/api/ 2>/dev/null || true && echo 'Directory structure created for production'",
     "start": "NODE_ENV=production node dist/server/index.js",
     "check": "tsc",
