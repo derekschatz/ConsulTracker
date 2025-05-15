@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import routes from "./routes/index.js";
+const { registerRoutes } = routes;
 import { setupVite, serveStatic, log } from "./vite";
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
