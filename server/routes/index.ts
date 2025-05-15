@@ -1,8 +1,10 @@
 
-import express from 'express';
+import express, { type Express, Router as ExpressRouter } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { createServer, type Server } from "http";
+import { pool } from '../db';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -14,5 +16,17 @@ if (!fs.existsSync(apiDir)) {
   fs.mkdirSync(apiDir, { recursive: true });
 }
 
-// Export an object with router
-export default { router };
+// Add registerRoutes function
+async function registerRoutes(app: Express): Promise<Server> {
+  const server = createServer(app);
+  
+  // Add basic test route
+  app.get('/api/test', (req, res) => {
+    res.json({ message: 'API is working!' });
+  });
+
+  return server;
+}
+
+// Export both router and registerRoutes
+export default { router, registerRoutes };
