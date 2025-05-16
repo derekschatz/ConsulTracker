@@ -22,7 +22,7 @@ export default function ForgotPasswordPage() {
               />
             </svg>
           </div>
-          <span className="text-xl font-bold text-gray-900">Contrack</span>
+          <span className="text-xl font-bold text-gray-900">Contraq</span>
         </Link>
       </div>
 
@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
 
       <div className="py-6 text-center bg-gray-50">
         <p className="text-gray-600 text-sm">
-          © {new Date().getFullYear()} Contrack. All rights reserved.
+          © {new Date().getFullYear()} Contraq. All rights reserved.
         </p>
       </div>
     </div>

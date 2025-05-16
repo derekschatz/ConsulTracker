@@ -93,7 +93,7 @@ export default function AuthPage() {
 
       <div className="py-6 text-center bg-gray-50">
         <p className="text-gray-600 text-sm">
-          © {new Date().getFullYear()} Contrack. All rights reserved.
+          © {new Date().getFullYear()} Contraq. All rights reserved.
         </p>
       </div>
     </div>

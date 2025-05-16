@@ -28,7 +28,7 @@ class EmailService {
   async sendEmail(options) {
     try {
       const result = await this.transporter.sendMail({
-        from: process.env.EMAIL_FROM || '"Contrack App" <noreply@example.com>',
+        from: process.env.EMAIL_FROM || '"Contraq App" <noreply@example.com>',
         ...options
       });
       console.log('Email sent:', result);

@@ -9,7 +9,7 @@ const Testimonials = () => {
             Trusted by consultants worldwide
           </h2>
           <p className="text-xl text-gray-600">
-            Here's what our customers have to say about Contrack
+            Here's what our customers have to say about Contraq
           </p>
         </div>
 
@@ -22,7 +22,7 @@ const Testimonials = () => {
               ))}
             </div>
             <p className="text-gray-700 mb-6 italic flex-grow">
-              "Contrack has completely transformed how I manage my consulting business. 
+              "Contraq has completely transformed how I manage my consulting business. 
               The time tracking and invoicing features save me hours every week."
             </p>
             <div className="mt-auto">
@@ -57,7 +57,7 @@ const Testimonials = () => {
             </div>
             <p className="text-gray-700 mb-6 italic flex-grow">
               "As a freelance consultant, keeping track of my time and billing used to be a hassle. 
-              Contrack makes it so easy that I can focus on what I do best."
+              Contraq makes it so easy that I can focus on what I do best."
             </p>
             <div className="mt-auto">
               <h4 className="font-bold text-gray-900">Emily Rodriguez</h4>
