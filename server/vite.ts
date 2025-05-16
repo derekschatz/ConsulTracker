@@ -3,8 +3,20 @@ import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
-import viteConfig from "../vite.config";
-import { nanoid } from "nanoid";
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Get vite config but handle both development and production
+async function getViteConfig() {
+  try {
+    return (await import("../vite.config.js")).default;
+  } catch (e) {
+    console.log("Failed to import vite config, using defaults");
+    return {};
+  }
+}
 
 const viteLogger = createLogger();
 
@@ -26,6 +38,8 @@ export async function setupVite(app: Express, server: Server) {
     allowedHosts: true,
   };
 
+  const viteConfig = await getViteConfig();
+
   const vite = await createViteServer({
     ...viteConfig,
     configFile: false,
@@ -43,10 +57,16 @@ export async function setupVite(app: Express, server: Server) {
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+    
+    // Skip API routes - let them be handled by their own handlers
+    if (url.startsWith('/api/')) {
+      return next();
+    }
 
     try {
-      const clientTemplate = path.resolve(
-        import.meta.dirname,
+      // Use path.join with __dirname to construct the path
+      const clientTemplate = path.join(
+        __dirname,
         "..",
         "client",
         "index.html",
@@ -56,7 +76,7 @@ export async function setupVite(app: Express, server: Server) {
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`,
+        `src="/src/main.tsx?v=${Date.now()}"`,
       );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
@@ -68,9 +88,25 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  // Use path.join with __dirname to construct the path
+  const distPath = path.join(__dirname, "..", "public");
 
   if (!fs.existsSync(distPath)) {
+    console.warn(`Could not find the build directory: ${distPath}, falling back to dist/client`);
+    // Try alternate path
+    const altPath = path.join(__dirname, "..", "client");
+    if (fs.existsSync(altPath)) {
+      app.use(express.static(altPath));
+      app.use("*", (_req, res) => {
+        // Skip API routes in the catch-all handler
+        if (_req.originalUrl.startsWith('/api/')) {
+          return;
+        }
+        res.sendFile(path.join(altPath, "index.html"));
+      });
+      return;
+    }
+    
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`,
     );
@@ -80,6 +116,10 @@ export function serveStatic(app: Express) {
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+    // Skip API routes in the catch-all handler
+    if (_req.originalUrl.startsWith('/api/')) {
+      return;
+    }
+    res.sendFile(path.join(distPath, "index.html"));
   });
 }
