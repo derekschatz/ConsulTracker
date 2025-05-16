@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server/index.ts",
     "prebuild": "rm -rf dist",
-    "build": "tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.build.json",
+    "build": "vite build",
     "postbuild": "node fix-prod-build.js",
     "start": "NODE_ENV=production node dist/server/index.js",
     "check": "npx tsc",
