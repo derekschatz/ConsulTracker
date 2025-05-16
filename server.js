@@ -6,12 +6,15 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import pg from 'pg';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import fs from 'fs';
+import { createServer } from 'http';
 
 // Load environment variables
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+console.log('Server root directory:', __dirname);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -461,4 +464,13 @@ app.listen(PORT, () => {
     console.log('⚠️  API endpoints requiring database will return error responses');
     console.log('');
   }
+});
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('UNCAUGHT EXCEPTION:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
 }); 
