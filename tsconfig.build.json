@@ -1,31 +1,20 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
     "noEmit": false,
-    "outDir": "dist",
-    "jsx": "react-jsx",
-    "strict": true,
+    "skipLibCheck": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["client/src/*"],
-      "@shared/*": ["shared/*"]
-    }
+    "skipDefaultLibCheck": true,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "noImplicitAny": false,
+    "declarationDir": "./dist/types",
+    "allowJs": true,
+    "outDir": "./dist"
   },
-  "include": [
-    "server",
-    "shared"
-  ]
+  "include": ["server/**/*", "shared/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts", "client", "dist"]
 } 
