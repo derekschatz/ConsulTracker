@@ -30,6 +30,21 @@ const app = express();
 // Configure middleware
 app.use(express.urlencoded({ extended: false }));
 
+// Configure proper MIME types for JavaScript files
+app.use(function(req, res, next) {
+  const url = req.url;
+  if (url.endsWith('.js')) {
+    res.setHeader('Content-Type', 'application/javascript');
+  } else if (url.endsWith('.mjs')) {
+    res.setHeader('Content-Type', 'application/javascript');
+  } else if (url.endsWith('.css')) {
+    res.setHeader('Content-Type', 'text/css');
+  } else if (url.endsWith('.json')) {
+    res.setHeader('Content-Type', 'application/json');
+  }
+  next();
+});
+
 // Configure JSON parsing for different routes
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
@@ -191,9 +206,23 @@ try {
 app.use('/api/*', (req, res) => {
   res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
 });
+   // Configure middleware
+   app.use(express.urlencoded({ extended: false }));
 
-// Serve static files
-app.use(express.static(path.join(__dirname, '..', 'public')));
+   // Add this middleware to set correct MIME types
+   app.use(function(req, res, next) {
+     const url = req.url;
+     if (url.endsWith('.js')) {
+       res.setHeader('Content-Type', 'application/javascript');
+     } else if (url.endsWith('.mjs')) {
+       res.setHeader('Content-Type', 'application/javascript');
+     } else if (url.endsWith('.css')) {
+       res.setHeader('Content-Type', 'text/css');
+     } else if (url.endsWith('.json')) {
+       res.setHeader('Content-Type', 'application/json');
+     }
+     next();
+   });
 
 // Final catch-all route for SPA
 app.get('*', (req, res) => {
