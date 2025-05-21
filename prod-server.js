@@ -206,23 +206,21 @@ try {
 app.use('/api/*', (req, res) => {
   res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
 });
-   // Configure middleware
-   app.use(express.urlencoded({ extended: false }));
 
-   // Add this middleware to set correct MIME types
-   app.use(function(req, res, next) {
-     const url = req.url;
-     if (url.endsWith('.js')) {
-       res.setHeader('Content-Type', 'application/javascript');
-     } else if (url.endsWith('.mjs')) {
-       res.setHeader('Content-Type', 'application/javascript');
-     } else if (url.endsWith('.css')) {
-       res.setHeader('Content-Type', 'text/css');
-     } else if (url.endsWith('.json')) {
-       res.setHeader('Content-Type', 'application/json');
-     }
-     next();
-   });
+// Serve static files with proper MIME types
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (path.endsWith('.mjs')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json');
+    }
+  }
+}));
 
 // Final catch-all route for SPA
 app.get('*', (req, res) => {
