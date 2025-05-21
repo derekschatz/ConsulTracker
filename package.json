@@ -9,7 +9,7 @@
     "build": "vite build && npm run fix-ts",
     "fix-ts": "mkdir -p dist/server && node fix-ts-imports.js || true",
     "postbuild": "node fix-prod-build.js",
-    "start": "NODE_ENV=production node dist/server/index.js",
+    "start": "NODE_ENV=production node dist/prod-server.js",
     "check": "npx tsc",
     "db:push": "drizzle-kit push",
     "test": "jest --config scripts/tests/config/jest.config.js",
