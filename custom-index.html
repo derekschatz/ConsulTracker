@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Consulting App</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    #app {
+      min-height: 100vh;
+    }
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .loading h1 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(0, 0, 0, 0.1);
+      border-left-color: #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="loading">
+      <h1>Loading Application...</h1>
+      <div class="spinner"></div>
+      <p>Please wait while we load the application.</p>
+      <p>If this takes too long, <a href="javascript:window.location.reload()">click here to reload</a>.</p>
+    </div>
+  </div>
+
+  <script>
+    // Simple script to check if assets are loading
+    window.addEventListener('DOMContentLoaded', function() {
+      // Try to load main script directly
+      setTimeout(function() {
+        var script = document.createElement('script');
+        script.src = '/assets/index.js';
+        script.onerror = function() {
+          console.error('Failed to load main script');
+          document.querySelector('.loading p').innerHTML = 
+            'Error loading application. <a href="javascript:window.location.reload()">Try refreshing</a>.';
+        };
+        document.body.appendChild(script);
+      }, 500);
+    });
+  </script>
+</body>
+</html> 
